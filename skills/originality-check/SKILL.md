@@ -1,10 +1,10 @@
 ---
 name: originality-check
-description: Pre-submission originality and attribution checking for your own drafts, backed by a stdlib-only Python toolkit at ~/Documents/Cline/originality-toolkit. Finds passages that closely track a real published source (OpenAlex, Crossref, arXiv, Europe PMC, Semantic Scholar), resolves each flagged passage to a verified BibTeX citation and in-text citation, produces a paraphrase-with-attribution worksheet, maps a corpus into an outline plus notes skeleton, and runs a style pass that structurally refuses to edit sourced sentences. Use when checking a draft for unintentional overlap, fixing citations on flagged passages, or preparing a defensible manuscript. Does NOT bypass or defeat plagiarism or AI-writing detectors.
+description: Pre-submission originality and attribution checking for your own drafts, backed by a stdlib-only Python toolkit at ~/.research-stack/originality-toolkit. Finds passages that closely track a real published source (OpenAlex, Crossref, arXiv, Europe PMC, Semantic Scholar), resolves each flagged passage to a verified BibTeX citation and in-text citation, produces a paraphrase-with-attribution worksheet, maps a corpus into an outline plus notes skeleton, and runs a style pass that structurally refuses to edit sourced sentences. Use when checking a draft for unintentional overlap, fixing citations on flagged passages, or preparing a defensible manuscript. Does NOT bypass or defeat plagiarism or AI-writing detectors.
 license: MIT
 metadata:
   version: "1.0"
-  toolkit-path: /Users/drb/Documents/Cline/originality-toolkit
+  toolkit-path: ~/.research-stack/originality-toolkit
 ---
 
 # Originality Check
@@ -32,7 +32,7 @@ what exactly overlaps, and what citation belongs there?*
 
 ## Toolkit
 
-All code lives in `~/Documents/Cline/originality-toolkit/` (7 modules plus a
+All code lives in `~/.research-stack/originality-toolkit/` (7 modules plus a
 `check.sh` wrapper). Do not copy it — run it in place:
 
 | Module | Purpose |
@@ -50,7 +50,7 @@ All code lives in `~/Documents/Cline/originality-toolkit/` (7 modules plus a
 Run from the toolkit directory:
 
 ```bash
-cd ~/Documents/Cline/originality-toolkit
+cd ~/.research-stack/originality-toolkit
 
 # 1. check a draft (HTML or markdown), machine-readable output for the next step
 python3 originality_check.py DRAFT --json out.json --out report.md

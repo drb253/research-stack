@@ -62,6 +62,13 @@ for t in "${TLIST[@]}"; do
   if [ "$missing" -eq 0 ]; then ok "$t: all 12 review skills present"; else bad "$t: $missing skill(s) missing in $sdir"; fi
 done
 
+echo "== 2b. originality toolkit (required by originality-check) =="
+if [ -f "$HOME/.research-stack/originality-toolkit/originality_check.py" ]; then
+  ok "originality-toolkit present ($HOME/.research-stack/originality-toolkit)"
+else
+  bad "originality-toolkit MISSING -> originality-check cannot run"
+fi
+
 echo "== 3. MCP config =="
 for t in "${TLIST[@]}"; do
   t="$(echo "$t" | tr -d '[:space:]')"; cfg="$(config_for "$t")"

@@ -729,7 +729,7 @@ def report_verify(results, style="text"):
                 if bt and rt and bt[:40] != rt[:40]:
                     notes.append("title differs from record")
                     tag = "WARN" if tag == "OK" else tag
-        if tag in ("FAIL", "RETRACTED"):
+        if tag != "OK":
             problems += 1
         if style == "json":
             lines.append(json.dumps({"index": idx, "key": res["key"], "status": tag,
@@ -743,8 +743,9 @@ def report_verify(results, style="text"):
             lines.append(line)
     if style != "json":
         lines.append("")
-        lines.append("%d entr(ies) checked, %d need attention." % (len(results), problems))
-    return "\n".join(lines)
+        lines.append("%d entr(ies) checked, %d need attention (FAIL/RETRACTED/WARN)."
+                     % (len(results), problems))
+    return "\n".join(lines), problems
 
 
 DOI_RE = re.compile(r"10\.\d{4,9}/[^\s\"'<>]+", re.I)
@@ -953,8 +954,9 @@ def main(argv=None):
         return 0
     if args.cmd == "verify":
         results = verify_file(args.file)
-        print(report_verify(results, args.style))
-        return 0
+        text, problems = report_verify(results, args.style)
+        print(text)
+        return 1 if problems else 0
     if args.cmd == "format":
         try:
             raw = open(args.file, encoding="utf-8").read() if args.file else sys.stdin.read()

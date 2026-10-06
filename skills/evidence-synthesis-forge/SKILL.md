@@ -51,6 +51,12 @@ Load:
 - `references/review-types.md` when the user needs help choosing review type or question framework.
 - `references/protocol-reporting-crosswalk.md` when the user needs PRISMA/Cochrane/JBI/CEE alignment.
 - `templates/prisma-flow-counts.csv` and `scripts/generate_prisma_flow.py` when the user needs a simple reproducible PRISMA-style flow diagram.
+- `references/screening-governance.md` when screening must be validated before scale (calibration pilots, κ ≥ 0.60 gate, criteria lock, eligibility-rules registry, tamper-evident audit log, reproducibility honesty).
+- `references/prospero-and-citation-verification.md` when registering on PROSPERO/PROSPERO-novelty checking, or when sourcing and verifying citations (empirical-integrity, grounded-citations, verifying-citations rules).
+- `references/prisma-2020-manuscript-reporting.md` when assembling or auditing a PRISMA 2020 manuscript (27 items, flow diagram, journal-format drafting).
+- `references/reporting-guideline-checklists.md` when selecting a reporting guideline / risk-of-bias instrument (PRISMA, PRISMA-P/ScR/DTA, STROBE, CONSORT, RoB 2, ROBINS-I, NOS, AMSTAR-2, …).
+- `scripts/cross_verify_citations.py` to gate the review ledger against Crossref/OpenAlex (resolves DOIs, flags retractions, writes GATE_REPORT.json, fails loudly).
+- `scripts/prospero_search.py` to query PROSPERO's internal endpoint for registration and novelty checks.
 
 ## Routing
 

@@ -95,9 +95,26 @@ def main() -> int:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 2
 
+    matched = [key for key in EXPECTED_KEYS if key in counts]
+    if not matched:
+        print(
+            "ERROR: no recognised PRISMA stage names in the input; refusing to write an "
+            "all-zero diagram. Expected stage names: " + ", ".join(EXPECTED_KEYS),
+            file=sys.stderr,
+        )
+        return 2
+    missing = [key for key in EXPECTED_KEYS if key not in counts]
+    if missing:
+        print(
+            f"WARNING: {len(missing)} expected stage(s) absent from the input: "
+            + ", ".join(missing),
+            file=sys.stderr,
+        )
+
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text("```mermaid\n" + diagram + "```\n", encoding="utf-8")
-    print(f"Wrote PRISMA Mermaid diagram to {output_path}")
+    print(f"Wrote PRISMA Mermaid diagram to {output_path} "
+          f"({len(matched)}/{len(EXPECTED_KEYS)} stages populated)")
     return 0
 
 

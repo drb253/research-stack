@@ -1,0 +1,10 @@
+[
+  {
+    "index": 1,
+    "prompt": "Rewrite the sentence below in my own voice.\n\nHard rules:\n- Keep the meaning exact. Do not add or drop claims.\n- Do NOT reuse this overlapping wording: \"the dominant sequence transduction models are based on complex recurrent or convolutional neural networks\"\n- The rewrite must carry this citation: (Vaswani et al., 2017)\n- If part of the sentence is a standard definition or common knowledge, say so\n  explicitly instead of citing it.\n- Return: (a) the rewritten sentence, (b) the citation placement, and\n  (c) a one-line note on what a reader would need to check in the source.\n\nSentence: The dominant sequence transduction models are based on complex recurrent or convolutional neural networks that include an encoder and a decoder.\nSource: Attention Is All You Need (2017)"
+  },
+  {
+    "index": 2,
+    "prompt": "Rewrite the sentence below in my own voice.\n\nHard rules:\n- Keep the meaning exact. Do not add or drop claims.\n- Do NOT reuse this overlapping wording: \"we introduce a new language representation model called bert which stands for bidirectional encoder representations from transformers\"\n- The rewrite must carry this citation: (Devlin et al., 2018)\n- If part of the sentence is a standard definition or common knowledge, say so\n  explicitly instead of citing it.\n- Return: (a) the rewritten sentence, (b) the citation placement, and\n  (c) a one-line note on what a reader would need to check in the source.\n\nSentence: We introduce a new language representation model called BERT, which stands for Bidirectional Encoder Representations from Transformers.\nSource: BERT: Pre-training of Deep Bidirectional Transformers for Language Understanding (2018)"
+  }
+]

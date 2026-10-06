@@ -3,6 +3,15 @@
 Run this after every **edit**, before returning output. Compare the draft you started from (the
 "before") against your rewrite (the "after").
 
+The mechanical subset of these checks can be run directly:
+
+```bash
+python3 scripts/humanizer_check.py --before draft_v1.md --after draft_v2.md
+```
+
+It automates H1, H2 and H4 by diffing the two drafts (exit `2` on a hard error) and warns on named
+patterns. It cannot judge meaning or voice - H3 and the S-checks stay with you.
+
 Two checks are **hard errors**: never return output that fails them. The rest are **fix-or-flag**; fix
 what you can, and name anything you deliberately left.
 

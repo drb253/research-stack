@@ -11,7 +11,7 @@ All bundled commands use only the Python standard library (3.9+). They:
 Run them from the skill directory:
 
 ```bash
-cd ~/.cline/skills/medical-narrative-review
+cd <skills-dir>/medical-narrative-review
 python3 scripts/validate_sources.py <workspace>/sources.csv --strict
 ```
 

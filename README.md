@@ -55,6 +55,7 @@ Then **restart your client(s)** so the MCP servers are spawned, and check:
 | **Review skills** | `sysreview`, `meta-analysis`, `evidence-synthesis-forge`, `meta-analysis-forge`, `medical-narrative-review`, `umbrella-review-skeptic`, `meta-ml-screener`, `environment-life-review-forge` |
 | **Guard skills** | `paper-search`, `citecheck`, `humanizerdrb`, `originality-check` |
 | **Patched connectors** | 43 modules fixing arXiv/OpenAlex/Zenodo/HAL/J-STAGE/PLOS/WHO-IRIS and the MeSH query-planner |
+| **Toolbox** | `originality-toolkit` (required by `originality-check`) → `~/.research-stack/originality-toolkit` |
 
 Runs on **macOS and Linux**; needs `git`, `curl`, `python3`, and (for two remote
 servers) `node`/`npx`. `uv` is installed automatically if missing.
@@ -71,12 +72,33 @@ servers) `node`/`npx`. `uv` is installed automatically if missing.
 --with-ncbi / --with-academic-search   include those servers in the config
 --copy-skills    copy skills instead of symlinking
 --reinstall      reinstall/upgrade the paper-search tool first
+--with-r         install the R meta-analysis packages (slow; needs R)
+--with-runtime   create the Python toolchain venv (scipy/pandas/...)
 --email ADDR     NCBI / polite-pool email
 --ncbi-key KEY   NCBI API key          --s2-key KEY   Semantic Scholar key
 --dry-run        print actions, change nothing
 ```
 
 Skills are symlinked from `~/.research-stack/skills` so an update is one `git pull`.
+
+### Optional MCP servers
+
+`ncbi` and `academic-search` are **configured** with `--with-ncbi` /
+`--with-academic-search` (the installer warns if their binary is missing), but
+their bespoke forks are not auto-installed. Build artifacts ship in `mcp/optional/`:
+
+- `ncbi-mcp-server.patch` — apply over https://github.com/vitorpavinato/ncbi-mcp-server
+- `academic-search-mcp-src.tgz` — the patched source tree
+- `browser-probe.requirements.txt` — render/PDF toolchain for DOCX/PDF export
+
+### Runtime dependencies
+
+The meta-analysis skills need **R** + the packages in
+`skills/meta-analysis-forge/scripts/install_r_packages.R`; a few
+`evidence-synthesis-forge` scripts use the Python toolchain venv. Install both
+with `--with-r` and `--with-runtime`. Without them `doctor.sh` reports the gap
+and the non-R paths still work.
+
 
 ---
 

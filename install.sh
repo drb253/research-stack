@@ -13,6 +13,8 @@
 #   --with-ncbi / --with-academic-search   include those servers in the config
 #   --copy-skills      copy skills instead of symlinking
 #   --reinstall        reinstall/upgrade the paper-search tool first
+#   --with-r           install the R meta-analysis packages (slow; needs R)
+#   --with-runtime     also create the Python toolchain venv (scipy/pandas/...)
 #   --email ADDR       NCBI/polite-pool email        (env NCBI_EMAIL)
 #   --ncbi-key KEY     NCBI API key                  (env NCBI_API_KEY)
 #   --s2-key KEY       Semantic Scholar key          (env S2_API_KEY)
@@ -32,6 +34,8 @@ WITH_UPSTREAM=0
 WITH_NCBI=0
 WITH_ACADEMIC=0
 REINSTALL=0
+WITH_R=0
+WITH_RUNTIME=0
 NCBI_EMAIL="${NCBI_EMAIL:-}"
 NCBI_API_KEY="${NCBI_API_KEY:-}"
 S2_API_KEY="${S2_API_KEY:-}"
@@ -60,6 +64,8 @@ while [ $# -gt 0 ]; do
     --email) NCBI_EMAIL="$2"; shift 2;;
     --ncbi-key) NCBI_API_KEY="$2"; shift 2;;
     --s2-key) S2_API_KEY="$2"; shift 2;;
+    --with-r) WITH_R=1; shift;;
+    --with-runtime) WITH_RUNTIME=1; shift;;
     --dry-run) DRY_RUN=1; shift;;
     -h|--help) usage; exit 0;;
     *) die "unknown option: $1 (try --help)";;
@@ -134,6 +140,12 @@ if [ "$DO_SKILLS" = 1 ]; then
   run "cp -R '$ROOT/skills/'* '$STORE/skills/'"
   run "find '$STORE/skills' -name '__pycache__' -type d -prune -exec rm -rf {} + 2>/dev/null || true"
   info "installed $(ls -1 "$STORE/skills" 2>/dev/null | grep -vc 'VENDORED') skills"
+
+  # ship the originality-check toolkit (the skill depends on it)
+  if [ -d "$ROOT/tools/originality-toolkit" ]; then
+    run "rm -rf '$STORE/originality-toolkit' && cp -R '$ROOT/tools/originality-toolkit' '$STORE/originality-toolkit'"
+    info "installed originality-toolkit -> $STORE/originality-toolkit"
+  fi
 
   if [ "$WITH_UPSTREAM" = 1 ]; then
     UP="$HOME/.local/share/scientific-agent-skills"
@@ -220,6 +232,25 @@ if [ -n "$NCBI_EMAIL" ] || [ -n "$S2_API_KEY" ]; then
 else
   info "no keys passed; the free sources work without them."
   info "add later:  $ROOT/install.sh --targets '${TARGETS}' --email you@org --s2-key <key>"
+fi
+
+# ---- 5. optional runtime deps --------------------------------------------- #
+if [ "$WITH_R" = 1 ] || [ "$WITH_RUNTIME" = 1 ]; then
+  step "5. Runtime dependencies"
+  if [ "$WITH_R" = 1 ]; then
+    if command -v Rscript >/dev/null 2>&1; then
+      info "installing R meta-analysis packages (several minutes)..."
+      run "Rscript '$STORE/skills/meta-analysis-forge/scripts/install_r_packages.R'"
+    else
+      warn "Rscript not found -- install R (brew install r) then re-run with --with-r"
+    fi
+  fi
+  if [ "$WITH_RUNTIME" = 1 ]; then
+    VENV="$HOME/.local/share/evidence-toolchain/.venv"
+    run "uv venv '$VENV'"
+    run "uv pip install --python '$VENV/bin/python' scipy pandas numpy matplotlib seaborn pingouin statsmodels pyyaml jinja2"
+    info "python toolchain venv -> $VENV"
+  fi
 fi
 
 # ---- done ------------------------------------------------------------------ #

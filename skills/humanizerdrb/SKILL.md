@@ -3,7 +3,7 @@ name: humanizerdrb
 description: "Rewrite AI-sounding text so it reads like a person wrote it, without changing what it says and without flattening the writer's voice. Two modes - edit (return a cleaned draft plus a \"What changed\" list) and audit (quote each AI-writing tell found, without rewriting or scoring). Optional target tone via references/registers.md (academic, technical, professional, casual, social, journalistic, reply). Every edit is checked against eval.md before it is returned. Use when the user asks to humanize, de-slop, de-AI, or \"make this sound human,\" or asks whether a draft reads as AI-written. Built on Wikipedia's Signs of AI writing and the AI-slop pattern list from petergyang/no-ai-slop. A writing-quality tool - it cannot guarantee any particular AI-detector score, and it will not strip provenance metadata, watermarks, or evade plagiarism/similarity systems."
 allowed-tools: Read Write Edit Bash
 license: MIT
-compatibility: Instructions only. No dependencies, no network, no API keys. Works in any agent that supports SKILL.md.
+compatibility: Instructions plus one stdlib-only Python 3.8+ script (scripts/humanizer_check.py) that runs the mechanical subset of eval.md. No third-party packages, no network, no API keys. Works in any agent that supports SKILL.md.
 metadata:
   version: "1.1"
   skill-author: local (custom skill)
@@ -125,6 +125,24 @@ always outranks a register. Name the register you used at the top of **What chan
 (no dropped claim) are hard errors - never ship a draft that fails them. The S-checks (survivor sweep,
 chat leftovers, length sanity, honest "What changed", register honoured, format, output shape) are
 fix-or-flag. Keep the check internal unless the user asks to see it.
+
+### Mechanical subset (runnable)
+
+`scripts/humanizer_check.py` automates the parts of eval.md that do not need judgement, by diffing a
+before/after pair:
+
+```bash
+python3 scripts/humanizer_check.py --before draft_v1.md --after draft_v2.md   # or --json
+```
+
+It reports **H1** (a number in the rewrite that is not in the original), **H2** (a number in the
+original missing from the rewrite) and **H4** (chat leftovers / method narration introduced by the
+rewrite) as hard errors - exit `2`. Named patterns from `references/patterns.md` come back as
+warnings. Run it as a first pass, then do the judgement checks by hand.
+
+**What it cannot do:** it cannot judge meaning, voice, or whether a claim survived in different words,
+and it does not score "AI-ness" or predict any detector. A clean run is not a pass on eval.md - H3 and
+the S-checks remain editorial.
 
 ## Pattern catalogue
 
