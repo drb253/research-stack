@@ -1,0 +1,547 @@
+# paper_search_mcp/academic_platforms/pmc.py
+from typing import List, Optional
+import requests
+from xml.etree import ElementTree as ET
+from datetime import datetime
+import logging
+import os
+from pathlib import Path
+from ..paper import Paper
+from ..utils import extract_doi
+from .base import PaperSource
+from ..source_status import (  # paper-search-mcp-patches: Tier 1/2 helpers
+    SourceUnavailable, and_query, field_and, field_phrase, phrase,
+    request_json, search_ladder, search_terms,
+    assert_not_botwall, assert_usable_bytes,
+)
+from ..config import ncbi_eutils_params  # patched: E-utilities API key
+from pypdf import PdfReader
+
+logger = logging.getLogger(__name__)
+
+
+class PMCSearcher(PaperSource):
+    """Searcher for PubMed Central (PMC) open access papers"""
+
+    # PMC OA Web Service for listing open access articles
+    OA_URL = "https://www.ncbi.nlm.nih.gov/pmc/utils/oa/oa.fcgi"
+    # E-utilities API for fetching metadata
+    EUTILS_SEARCH_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
+    EUTILS_SUMMARY_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi"
+    EUTILS_FETCH_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi"
+
+    def __init__(self):
+        self.session = requests.Session()
+        self.session.headers.update({
+            'User-Agent': 'paper-search-mcp/1.0 (mailto:openags@example.com)',
+            'Accept': 'application/xml'
+        })
+
+    def _search_via_europepmc(self, query: str, max_results: int) -> List[Paper]:
+        """Discover PMC records through Europe PMC instead of NCBI esearch.
+
+        Measured 2026-09-29: ``esearch.fcgi?db=pmc`` took 18-21s and answered
+        HTTP 500 ("error forwarding request") on 5 of 9 attempts, while Europe
+        PMC -- which indexes the same PMC corpus -- answered in ~1s.  NCBI is
+        still used below for summaries, so this is a routing change, not a
+        replacement of the source.
+        """
+        from .europepmc import EuropePMCSearcher  # local import avoids a load cycle
+
+        searcher = EuropePMCSearcher()
+        papers = searcher.search(f"({query}) AND SRC:PMC", max_results)
+        for paper in papers:
+            # Report these as PMC hits so the caller can tell the routes apart.
+            paper.source = "pmc"
+        return papers
+
+    def search(self, query: str, max_results: int = 10, **kwargs) -> List[Paper]:
+        """
+        Search PMC open access articles.
+
+        Args:
+            query: Search query string
+            max_results: Maximum results to return
+            **kwargs: Additional parameters (e.g., from_date, to_date)
+
+        Returns:
+            List[Paper]: List of found papers with metadata
+        """
+        papers = []
+
+        # Discovery via Europe PMC first: same corpus, ~20x faster and far more
+        # reliable than NCBI esearch (measured 2026-09-29).  Falls through to the
+        # NCBI ladder when Europe PMC is unavailable.
+        try:
+            papers = self._search_via_europepmc(query, max_results)
+            if papers:
+                logger.info("PMC discovery via Europe PMC for: %s", query)
+                return papers
+        except SourceUnavailable as exc:
+            logger.warning(
+                "Europe PMC discovery unavailable for PMC (%s); using NCBI esearch", exc
+            )
+
+        try:
+            # Field-scoped ladder: [Title/Abstract] + relevance sort first, then
+            # looser rungs.  Availability failures raise instead of returning [].
+            terms = search_terms(query)
+            ladder = []
+            if len(terms) >= 2:
+                ladder.append((
+                    "title/abstract AND",
+                    {"term": " AND ".join(terms) + "[Title/Abstract]",
+                     "sort": "relevance"},
+                ))
+                ladder.append((
+                    "title/abstract phrase",
+                    {"term": f'"{phrase(terms)}"[Title/Abstract]', "sort": "relevance"},
+                ))
+            ladder.append(("raw", {"term": query}))
+
+            # ncbi_eutils_params() adds the NCBI API key (3 req/s -> 10 req/s).
+            base_params = {
+                'db': 'pmc',
+                'retmax': max_results,
+                'retmode': 'json',
+                **ncbi_eutils_params(),
+            }
+
+            attempts = []
+            for label, extra in ladder:
+                params = dict(base_params)
+                params.update(extra)
+                attempts.append((label, params))
+
+            pmcids, _label = search_ladder(
+                "pmc",
+                self.session,
+                self.EUTILS_SEARCH_URL,
+                attempts,
+                lambda payload: (
+                    (payload or {}).get("esearchresult") or {}
+                ).get("idlist") or [],
+                timeout=30,
+            )
+            logger.info("PMC query mode '%s' for: %s", _label, query)
+
+            if not pmcids:
+                logger.info(f"No PMC results found for query: {query}")
+                return papers
+
+            # Step 2: Fetch compact summaries (more stable than full-text efetch)
+            summary_params = {
+                'db': 'pmc',
+                'id': ','.join(pmcids),
+                'retmode': 'xml',
+                **ncbi_eutils_params(),
+            }
+
+            summary_response = request_json(
+                self.session,
+                self.EUTILS_SUMMARY_URL,
+                "pmc",
+                params=summary_params,
+                timeout=30,
+                accept_json=False,
+            )
+            summary_root = ET.fromstring(summary_response.content)
+
+            # Step 3: Parse each summary record
+            for docsum in summary_root.findall('.//DocSum'):
+                try:
+                    paper = self._parse_docsum(docsum)
+                    if paper:
+                        papers.append(paper)
+                        if len(papers) >= max_results:
+                            break
+                except Exception as e:
+                    logger.warning(f"Error parsing PMC summary: {e}")
+                    continue
+
+        except SourceUnavailable:
+            raise
+        except ET.ParseError as e:
+            # A 200 carrying an error body (NCBI answers {"error": "error
+            # forwarding request"} during outages) parses as neither XML nor a
+            # result set.  Returning [] here would report "no literature".
+            raise SourceUnavailable(
+                "pmc", f"unparsable summary XML ({type(e).__name__})"
+            )
+        except requests.RequestException as e:
+            raise SourceUnavailable("pmc", f"{type(e).__name__}: {e}"[:200])
+        except Exception as e:
+            # paper-search-mcp-patches Tier 7: never turn an unexpected failure
+            # into a silent empty result set.
+            raise SourceUnavailable("pmc", f"{type(e).__name__}: {e}"[:200])
+
+        return papers
+
+    def _parse_docsum(self, docsum: ET.Element) -> Optional[Paper]:
+        """Parse a single PMC eSummary DocSum element into a Paper object."""
+        try:
+            def _item_text(name: str) -> str:
+                item = docsum.find(f"./Item[@Name='{name}']")
+                if item is None:
+                    return ''
+                return ''.join(item.itertext()).strip()
+
+            doc_id = ''.join((docsum.findtext('Id') or '').split())
+            if not doc_id:
+                return None
+
+            title = _item_text('Title')
+            if not title:
+                return None
+
+            # Parse authors list
+            authors: List[str] = []
+            author_list_item = docsum.find("./Item[@Name='AuthorList']")
+            if author_list_item is not None:
+                for sub_item in author_list_item.findall('./Item'):
+                    value = ''.join(sub_item.itertext()).strip()
+                    if value:
+                        authors.append(value)
+
+            article_ids_text = _item_text('ArticleIds')
+            article_ids = [line.strip() for line in article_ids_text.splitlines() if line.strip()]
+
+            pmcid = next((value for value in article_ids if value.upper().startswith('PMC')), f"PMC{doc_id}")
+            if not pmcid.upper().startswith('PMC'):
+                pmcid = f"PMC{pmcid}"
+
+            doi = _item_text('DOI')
+            if not doi:
+                doi = next((value for value in article_ids if value.startswith('10.')), '')
+
+            pub_date = None
+            pub_date_raw = _item_text('PubDate')
+            for fmt in ('%Y %b %d', '%Y %b', '%Y'):
+                try:
+                    pub_date = datetime.strptime(pub_date_raw, fmt)
+                    break
+                except ValueError:
+                    continue
+
+            journal = _item_text('FullJournalName') or _item_text('Source')
+
+            return Paper(
+                paper_id=pmcid,
+                title=title,
+                authors=authors,
+                abstract='',
+                url=f"https://www.ncbi.nlm.nih.gov/pmc/articles/{pmcid}/",
+                pdf_url=f"https://www.ncbi.nlm.nih.gov/pmc/articles/{pmcid}/pdf/",
+                published_date=pub_date,
+                source='pmc',
+                categories=[journal] if journal else [],
+                keywords=[],
+                doi=doi,
+            )
+        except Exception as e:
+            logger.warning(f"Error parsing PMC DocSum: {e}")
+            return None
+
+    def _parse_article(self, article: ET.Element) -> Optional[Paper]:
+        """Parse a single PMC article XML element into a Paper object."""
+        try:
+            def elem_text(elem: Optional[ET.Element]) -> str:
+                if elem is None:
+                    return ''
+                return ''.join(elem.itertext()).strip()
+
+            # Extract PMCID
+            pmcid_elem = (
+                article.find('.//article-id[@pub-id-type="pmcid"]')
+                or article.find('.//article-id[@pub-id-type="pmc"]')
+            )
+            pmcid = elem_text(pmcid_elem)
+            if not pmcid:
+                return None
+            if not pmcid.startswith('PMC'):
+                pmcid = f"PMC{pmcid}"
+
+            # Extract DOI
+            doi_elem = article.find('.//article-id[@pub-id-type="doi"]')
+            doi = elem_text(doi_elem)
+
+            # Extract title
+            title_elem = article.find('.//article-title')
+            title = elem_text(title_elem)
+            if not title:
+                # Try alternative title paths
+                title_elem = article.find('.//title-group/article-title')
+                title = elem_text(title_elem)
+
+            # Extract authors
+            authors = []
+            for author_elem in article.findall('.//contrib[@contrib-type="author"]'):
+                surname_elem = author_elem.find('.//surname')
+                given_names_elem = author_elem.find('.//given-names')
+                if surname_elem is not None:
+                    surname = elem_text(surname_elem)
+                    given_names = elem_text(given_names_elem)
+                    author_name = f"{given_names} {surname}".strip()
+                    if author_name:
+                        authors.append(author_name)
+
+            # Extract abstract
+            abstract_parts = []
+            for abstract_elem in article.findall('.//abstract//p'):
+                part = elem_text(abstract_elem)
+                if part:
+                    abstract_parts.append(part)
+            if not abstract_parts:
+                abstract_elem = article.find('.//abstract')
+                abstract_text = elem_text(abstract_elem)
+                if abstract_text:
+                    abstract_parts.append(abstract_text)
+            abstract = ' '.join(abstract_parts)
+
+            # Extract publication date
+            pub_date = None
+            pub_date_elem = article.find('.//pub-date[@pub-type="epub"]') or article.find('.//pub-date')
+            if pub_date_elem is not None:
+                year_elem = pub_date_elem.find('year')
+                month_elem = pub_date_elem.find('month')
+                day_elem = pub_date_elem.find('day')
+                year = year_elem.text if year_elem is not None else None
+                month = month_elem.text if month_elem is not None else '01'
+                day = day_elem.text if day_elem is not None else '01'
+                if year:
+                    try:
+                        date_str = f"{year}-{month.zfill(2)}-{day.zfill(2)}"
+                        pub_date = datetime.strptime(date_str, '%Y-%m-%d')
+                    except ValueError:
+                        try:
+                            pub_date = datetime.strptime(year, '%Y')
+                        except ValueError:
+                            pass
+
+            # Construct URLs
+            url = f"https://www.ncbi.nlm.nih.gov/pmc/articles/{pmcid}/"
+            pdf_url = f"https://www.ncbi.nlm.nih.gov/pmc/articles/{pmcid}/pdf/"
+
+            # Extract categories (subjects)
+            categories = []
+            for subject_elem in article.findall('.//subject'):
+                subject_text = elem_text(subject_elem)
+                if subject_text:
+                    categories.append(subject_text)
+
+            # Extract keywords
+            keywords = []
+            for kwd_elem in article.findall('.//kwd'):
+                kwd_text = elem_text(kwd_elem)
+                if kwd_text:
+                    keywords.append(kwd_text)
+
+            # If DOI not found in XML, try to extract from abstract
+            if not doi and abstract:
+                doi = extract_doi(abstract)
+
+            return Paper(
+                paper_id=pmcid,
+                title=title,
+                authors=authors,
+                abstract=abstract,
+                url=url,
+                pdf_url=pdf_url,
+                published_date=pub_date,
+                source='pmc',
+                categories=categories[:10],  # Limit to 10 categories
+                keywords=keywords[:10],      # Limit to 10 keywords
+                doi=doi
+            )
+
+        except Exception as e:
+            logger.warning(f"Error parsing article element: {e}")
+            return None
+
+    def get_fulltext(self, paper_id: str) -> str:
+        """Full text of a PMC article as JATS-derived text.
+
+        Measured 2026-09-29: the PMC PDF endpoint answers HTTP 403 (the same bot
+        wall medRxiv has), while ``efetch db=pmc`` returns the complete JATS
+        article in 1-2s -- 354,990 bytes, 49 sections and 127,694 chars of body
+        text for PMC13601907.  The XML is therefore the reliable route, and the
+        PDF is only a fallback.
+        """
+        pmcid = str(paper_id or "").strip()
+        if not pmcid:
+            raise ValueError("Invalid paper_id: paper_id is empty")
+        if not pmcid.upper().startswith("PMC"):
+            pmcid = f"PMC{pmcid}"
+
+        response = request_json(
+            self.session,
+            self.EUTILS_FETCH_URL,
+            "pmc",
+            params={
+                "db": "pmc",
+                "id": pmcid,
+                "retmode": "xml",
+                **ncbi_eutils_params(),
+            },
+            timeout=30,
+            accept_json=False,
+        )
+        xml = response.text
+        assert_not_botwall("pmc", xml, response.status_code)
+        assert_usable_bytes("pmc", response.content, 2000, label="PMC JATS XML")
+
+        try:
+            root = ET.fromstring(xml)
+        except ET.ParseError as exc:
+            raise SourceUnavailable(
+                "pmc", f"unparsable efetch XML ({type(exc).__name__})"
+            )
+
+        # <back> (the reference list) sits outside <body>, so taking the body
+        # alone also drops the bibliography.
+        body = root.find(".//body")
+        if body is None:
+            raise SourceUnavailable(
+                "pmc",
+                f"efetch returned no <body> for {pmcid} "
+                "(article has no open-access full text)",
+            )
+
+        # Join element texts with a delimiter: concatenating them undelimited
+        # glues JATS section numbers to their titles ("1Introduction1.1Historical").
+        parts: List[str] = []
+        for element in body.iter():
+            if element.text:
+                parts.append(element.text)
+            if element.tail:
+                parts.append(element.tail)
+        text = " ".join(" ".join(parts).split())
+        assert_usable_bytes(
+            "pmc", text.encode("utf-8"), 500, label="PMC body text"
+        )
+        return text
+
+    def download_pdf(self, paper_id: str, save_path: str) -> str:
+        """
+        Download PDF of a PMC open access article.
+
+        Args:
+            paper_id: PMCID (e.g., 'PMC1234567')
+            save_path: Directory to save the PDF
+
+        Returns:
+            str: Path to the downloaded PDF file
+
+        Raises:
+            Exception: If download fails
+        """
+        try:
+            # Ensure PMCID format
+            if not paper_id.startswith('PMC'):
+                paper_id = f"PMC{paper_id}"
+
+            pdf_url = f"https://www.ncbi.nlm.nih.gov/pmc/articles/{paper_id}/pdf/"
+
+            # Create save directory if it doesn't exist
+            save_dir = Path(save_path)
+            save_dir.mkdir(parents=True, exist_ok=True)
+
+            # Download PDF
+            response = self.session.get(pdf_url, timeout=60)
+            response.raise_for_status()
+
+            # Check if response is actually a PDF
+            content_type = response.headers.get('Content-Type', '')
+            if 'pdf' not in content_type.lower():
+                # Might be an HTML page indicating no PDF available
+                raise ValueError(f"PMC article {paper_id} does not have an open access PDF")
+
+            # Generate filename
+            filename = f"{paper_id}.pdf"
+            filepath = save_dir / filename
+
+            # Save PDF
+            with open(filepath, 'wb') as f:
+                f.write(response.content)
+
+            logger.info(f"Downloaded PMC PDF to {filepath}")
+            return str(filepath)
+
+        except requests.RequestException as e:
+            error_msg = f"Failed to download PMC PDF for {paper_id}: {e}"
+            logger.error(error_msg)
+            raise SourceUnavailable("pmc", error_msg)
+        except Exception as e:
+            error_msg = f"Error downloading PMC PDF for {paper_id}: {e}"
+            logger.error(error_msg)
+            raise SourceUnavailable("pmc", error_msg)
+
+    def read_paper(self, paper_id: str, save_path: str = "./downloads") -> str:
+        """
+        Return the full text of a PMC article.
+
+        Prefers the JATS XML from NCBI efetch (verified 1-2s, 59k-128k chars of
+        body text) and only falls back to the PDF, whose endpoint answers HTTP
+        403. Failures raise SourceUnavailable: this method used to return the
+        error text as though it were the article, so a broken read looked like a
+        successful one.
+        """
+        try:
+            return self.get_fulltext(paper_id)
+        except SourceUnavailable as exc:
+            logger.warning(
+                "PMC JATS full text unavailable for %s (%s); falling back to the PDF",
+                paper_id, exc,
+            )
+        except ValueError:
+            raise
+
+        pdf_path = self.download_pdf(paper_id, save_path)
+
+        with open(pdf_path, 'rb') as f:
+            pdf_reader = PdfReader(f)
+            text_parts = [page.extract_text() for page in pdf_reader.pages
+                          if page.extract_text()]
+
+        text = '\n'.join(text_parts)
+        assert_usable_bytes("pmc", text.encode("utf-8"), 100, label="PMC PDF text")
+        return text
+
+
+if __name__ == "__main__":
+    # Test the PMCSearcher
+    import sys
+    import os
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+
+    searcher = PMCSearcher()
+
+    print("Testing PMC search...")
+    query = "cancer immunotherapy"
+    papers = searcher.search(query, max_results=3)
+    print(f"Found {len(papers)} papers for query '{query}':")
+
+    for i, paper in enumerate(papers, 1):
+        print(f"\n{i}. {paper.title}")
+        print(f"   PMCID: {paper.paper_id}")
+        print(f"   DOI: {paper.doi}")
+        print(f"   Authors: {', '.join(paper.authors[:3])}")
+        print(f"   PDF URL: {paper.pdf_url}")
+        if paper.abstract:
+            print(f"   Abstract preview: {paper.abstract[:150]}...")
+
+    # Test PDF download if we have papers
+    if papers:
+        print("\n\nTesting PMC PDF download...")
+        test_pmcid = papers[0].paper_id
+        try:
+            pdf_path = searcher.download_pdf(test_pmcid, "/tmp/pmc_test")
+            print(f"PDF downloaded to: {pdf_path}")
+
+            # Test text extraction
+            print("\nTesting text extraction...")
+            text = searcher.read_paper(test_pmcid, "/tmp/pmc_test")
+            print(f"Extracted text length: {len(text)} characters")
+            print(f"Text preview: {text[:200]}...")
+        except Exception as e:
+            print(f"PDF download/test failed: {e}")

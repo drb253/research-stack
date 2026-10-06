@@ -1,0 +1,30 @@
+{
+  "review_type": "narrative",
+  "review_title": "REPLACE with the working title",
+  "search_date_range": "",
+  "databases_searched": [],
+  "registers_searched": [],
+  "identification": {
+    "records_from_databases": 0,
+    "records_from_registers": 0,
+    "records_from_other_methods": 0,
+    "duplicates_removed": 0
+  },
+  "screening": {
+    "records_screened": 0,
+    "records_excluded": 0
+  },
+  "retrieval": {
+    "reports_sought": 0,
+    "reports_not_retrieved": 0
+  },
+  "eligibility": {
+    "reports_assessed": 0,
+    "reports_excluded": 0,
+    "exclusion_reasons": {}
+  },
+  "included": {
+    "studies_included": 0,
+    "sources_verified": 0
+  }
+}

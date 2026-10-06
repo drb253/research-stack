@@ -1,0 +1,12 @@
+# secrets / local state
+.env
+*.env
+!*.env.template
+*.bak.*
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+
+# never commit real keys
+*_key.txt
