@@ -310,13 +310,24 @@ fi
 # ---- 4. api keys ----------------------------------------------------------- #
 step "4. API keys (optional but recommended)"
 ENV_FILE="$HOME/.config/paper-search-mcp/.env"
-if [ -n "$NCBI_EMAIL" ] || [ -n "$S2_API_KEY" ]; then
+if [ -n "$NCBI_EMAIL" ] || [ -n "$S2_API_KEY" ] || [ -n "$NCBI_API_KEY" ]; then
   run "mkdir -p '$(dirname "$ENV_FILE")'"
   if [ "$DRY_RUN" = 0 ]; then
     { echo "# written by research-stack on $(date +%F)";
-      [ -n "$NCBI_EMAIL" ] && echo "PAPER_SEARCH_MCP_OPENALEX_EMAIL=$NCBI_EMAIL";
-      [ -n "$NCBI_EMAIL" ] && echo "PAPER_SEARCH_MCP_UNPAYWALL_EMAIL=$NCBI_EMAIL";
-      [ -n "$S2_API_KEY" ]  && echo "PAPER_SEARCH_MCP_S2_API_KEY=$S2_API_KEY";
+      if [ -n "$NCBI_EMAIL" ]; then
+        echo "PAPER_SEARCH_MCP_OPENALEX_EMAIL=$NCBI_EMAIL";
+        echo "PAPER_SEARCH_MCP_UNPAYWALL_EMAIL=$NCBI_EMAIL";
+        echo "PAPER_SEARCH_MCP_NCBI_EMAIL=$NCBI_EMAIL";
+        echo "NCBI_EMAIL=$NCBI_EMAIL";
+      fi
+      if [ -n "$S2_API_KEY" ]; then
+        echo "PAPER_SEARCH_MCP_SEMANTIC_SCHOLAR_API_KEY=$S2_API_KEY";
+        echo "SEMANTIC_SCHOLAR_API_KEY=$S2_API_KEY";
+      fi
+      if [ -n "$NCBI_API_KEY" ]; then
+        echo "PAPER_SEARCH_MCP_NCBI_API_KEY=$NCBI_API_KEY";
+        echo "NCBI_API_KEY=$NCBI_API_KEY";
+      fi
     } >> "$ENV_FILE"
     chmod 600 "$ENV_FILE"
     info "appended keys -> $ENV_FILE (chmod 600)"

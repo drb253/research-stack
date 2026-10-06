@@ -54,7 +54,7 @@ git clone https://github.com/drb253/research-stack.git && cd research-stack
 - [Correctness guarantees](#correctness-guarantees)
 - [Verification & testing](#verification--testing)
 - [Platforms](#platforms)
-- [Configuration & API keys](#configuration--api-keys)
+- [API keys & access (100% output)](#api-keys--access-how-to-get-100-output)
 - [Updating](#updating)
 - [Repository layout](#repository-layout)
 - [Troubleshooting](#troubleshooting)
@@ -362,23 +362,79 @@ from the working setup, so the search tools do not need per-call approval.
 
 ---
 
-## Configuration & API keys
+## API keys & access (how to get 100% output)
 
-Free sources work with **no keys**. Keys only raise rate limits and enable polite
-pools / PDF resolution. The installer writes `~/.config/paper-search-mcp/.env`
-(chmod `600`):
+The stack is **free-first**: with **zero keys** you already get the full 27-source
+search, DOI/PMID resolution, retraction checks, and every skill and gate. Keys do
+not unlock *correctness* — they unlock **coverage, rate limits, and PDF access**.
+To reach **100% of the repo's retrieval output**, add the settings below.
+
+All paper-search settings live in one auto-loaded file:
 
 ```ini
-PAPER_SEARCH_MCP_OPENALEX_EMAIL=you@example.org
-PAPER_SEARCH_MCP_UNPAYWALL_EMAIL=you@example.org
-PAPER_SEARCH_MCP_S2_API_KEY=        # https://www.semanticscholar.org/product/api
-PAPER_SEARCH_MCP_DOAJ_API_KEY=      # https://doaj.org/apply-for-api-key/
+# ~/.config/paper-search-mcp/.env   (chmod 600)
+# Preferred names carry the PAPER_SEARCH_MCP_ prefix; the bare names also work.
 ```
+
+### Tier 0 — no keys (works out of the box)
+
+Free sources, Crossref / OpenAlex / DataCite resolution, retraction checks, the
+12 skills and all gates. **≈90% of output.**
+
+### Tier 1 — recommended, free (~2 minutes) → unlocks the rest of the free tier
+
+| Setting | Env var(s) | Where to get it | Unlocks |
+|---|---|---|---|
+| **Contact email** ⭐ | `PAPER_SEARCH_MCP_OPENALEX_EMAIL`, `PAPER_SEARCH_MCP_UNPAYWALL_EMAIL`, `PAPER_SEARCH_MCP_NCBI_EMAIL` (+ bare `NCBI_EMAIL`) | your own email (no account) | OpenAlex **polite pool** (avoids HTTP 429), **open-access PDF resolution** (Unpaywall *requires* an email), NCBI polite pool |
+| **NCBI API key** ⭐ | `PAPER_SEARCH_MCP_NCBI_API_KEY` + `NCBI_API_KEY` | https://www.ncbi.nlm.nih.gov/account/settings/ | E-utilities **3 → 10 req/s** (PubMed, PMC, MeSH, `convert_paper_ids`) |
+| **Semantic Scholar key** ⭐ | `PAPER_SEARCH_MCP_SEMANTIC_SCHOLAR_API_KEY` + `SEMANTIC_SCHOLAR_API_KEY` | https://www.semanticscholar.org/product/api | Semantic Scholar at policy rate (1 req/s) |
+| OpenAlex key | `PAPER_SEARCH_MCP_OPENALEX_API_KEY` | https://openalex.org/settings/api | higher OpenAlex limits |
+| DOAJ key | `PAPER_SEARCH_MCP_DOAJ_API_KEY` | https://doaj.org/apply-for-api-key/ | public 100 req/hr → higher |
+| CORE key | `PAPER_SEARCH_MCP_CORE_API_KEY` | https://core.ac.uk/services/api | CORE quota |
+| Zenodo token | `PAPER_SEARCH_MCP_ZENODO_ACCESS_TOKEN` | https://zenodo.org/account/settings/applications/ | Zenodo quota |
+| OpenAIRE key | `PAPER_SEARCH_MCP_OPENAIRE_API_KEY` | https://develop.openaire.eu/ | OpenAIRE quota |
+
+> ⚠️ **Naming gotcha:** paper-search's Semantic Scholar connector reads
+> **`SEMANTIC_SCHOLAR_API_KEY`**, *not* `S2_API_KEY` (the separate `academic-search`
+> MCP reads `S2_API_KEY`). `install.sh` writes **both** names for you.
+
+### Tier 2 — keyed publisher sources (free keys, **quota-limited**) → the last ~10%
+
+| Setting | Env var(s) | Where to get it | Unlocks | Quota |
+|---|---|---|---|---|
+| **Springer Nature** (two keys) | `PAPER_SEARCH_MCP_SPRINGER_NATURE_META_API_KEY` + `…_OPENACCESS_API_KEY` | https://dev.springernature.com | 2 extra sources incl. **Springer OA full text (JATS)** | 500/day **per key** |
+| **Elsevier / Scopus** | `PAPER_SEARCH_MCP_ELSEVIER_API_KEY` (+ `…_ELSEVIER_INSTTOKEN`) | https://dev.elsevier.com | Scopus metadata search | full text needs the institutional token |
+| IEEE / ACM (paid corpora) | `PAPER_SEARCH_MCP_IEEE_API_KEY` / `…_ACM_API_KEY` | IEEE / ACM developer portals | paid-index coverage | paid |
+| Google Scholar proxy | `PAPER_SEARCH_MCP_GOOGLE_SCHOLAR_PROXY_URL` | a scraping proxy | optional — use the `google-scholar` MCP instead | — |
+
+> ⚠️ **Quota note:** Springer and Elsevier keys make `sources="all"` spend their
+> daily quota on every sweep. Prefer `sources="auto"`.
+
+### Other MCP servers — what they need
+
+| Server | Key needed | Where / how |
+|---|---|---|
+| `consensus` | none | `npx mcp-remote` OAuth — a browser opens on first use |
+| `google-scholar` | none (HasData) | `npx mcp-remote` — first-run auth via HasData |
+| `ncbi` | `NCBI_EMAIL` + `NCBI_API_KEY` | written into its MCP `env` by `install.sh` |
+| `academic-search` | `S2_API_KEY` | written into its MCP `env` by `install.sh` |
+
+### Reach 100% in one command
 
 ```bash
 ./install.sh --targets cline,claude,opencode \
-  --email you@org --s2-key <key> --ncbi-key <key>
+  --email you@example.org \
+  --s2-key  <semantic-scholar-key> \
+  --ncbi-key <ncbi-key>
+# then paste the Springer + Elsevier keys into ~/.config/paper-search-mcp/.env
+# and restart the client.  Re-running install.sh is safe (it appends).
 ```
+
+Copy the full annotated template from
+[`config/paper-search.env.template`](config/paper-search.env.template) if you
+prefer to edit it by hand. Nothing here is required for the gates to pass — keys
+only widen what the search layer can *find*.
+
 
 ---
 
