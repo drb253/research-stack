@@ -161,13 +161,17 @@ bash ~/.research-stack/skills/medical-narrative-review/scripts/selftest.sh   # 1
 
 ## Publishing this repo
 
+One step, once you have a GitHub account (repo is already committed):
+
 ```bash
 cd research-stack
-git init -b main
-git add . && git commit -m "research-stack v1.0.0"
-gh repo create research-stack --public --source=. --push   # or add a remote manually
-# then replace REPLACE_ME in README.md + bootstrap.sh with your user/org
+./publish.sh --user <your-github-user>      # stamps owner, sets origin, pushes
 ```
+
+It replaces every `REPLACE_ME`, commits, sets `origin`, and pushes `main`. If you
+are not authenticated yet, add `--no-push` and it prints the exact commands
+(`gh auth login` + `gh repo create research-stack --public --source=. --push`, or a
+manual `git push`).
 
 ## License & provenance
 
