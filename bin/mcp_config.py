@@ -38,7 +38,19 @@ def definitions() -> dict:
     return {
         "paper-search": {
             "spec": {"command": f"{home}/.local/bin/paper-search-mcp", "args": [],
-                     "env": {}, "type": "stdio"},
+                     "env": {}, "type": "stdio", "timeout": 300,
+                     "autoApprove": [
+                         "search_papers", "search_arxiv", "search_pubmed", "search_biorxiv",
+                         "search_medrxiv", "search_iacr", "search_semantic", "search_crossref",
+                         "search_openalex", "search_pmc", "search_core", "search_europepmc",
+                         "search_openaire", "search_doaj", "search_zenodo", "search_hal",
+                         "search_ssrn", "search_unpaywall", "search_plos", "search_jstage",
+                         "search_figshare", "search_datacite", "search_whoris", "search_osf",
+                         "plan_search_query", "check_retraction", "get_crossref_paper_by_doi",
+                         "convert_paper_ids", "get_citation_metrics", "get_citing_articles",
+                         "get_annotations", "search_clinicaltrials", "get_related_articles",
+                         "get_mesh_details", "search_bookshelf", "search_ictrp", "search_ctis",
+                     ]},
             "requires": [],
         },
         "ncbi": {
@@ -52,6 +64,13 @@ def definitions() -> dict:
                     "LOG_LEVEL": "INFO",
                 },
                 "type": "stdio",
+                "timeout": 120,
+                "autoApprove": [
+                    "search_pubmed", "get_article_details", "search_mesh_terms",
+                    "get_related_articles", "advanced_search", "cache_stats",
+                    "batch_search_multiple_queries", "batch_get_article_details",
+                    "get_analytics_summary", "get_detailed_metrics",
+                ],
             },
             "requires": [f"{home}/.local/share/ncbi-mcp-server/.venv/bin/python"],
         },
@@ -62,7 +81,9 @@ def definitions() -> dict:
                 "env": {"S2_API_KEY": _env("S2_API_KEY", ""),
                         "PATH": f"{home}/.local/bin:/usr/local/bin:/usr/bin:/bin",
                         "HOME": home},
-                "type": "stdio",
+                "type": "stdio", "timeout": 300,
+                "autoApprove": ["search_papers", "search_by_author", "explore_citations",
+                                "get_paper_stats", "build_extended_query"],
             },
             "requires": [f"{home}/.local/share/academic-search-mcp/.venv/bin/academic-search"],
         },
@@ -71,7 +92,7 @@ def definitions() -> dict:
                      "args": ["-y", "mcp-remote", "https://mcp.consensus.app/mcp"],
                      "env": {"PATH": f"{home}/.local/bin:/usr/local/bin:/usr/bin:/bin",
                              "HOME": home},
-                     "type": "stdio"},
+                     "type": "stdio", "timeout": 180},
             "requires": [],
         },
         "google-scholar": {
@@ -80,7 +101,7 @@ def definitions() -> dict:
                               "https://mcp.hasdata.com/mcp?apis=google_scholar"],
                      "env": {"PATH": f"{home}/.local/bin:/usr/local/bin:/usr/bin:/bin",
                              "HOME": home},
-                     "type": "stdio"},
+                     "type": "stdio", "timeout": 180},
             "requires": [],
         },
     }
@@ -117,6 +138,13 @@ PLATFORMS = {
     "opencode": (HOME / ".config/opencode/opencode.json", "opencode", "mcp"),
     "gemini": (HOME / ".gemini/settings.json", "cline", "mcpServers"),
     "lmstudio": (HOME / ".lmstudio/mcp.json", "cline", "mcpServers"),
+    "trae": (
+        (HOME / "Library/Application Support/Trae/User/mcp.json")
+        if sys.platform == "darwin"
+        else (HOME / ".config/Trae/User/mcp.json"),
+        "cline", "mcpServers"),
+    "cursor": (HOME / ".cursor/mcp.json", "cline", "mcpServers"),
+    "windsurf": (HOME / ".codeium/windsurf/mcp_config.json", "cline", "mcpServers"),
 }
 
 

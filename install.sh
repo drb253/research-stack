@@ -30,7 +30,7 @@ TARGETS="cline"
 DO_SKILLS=1
 DO_MCP=1
 COPY_SKILLS=0
-WITH_UPSTREAM=0
+WITH_UPSTREAM=1
 INSTALL_NCBI=1
 INSTALL_ACADEMIC=1
 INSTALL_RENDER=1
@@ -59,7 +59,8 @@ Options:
   --targets LIST     cline,claude,opencode,gemini,lmstudio  (default: cline)
   --no-mcp           install skills only
   --no-skills        configure MCP only
-  --with-upstream-skills   also clone the 160+ K-Dense scientific skills
+  --with-upstream-skills   (default) also clone the 160+ K-Dense scientific skills
+  --no-upstream-skills     skip the upstream scientific skills
   --copy-skills      copy skills instead of symlinking
   --reinstall        reinstall/upgrade the paper-search tool first
   --no-ncbi / --no-academic-search / --no-render / --no-r   skip a default step
@@ -81,6 +82,7 @@ while [ $# -gt 0 ]; do
     --no-mcp) DO_MCP=0; shift;;
     --no-skills) DO_SKILLS=0; shift;;
     --with-upstream-skills) WITH_UPSTREAM=1; shift;;
+    --no-upstream-skills) WITH_UPSTREAM=0; shift;;
     --with-ncbi) INSTALL_NCBI=1; shift;;
     --with-academic-search) INSTALL_ACADEMIC=1; shift;;
     --no-ncbi) INSTALL_NCBI=0; shift;;
@@ -111,6 +113,7 @@ skills_dir_for() {
     opencode)  echo "$HOME/.config/opencode/skills";;
     gemini)    echo "$HOME/.gemini/skills";;
     lmstudio)  echo "$HOME/.lmstudio/skills";;
+    codex)     echo "$HOME/.codex/skills";;
     *)         echo "";;
   esac
 }
@@ -292,7 +295,7 @@ if [ "$DO_MCP" = 1 ]; then
   for t in "${TLIST[@]}"; do
     t="$(echo "$t" | tr -d '[:space:]')"
     case "$t" in
-      cline|claude|opencode|gemini|lmstudio) ;;
+      cline|claude|opencode|gemini|lmstudio|trae|cursor|windsurf) ;;
       *) warn "no MCP schema for target '$t' (skills only)"; continue;;
     esac
     info "configuring $t ..."

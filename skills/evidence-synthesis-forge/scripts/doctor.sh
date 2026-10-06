@@ -56,9 +56,14 @@ check_url "PROSPERO"    "https://www.crd.york.ac.uk/PROSPERO/"
 
 echo "== Skills =="
 for s in sysreview meta-analysis evidence-synthesis-forge meta-analysis-forge \
-         citecheck humanizerdrb meta-ml-screener umbrella-review-skeptic \
-         environment-life-review-forge statistical-analysis; do
+         medical-narrative-review umbrella-review-skeptic meta-ml-screener \
+         environment-life-review-forge paper-search citecheck humanizerdrb originality-check; do
   [ -f "$SKILLS/$s/SKILL.md" ] && ok "$s" || bad "$s"
+done
+# Upstream scientific skills (installed with --with-upstream-skills) are optional.
+for s in statistical-analysis citation-management literature-review peer-review scientific-writing; do
+  [ -f "$SKILLS/$s/SKILL.md" ] && ok "$s (upstream)" \
+    || warn "$s (upstream) not installed -- add with --with-upstream-skills"
 done
 
 echo

@@ -20,7 +20,7 @@ skills_dir_for() {
   case "$1" in
     cline) echo "$HOME/.cline/skills";; claude) echo "$HOME/.claude/skills";;
     opencode) echo "$HOME/.config/opencode/skills";; gemini) echo "$HOME/.gemini/skills";;
-    lmstudio) echo "$HOME/.lmstudio/skills";; *) echo "";;
+    lmstudio) echo "$HOME/.lmstudio/skills";; codex) echo "$HOME/.codex/skills";; *) echo "";;
   esac
 }
 config_for() {
@@ -29,7 +29,10 @@ config_for() {
     claude) if [ "$(uname)" = "Darwin" ]; then echo "$HOME/Library/Application Support/Claude/claude_desktop_config.json"; else echo "$HOME/.config/Claude/claude_desktop_config.json"; fi;;
     opencode) echo "$HOME/.config/opencode/opencode.json";;
     gemini) echo "$HOME/.gemini/settings.json";;
-    lmstudio) echo "$HOME/.lmstudio/mcp.json";; *) echo "";;
+    lmstudio) echo "$HOME/.lmstudio/mcp.json";;
+    trae) if [ "$(uname)" = "Darwin" ]; then echo "$HOME/Library/Application Support/Trae/User/mcp.json"; else echo "$HOME/.config/Trae/User/mcp.json"; fi;;
+    cursor) echo "$HOME/.cursor/mcp.json";;
+    windsurf) echo "$HOME/.codeium/windsurf/mcp_config.json";; *) echo "";;
   esac
 }
 

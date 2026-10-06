@@ -73,7 +73,8 @@ servers) `node`/`npx`. `uv` is installed automatically if missing.
 --minimal        skip ncbi, academic-search, render toolchain and R packages
 --no-ncbi / --no-academic-search / --no-render / --no-r   skip one default step
 --ncbi-repo URL  override the ncbi source repo (default: upstream)
---with-upstream-skills   also add the 160+ K-Dense scientific skills (MIT)
+--with-upstream-skills   (default) clone the 160+ K-Dense scientific skills (MIT)
+--no-upstream-skills     skip the upstream scientific skills
 --copy-skills    copy skills instead of symlinking
 --reinstall      reinstall/upgrade the paper-search tool first
 --with-runtime   also create the Python toolchain venv (scipy/pandas/...)
@@ -91,6 +92,10 @@ Skills are symlinked from `~/.research-stack/skills` so an update is one `git pu
 - **`academic-search`** — installs the patched source tree from `mcp/optional/academic-search-mcp/`.
 - **render / PDF toolchain** — `browser-probe` venv + chromium (DOCX/PDF export; downloads chromium).
 - **R packages** — `install_r_packages.R` (needs R on PATH; skipped with a warning otherwise).
+- **upstream scientific skills** — the 160+ K-Dense pack, symlinked alongside the 12 (skip with `--no-upstream-skills`).
+
+Generated MCP configs carry the `autoApprove` tool lists and `timeout` values from
+the working setup, so the search tools do not need per-call approval.
 
 `--minimal` installs just the skills + `paper-search`. Every default step is
 best-effort: a network failure warns and the rest of the install continues.
@@ -108,6 +113,10 @@ best-effort: a network failure warns and the rest of the install continues.
 | OpenCode | `~/.config/opencode/skills` | `~/.config/opencode/opencode.json` |
 | Gemini CLI | `~/.gemini/skills` | `~/.gemini/settings.json` |
 | LM Studio | `~/.lmstudio/skills` | `~/.lmstudio/mcp.json` |
+| Trae | — | `…/Trae/User/mcp.json` |
+| Cursor | — | `~/.cursor/mcp.json` |
+| Windsurf | — | `~/.codeium/windsurf/mcp_config.json` |
+| Codex | `~/.codex/skills` | (TOML — configure manually) |
 
 Existing configs are **backed up** (`.bak.<timestamp>`) and only the managed MCP
 keys are merged in — nothing else is touched. Generated configs are chmod `600`.
