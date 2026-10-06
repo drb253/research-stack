@@ -31,11 +31,13 @@ DO_SKILLS=1
 DO_MCP=1
 COPY_SKILLS=0
 WITH_UPSTREAM=0
-WITH_NCBI=0
-WITH_ACADEMIC=0
+INSTALL_NCBI=1
+INSTALL_ACADEMIC=1
+INSTALL_RENDER=1
+INSTALL_R=1
 REINSTALL=0
-WITH_R=0
 WITH_RUNTIME=0
+NCBI_REPO="${NCBI_REPO:-https://github.com/vitorpavinato/ncbi-mcp-server.git}"
 NCBI_EMAIL="${NCBI_EMAIL:-}"
 NCBI_API_KEY="${NCBI_API_KEY:-}"
 S2_API_KEY="${S2_API_KEY:-}"
@@ -48,7 +50,29 @@ die()  { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 run()  { if [ "$DRY_RUN" = 1 ]; then printf '  [dry-run] %s\n' "$*"; else eval "$@"; fi; }
 have() { command -v "$1" >/dev/null 2>&1; }
 
-usage() { sed -n '2,26p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
+usage() {
+  cat <<'EOF'
+research-stack installer -- review MCPs + skills for Cline / Claude / OpenCode.
+
+Usage: ./install.sh [options]
+Options:
+  --targets LIST     cline,claude,opencode,gemini,lmstudio  (default: cline)
+  --no-mcp           install skills only
+  --no-skills        configure MCP only
+  --with-upstream-skills   also clone the 160+ K-Dense scientific skills
+  --copy-skills      copy skills instead of symlinking
+  --reinstall        reinstall/upgrade the paper-search tool first
+  --no-ncbi / --no-academic-search / --no-render / --no-r   skip a default step
+  --minimal          skip ncbi, academic-search, render toolchain and R packages
+  --ncbi-repo URL    override the ncbi source repo (default upstream)
+  --with-runtime     also create the Python toolchain venv (scipy/pandas/...)
+  --email ADDR       NCBI / polite-pool email         (env NCBI_EMAIL)
+  --ncbi-key KEY     NCBI API key                     (env NCBI_API_KEY)
+  --s2-key KEY       Semantic Scholar key             (env S2_API_KEY)
+  --dry-run          print what would happen, change nothing
+  -h|--help
+EOF
+}
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -57,14 +81,20 @@ while [ $# -gt 0 ]; do
     --no-mcp) DO_MCP=0; shift;;
     --no-skills) DO_SKILLS=0; shift;;
     --with-upstream-skills) WITH_UPSTREAM=1; shift;;
-    --with-ncbi) WITH_NCBI=1; shift;;
-    --with-academic-search) WITH_ACADEMIC=1; shift;;
+    --with-ncbi) INSTALL_NCBI=1; shift;;
+    --with-academic-search) INSTALL_ACADEMIC=1; shift;;
+    --no-ncbi) INSTALL_NCBI=0; shift;;
+    --no-academic-search) INSTALL_ACADEMIC=0; shift;;
+    --no-render) INSTALL_RENDER=0; shift;;
+    --no-r) INSTALL_R=0; shift;;
+    --minimal) INSTALL_NCBI=0; INSTALL_ACADEMIC=0; INSTALL_RENDER=0; INSTALL_R=0; shift;;
+    --ncbi-repo) NCBI_REPO="$2"; shift 2;;
     --copy-skills) COPY_SKILLS=1; shift;;
     --reinstall) REINSTALL=1; shift;;
     --email) NCBI_EMAIL="$2"; shift 2;;
     --ncbi-key) NCBI_API_KEY="$2"; shift 2;;
     --s2-key) S2_API_KEY="$2"; shift 2;;
-    --with-r) WITH_R=1; shift;;
+    --with-r) INSTALL_R=1; shift;;
     --with-runtime) WITH_RUNTIME=1; shift;;
     --dry-run) DRY_RUN=1; shift;;
     -h|--help) usage; exit 0;;
@@ -83,6 +113,53 @@ skills_dir_for() {
     lmstudio)  echo "$HOME/.lmstudio/skills";;
     *)         echo "";;
   esac
+}
+
+# ---- optional component installers ----------------------------------------- #
+install_ncbi() {
+  DEST="$HOME/.local/share/ncbi-mcp-server"
+  if [ -x "$DEST/.venv/bin/python" ] && [ -d "$DEST/src/ncbi_mcp_server" ]; then
+    info "ncbi already installed"; return 0
+  fi
+  info "installing ncbi MCP (clone + reliability patch + venv)..."
+  run "rm -rf '$DEST'"
+  run "git clone --depth 1 '$NCBI_REPO' '$DEST'" || { warn "ncbi clone failed (skipping)"; return 1; }
+  run "git -C '$DEST' apply '$ROOT/mcp/optional/ncbi-mcp-server.patch' 2>/dev/null || patch -d '$DEST' -p1 -N < '$ROOT/mcp/optional/ncbi-mcp-server.patch' >/dev/null 2>&1 || true"
+  run "uv venv '$DEST/.venv'" || { warn "ncbi venv failed"; return 1; }
+  run "uv pip install --python '$DEST/.venv/bin/python' mcp httpx typing-extensions python-dotenv redis aiofiles" \
+    || warn "ncbi dependency install failed"
+  info "ncbi -> $DEST"
+}
+
+install_academic_search() {
+  DEST="$HOME/.local/share/academic-search-mcp"
+  if [ -x "$DEST/.venv/bin/academic-search" ]; then
+    info "academic-search already installed"; return 0
+  fi
+  SRC="$ROOT/mcp/optional/academic-search-mcp"
+  [ -d "$SRC" ] || { warn "academic-search source missing in repo (skipping)"; return 1; }
+  info "installing academic-search MCP (copy + venv)..."
+  run "rm -rf '$DEST' && cp -R '$SRC' '$DEST'"
+  run "uv venv '$DEST/.venv'" || { warn "academic-search venv failed"; return 1; }
+  run "uv pip install --python '$DEST/.venv/bin/python' -e '$DEST'" \
+    || warn "academic-search dependency install failed"
+  info "academic-search -> $DEST"
+}
+
+install_render() {
+  DEST="$HOME/.local/share/browser-probe"
+  REQ="$ROOT/mcp/optional/browser-probe.requirements.txt"
+  [ -f "$REQ" ] || { warn "browser-probe requirements missing (skipping)"; return 1; }
+  if [ -x "$DEST/.venv/bin/python" ] && \
+     "$DEST/.venv/bin/python" -c 'import playwright,pypdf,pypdfium2,reportlab,PIL' >/dev/null 2>&1; then
+    info "render/PDF toolchain already installed"; return 0
+  fi
+  info "installing render/PDF toolchain (browser-probe; downloads chromium)..."
+  run "uv venv '$DEST/.venv'" || { warn "render venv failed"; return 1; }
+  run "uv pip install --python '$DEST/.venv/bin/python' -r '$REQ'" \
+    || { warn "render deps install failed"; return 1; }
+  run "'$DEST/.venv/bin/playwright' install chromium" || warn "chromium download failed"
+  info "render toolchain -> $DEST"
 }
 
 # ---- prerequisites --------------------------------------------------------- #
@@ -131,6 +208,10 @@ if [ "$DO_MCP" = 1 ]; then
       python3 "$PATCHES/audit_fix_check.py" || warn "mesh audit-fix self-check FAILED"
     fi
   fi
+
+  step "1b. optional MCP servers (ncbi, academic-search)"
+  if [ "$INSTALL_NCBI" = 1 ]; then install_ncbi || true; else info "ncbi: skipped (--no-ncbi)"; fi
+  if [ "$INSTALL_ACADEMIC" = 1 ]; then install_academic_search || true; else info "academic-search: skipped"; fi
 fi
 
 # ---- 2. skills ------------------------------------------------------------- #
@@ -183,19 +264,29 @@ if [ "$DO_SKILLS" = 1 ]; then
   done
 fi
 
+# ---- 2b. render/PDF toolchain ---------------------------------------------- #
+if [ "$INSTALL_RENDER" = 1 ]; then
+  step "2b. render/PDF toolchain"
+  install_render || true
+fi
+
 # ---- 3. MCP client config -------------------------------------------------- #
 if [ "$DO_MCP" = 1 ]; then
   step "3. MCP client config"
   SERVERS="paper-search,consensus,google-scholar"
-  if [ "$WITH_NCBI" = 1 ]; then
-    SERVERS="$SERVERS,ncbi"
-    [ -x "$HOME/.local/share/ncbi-mcp-server/.venv/bin/python" ] \
-      || warn "ncbi configured but the ncbi fork is not installed at ~/.local/share/ncbi-mcp-server (server will not start until it is)."
+  if [ "$INSTALL_NCBI" = 1 ]; then
+    if [ -x "$HOME/.local/share/ncbi-mcp-server/.venv/bin/python" ]; then
+      SERVERS="$SERVERS,ncbi"
+    else
+      warn "ncbi not installed -> omitted from config (re-run without --no-ncbi to install)"
+    fi
   fi
-  if [ "$WITH_ACADEMIC" = 1 ]; then
-    SERVERS="$SERVERS,academic-search"
-    [ -x "$HOME/.local/share/academic-search-mcp/.venv/bin/academic-search" ] \
-      || warn "academic-search configured but its fork is not installed at ~/.local/share/academic-search-mcp."
+  if [ "$INSTALL_ACADEMIC" = 1 ]; then
+    if [ -x "$HOME/.local/share/academic-search-mcp/.venv/bin/academic-search" ]; then
+      SERVERS="$SERVERS,academic-search"
+    else
+      warn "academic-search not installed -> omitted from config"
+    fi
   fi
   IFS=',' read -ra TLIST <<< "$TARGETS"
   for t in "${TLIST[@]}"; do
@@ -234,21 +325,23 @@ else
   info "add later:  $ROOT/install.sh --targets '${TARGETS}' --email you@org --s2-key <key>"
 fi
 
-# ---- 5. optional runtime deps --------------------------------------------- #
-if [ "$WITH_R" = 1 ] || [ "$WITH_RUNTIME" = 1 ]; then
+# ---- 5. runtime deps ------------------------------------------------------- #
+if [ "$INSTALL_R" = 1 ] || [ "$WITH_RUNTIME" = 1 ]; then
   step "5. Runtime dependencies"
-  if [ "$WITH_R" = 1 ]; then
+  if [ "$INSTALL_R" = 1 ]; then
     if command -v Rscript >/dev/null 2>&1; then
-      info "installing R meta-analysis packages (several minutes)..."
-      run "Rscript '$STORE/skills/meta-analysis-forge/scripts/install_r_packages.R'"
+      info "installing R meta-analysis packages (first run can take several minutes)..."
+      run "Rscript '$STORE/skills/meta-analysis-forge/scripts/install_r_packages.R'" \
+        || warn "R package install failed -- re-run: Rscript $STORE/skills/meta-analysis-forge/scripts/install_r_packages.R"
     else
-      warn "Rscript not found -- install R (brew install r) then re-run with --with-r"
+      warn "Rscript not found -- install R (macOS: brew install r; Linux: apt install r-base) then re-run without --no-r"
     fi
   fi
   if [ "$WITH_RUNTIME" = 1 ]; then
     VENV="$HOME/.local/share/evidence-toolchain/.venv"
     run "uv venv '$VENV'"
-    run "uv pip install --python '$VENV/bin/python' scipy pandas numpy matplotlib seaborn pingouin statsmodels pyyaml jinja2"
+    run "uv pip install --python '$VENV/bin/python' scipy pandas numpy matplotlib seaborn pingouin statsmodels pyyaml jinja2" \
+      || warn "python toolchain venv install failed"
     info "python toolchain venv -> $VENV"
   fi
 fi

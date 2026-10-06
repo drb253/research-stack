@@ -1,0 +1,11 @@
+# Virtual environment and build artefacts
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+build/
+dist/
+
+# Local verification output
+*.log

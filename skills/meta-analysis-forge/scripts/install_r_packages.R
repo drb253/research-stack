@@ -1,6 +1,9 @@
 #!/usr/bin/env Rscript
 
-packages <- c("metafor")
+packages <- c(
+  "metafor", "meta", "netmeta", "robumeta", "clubSandwich",
+  "robvis", "esc", "mvmeta", "ggplot2"
+)
 repos <- getOption("repos")
 if (is.null(repos) || identical(repos[["CRAN"]], "@CRAN@")) {
   repos <- c(CRAN = "https://cloud.r-project.org")

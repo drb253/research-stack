@@ -51,11 +51,13 @@ Then **restart your client(s)** so the MCP servers are spawned, and check:
 
 | Layer | Contents |
 |---|---|
-| **MCP servers** | `paper-search` (27 sources, patched), `consensus`, `google-scholar` (+ optional `ncbi`, `academic-search`) |
+| **MCP servers** | `paper-search` (27 sources, patched), `consensus`, `google-scholar`, `ncbi`, `academic-search` |
 | **Review skills** | `sysreview`, `meta-analysis`, `evidence-synthesis-forge`, `meta-analysis-forge`, `medical-narrative-review`, `umbrella-review-skeptic`, `meta-ml-screener`, `environment-life-review-forge` |
 | **Guard skills** | `paper-search`, `citecheck`, `humanizerdrb`, `originality-check` |
 | **Patched connectors** | 43 modules fixing arXiv/OpenAlex/Zenodo/HAL/J-STAGE/PLOS/WHO-IRIS and the MeSH query-planner |
 | **Toolbox** | `originality-toolkit` (required by `originality-check`) → `~/.research-stack/originality-toolkit` |
+| **Render/PDF** | `browser-probe` venv (playwright + chromium, pypdf/pypdfium2/reportlab/pillow) for DOCX/PDF export |
+| **R engine** | metafor, meta, netmeta, robumeta, clubSandwich, robvis, esc, mvmeta, ggplot2 (via `install_r_packages.R`) |
 
 Runs on **macOS and Linux**; needs `git`, `curl`, `python3`, and (for two remote
 servers) `node`/`npx`. `uv` is installed automatically if missing.
@@ -68,12 +70,13 @@ servers) `node`/`npx`. `uv` is installed automatically if missing.
 --targets LIST   cline,claude,opencode,gemini,lmstudio   (default: cline)
 --no-mcp         skills only
 --no-skills      configure MCP only
+--minimal        skip ncbi, academic-search, render toolchain and R packages
+--no-ncbi / --no-academic-search / --no-render / --no-r   skip one default step
+--ncbi-repo URL  override the ncbi source repo (default: upstream)
 --with-upstream-skills   also add the 160+ K-Dense scientific skills (MIT)
---with-ncbi / --with-academic-search   include those servers in the config
 --copy-skills    copy skills instead of symlinking
 --reinstall      reinstall/upgrade the paper-search tool first
---with-r         install the R meta-analysis packages (slow; needs R)
---with-runtime   create the Python toolchain venv (scipy/pandas/...)
+--with-runtime   also create the Python toolchain venv (scipy/pandas/...)
 --email ADDR     NCBI / polite-pool email
 --ncbi-key KEY   NCBI API key          --s2-key KEY   Semantic Scholar key
 --dry-run        print actions, change nothing
@@ -81,23 +84,17 @@ servers) `node`/`npx`. `uv` is installed automatically if missing.
 
 Skills are symlinked from `~/.research-stack/skills` so an update is one `git pull`.
 
-### Optional MCP servers
+### Installed by default (opt out with the flags above)
 
-`ncbi` and `academic-search` are **configured** with `--with-ncbi` /
-`--with-academic-search` (the installer warns if their binary is missing), but
-their bespoke forks are not auto-installed. Build artifacts ship in `mcp/optional/`:
+- **`ncbi`** — clones the upstream repo, applies `mcp/optional/ncbi-mcp-server.patch`,
+  builds a venv. Only added to the config if the install actually succeeded.
+- **`academic-search`** — installs the patched source tree from `mcp/optional/academic-search-mcp/`.
+- **render / PDF toolchain** — `browser-probe` venv + chromium (DOCX/PDF export; downloads chromium).
+- **R packages** — `install_r_packages.R` (needs R on PATH; skipped with a warning otherwise).
 
-- `ncbi-mcp-server.patch` — apply over https://github.com/vitorpavinato/ncbi-mcp-server
-- `academic-search-mcp-src.tgz` — the patched source tree
-- `browser-probe.requirements.txt` — render/PDF toolchain for DOCX/PDF export
+`--minimal` installs just the skills + `paper-search`. Every default step is
+best-effort: a network failure warns and the rest of the install continues.
 
-### Runtime dependencies
-
-The meta-analysis skills need **R** + the packages in
-`skills/meta-analysis-forge/scripts/install_r_packages.R`; a few
-`evidence-synthesis-forge` scripts use the Python toolchain venv. Install both
-with `--with-r` and `--with-runtime`. Without them `doctor.sh` reports the gap
-and the non-R paths still work.
 
 
 ---

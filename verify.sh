@@ -14,6 +14,7 @@ done
 pass=0; fail=0
 ok()  { printf '  PASS  %s\n' "$1"; pass=$((pass+1)); }
 bad() { printf '  FAIL  %s\n' "$1"; fail=$((fail+1)); }
+info(){ printf '  INFO  %s\n' "$1"; }
 
 skills_dir_for() {
   case "$1" in
@@ -87,6 +88,11 @@ sys.exit(0 if '$s' in box else 1)" 2>/dev/null \
     bad "$t config missing or invalid: $cfg"
   fi
 done
+
+echo "== 4. optional components =="
+[ -x "$HOME/.local/share/ncbi-mcp-server/.venv/bin/python" ] && ok "ncbi installed" || info "ncbi not installed (optional)"
+[ -x "$HOME/.local/share/academic-search-mcp/.venv/bin/academic-search" ] && ok "academic-search installed" || info "academic-search not installed (optional)"
+[ -x "$HOME/.local/share/browser-probe/.venv/bin/python" ] && ok "render toolchain installed" || info "render toolchain not installed (optional)"
 
 echo
 printf 'RESULT: %d passed, %d failed\n' "$pass" "$fail"

@@ -1,0 +1,21 @@
+[project]
+name = "academic-search"
+version = "0.8.0+local1"
+description = "MCP Server for multi-provider academic search (locally patched fork of 0.8.0)"
+requires-python = ">=3.10"
+dependencies = [
+    "fastmcp>=3.4",
+    "numpy>=1.24.0",
+    "pandas>=2.0.0",
+    "requests>=2.31.0",
+]
+
+[project.scripts]
+academic-search = "academic_search.__main__:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
