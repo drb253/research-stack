@@ -154,6 +154,7 @@ tests + a live adversarial acceptance run):
 
 ```bash
 bash ~/.research-stack/skills/evidence-synthesis-forge/scripts/selftest.sh
+bash ~/.research-stack/skills/medical-narrative-review/scripts/selftest.sh   # 19 checks
 ```
 
 ---

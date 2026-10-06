@@ -431,3 +431,17 @@ exit code is `1` when any `error`-severity issue is present. Full flag list and 
 - Never state a percentage, incidence, or effect size that is not in `sources.csv`.
 - Say clearly when the review is a draft with open placeholders rather than a finished manuscript.
 
+## Regression tests
+
+`scripts/selftest.sh` is the offline regression harness. It runs every bundled CLI
+against fixtures and asserts **both** the PASS and the FAIL path of each gate (a gate
+that cannot fail is not a gate), then exercises the whole chain
+(`build_reference_list` → `export_document` → `gate` PASS). Run it after any change:
+
+```bash
+bash scripts/selftest.sh     # RESULT: 19 passed, 0 failed
+```
+
+It needs only `python3` and `bash` — no network, no third-party packages — and is
+location-independent (it resolves the skill root from its own path).
+

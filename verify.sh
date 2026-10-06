@@ -73,6 +73,23 @@ else
   bad "originality-toolkit MISSING -> originality-check cannot run"
 fi
 
+echo "== 2c. medical-narrative-review harness =="
+MNR=""
+for cand in "$ROOT/skills/medical-narrative-review/scripts/selftest.sh" \
+            "$HOME/.research-stack/skills/medical-narrative-review/scripts/selftest.sh"; do
+  [ -f "$cand" ] && { MNR="$cand"; break; }
+done
+if [ -n "$MNR" ]; then
+  if bash "$MNR" >/tmp/mnr_selftest.out 2>&1; then
+    ok "narrative-review selftest passes ($(grep -oE 'RESULT: [0-9]+ passed, [0-9]+ failed' /tmp/mnr_selftest.out | tail -1))"
+  else
+    bad "narrative-review selftest FAILED"
+    tail -4 /tmp/mnr_selftest.out | sed 's/^/        /'
+  fi
+else
+  info "narrative-review selftest not found"
+fi
+
 echo "== 3. MCP config =="
 for t in "${TLIST[@]}"; do
   t="$(echo "$t" | tr -d '[:space:]')"; cfg="$(config_for "$t")"
