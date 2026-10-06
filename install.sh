@@ -38,6 +38,7 @@ INSTALL_R=1
 REINSTALL=0
 WITH_RUNTIME=0
 NCBI_REPO="${NCBI_REPO:-https://github.com/vitorpavinato/ncbi-mcp-server.git}"
+FROM_PYPI=0
 NCBI_EMAIL="${NCBI_EMAIL:-}"
 NCBI_API_KEY="${NCBI_API_KEY:-}"
 S2_API_KEY="${S2_API_KEY:-}"
@@ -66,6 +67,7 @@ Options:
   --no-ncbi / --no-academic-search / --no-render / --no-r   skip a default step
   --minimal          skip ncbi, academic-search, render toolchain and R packages
   --ncbi-repo URL    override the ncbi source repo (default upstream)
+  --from-pypi        install paper-search from PyPI + apply patches (legacy) instead of vendored
   --with-runtime     also create the Python toolchain venv (scipy/pandas/...)
   --email ADDR       NCBI / polite-pool email         (env NCBI_EMAIL)
   --ncbi-key KEY     NCBI API key                     (env NCBI_API_KEY)
@@ -91,6 +93,7 @@ while [ $# -gt 0 ]; do
     --no-r) INSTALL_R=0; shift;;
     --minimal) INSTALL_NCBI=0; INSTALL_ACADEMIC=0; INSTALL_RENDER=0; INSTALL_R=0; shift;;
     --ncbi-repo) NCBI_REPO="$2"; shift 2;;
+    --from-pypi) FROM_PYPI=1; shift;;
     --copy-skills) COPY_SKILLS=1; shift;;
     --reinstall) REINSTALL=1; shift;;
     --email) NCBI_EMAIL="$2"; shift 2;;
@@ -190,26 +193,33 @@ fi
 
 # ---- 1. paper-search MCP --------------------------------------------------- #
 if [ "$DO_MCP" = 1 ]; then
-  step "1. paper-search MCP (uv tool) + reliability patches"
-  if [ "$REINSTALL" = 1 ]; then
-    run "uv tool install --reinstall paper-search-mcp --force"
-  elif have paper-search-mcp; then
-    info "paper-search-mcp already on PATH (use --reinstall to upgrade)"
+  step "1. paper-search MCP (vendored, pre-patched)"
+  VENDORED="$ROOT/mcp/paper-search-mcp"
+  if [ "$FROM_PYPI" = 1 ]; then
+    info "legacy path: PyPI base + apply_patches"
+    if [ "$REINSTALL" = 1 ]; then
+      run "uv tool install --reinstall --force paper-search-mcp"
+    else
+      run "uv tool install paper-search-mcp"
+    fi
+    run "python3 '$ROOT/mcp/paper-search-patches/apply_patches.py' | tail -4"
   else
-    run "uv tool install paper-search-mcp"
+    [ -d "$VENDORED/paper_search_mcp" ] || die "vendored package missing at $VENDORED"
+    if [ "$REINSTALL" = 1 ]; then
+      run "uv tool install --force '$VENDORED'"
+    elif have paper-search-mcp; then
+      info "paper-search-mcp already on PATH (use --reinstall to refresh from the vendored copy)"
+    else
+      info "installing paper-search-mcp from the vendored, pre-patched source..."
+      run "uv tool install '$VENDORED'"
+    fi
   fi
 
-  PATCHES="$ROOT/mcp/paper-search-patches"
-  [ -f "$PATCHES/apply_patches.py" ] || die "patch system missing at $PATCHES"
-  if [ "$DRY_RUN" = 1 ]; then
-    info "[dry-run] python3 $PATCHES/apply_patches.py"
-  else
-    info "applying connector patches (idempotent)..."
-    python3 "$PATCHES/apply_patches.py" | tail -4
-    # carry the audit fix proof
-    if [ -f "$PATCHES/audit_fix_check.py" ]; then
-      python3 "$PATCHES/audit_fix_check.py" || warn "mesh audit-fix self-check FAILED"
-    fi
+  if [ "$DRY_RUN" = 0 ]; then
+    PY="$HOME/.local/share/uv/tools/paper-search-mcp/bin/python"
+    [ -x "$PY" ] && "$PY" -c "import paper_search_mcp; print('paper_search_mcp import OK')" || true
+    AUD="$ROOT/mcp/paper-search-patches/audit_fix_check.py"
+    [ -f "$AUD" ] && { python3 "$AUD" || warn "mesh audit-fix self-check FAILED"; }
   fi
 
   step "1b. optional MCP servers (ncbi, academic-search)"

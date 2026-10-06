@@ -8,7 +8,7 @@ non-destructive (existing file is backed up, only managed keys are replaced).
 
 | Server | Command | Needs |
 |---|---|---|
-| `paper-search` | `~/.local/bin/paper-search-mcp` | uv tool + patches |
+| `paper-search` | `~/.local/bin/paper-search-mcp` | uv tool (vendored, pre-patched) |
 | `consensus` | `npx -y mcp-remote https://mcp.consensus.app/mcp` | node/npx |
 | `google-scholar` | `npx -y mcp-remote https://mcp.hasdata.com/mcp?apis=google_scholar` | node/npx |
 | `ncbi` (optional) | `~/.local/share/ncbi-mcp-server/.venv/bin/python -m ncbi_mcp_server.server` | the ncbi fork + venv |
@@ -61,8 +61,8 @@ opens with `---`.
 - **A server does not appear** → the client spawns MCP servers only at startup.
   Fully quit and reopen the client.
 - **`npx` servers fail** → install Node.js 18+.
-- **Paper-search returns nothing / arXiv empty after an upgrade** → re-run the
-  patches: `~/.research-stack-src/install.sh --no-skills`.
+- **Paper-search returns nothing / arXiv empty** → reinstall from the vendored
+  source: `~/.research-stack-src/install.sh --reinstall`.
 - **Config was clobbered** → restore the `.bak.<timestamp>` written next to it.
 - **Python version** → 3.9+ (stdlib only for the skills; the MCP tool brings its
   own Python via uv).

@@ -167,10 +167,10 @@ flowchart LR
 
 | Layer | Contents |
 |---|---|
-| **MCP servers** | `paper-search` (27 free sources, patched), `consensus`, `google-scholar`, `ncbi`, `academic-search` |
+| **MCP servers** | `paper-search` (27 free sources; **vendored, pre-patched**), `consensus`, `google-scholar`, `ncbi`, `academic-search` |
 | **Review skills** | `sysreview`, `meta-analysis`, `evidence-synthesis-forge`, `meta-analysis-forge`, `medical-narrative-review`, `umbrella-review-skeptic`, `meta-ml-screener`, `environment-life-review-forge` |
 | **Guard skills** | `paper-search`, `citecheck`, `humanizerdrb`, `originality-check` |
-| **Patched connectors** | 43 modules fixing arXiv / OpenAlex / Zenodo / HAL / J-STAGE / PLOS / WHO-IRIS and the MeSH query-planner |
+| **vendored source** | the whole `paper-search-mcp` package — upstream `v0.1.4` + 43 patched modules (arXiv / OpenAlex / Zenodo / HAL / J-STAGE / PLOS / WHO-IRIS + the MeSH query-planner) |
 | **Toolbox & tools** | `originality-toolkit` (23 files), `verification_report.py` |
 | **Render/PDF** | `browser-probe` venv — playwright + chromium, pypdf, pypdfium2, reportlab, pillow |
 | **R engine** | metafor, meta, netmeta, robumeta, clubSandwich, robvis, esc, mvmeta, ggplot2 |
@@ -209,6 +209,11 @@ flowchart LR
     R --> ST["source_status per source<br/>ok · empty · unavailable"]
     R --> RB["relevance bands<br/>high · medium · low"]
 ```
+
+> **Vendored, not fetched.** The whole `paper-search-mcp` package ships in this
+> repo (`mcp/paper-search-mcp/`, upstream `v0.1.4` + the 43 patched modules), and
+> the installer builds it from that path — so it never depends on PyPI or on
+> upstream HEAD, which has since diverged from the release the patches target.
 
 > **Audit fix included.** The MeSH query-planner previously expanded common words
 > to a *subheading's* entry terms (e.g. `screening → diagnosis, signs, findings,
@@ -440,19 +445,21 @@ only widen what the search layer can *find*.
 
 ## Updating
 
-The `paper-search` patches (and the MeSH audit fix) are **reverted by
-`uv tool upgrade`**. Re-apply them:
+`paper-search-mcp` is **vendored** (upstream `v0.1.4` + our patches) and installed
+from the repo, so `uv tool upgrade` no longer touches it. Update from source:
 
 ```bash
-uv tool install --reinstall paper-search-mcp --force
-~/.research-stack-src/install.sh --no-skills        # re-runs apply_patches.py + audit_fix_check.py
+git -C ~/.research-stack-src pull
+~/.research-stack-src/install.sh --reinstall     # rebuild the uv tool from the vendored source
 ```
 
-Update the skills (symlinked from `~/.research-stack/skills`, so one pull is enough):
+The skills are symlinked from `~/.research-stack/skills`, so a pull is enough:
 
 ```bash
 git -C ~/.research-stack-src pull && ~/.research-stack-src/install.sh --no-mcp
 ```
+
+Prefer the classic PyPI base + runtime patches? Use `install.sh --from-pypi`.
 
 ---
 
@@ -469,8 +476,9 @@ research-stack/
 ├── skills/                         # 12 review/guard skills  (198 files)
 ├── tools/  originality-toolkit/ (23 files) · verification_report.py
 └── mcp/
-    ├── paper-search-patches/       # 43 connectors + apply_patches.py + audit_fix_check.py
-    └── optional/                   # ncbi patch · academic-search source · browser-probe reqs
+    ├── paper-search-mcp/            # vendored, pre-patched package (upstream v0.1.4 + patches)
+    ├── paper-search-patches/        # 43 connectors + apply_patches.py + audit_fix_check.py
+    └── optional/                    # ncbi patch · academic-search source · browser-probe reqs
 ```
 
 ---
