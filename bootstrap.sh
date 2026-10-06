@@ -9,7 +9,7 @@
 # Env: RESEARCH_STACK_REPO (git url), RESEARCH_STACK_REF (branch/tag, default main),
 #      RESEARCH_STACK_HOME (clone dir, default ~/.research-stack-src)
 set -euo pipefail
-REPO="${RESEARCH_STACK_REPO:-https://github.com/REPLACE_ME/research-stack.git}"
+REPO="${RESEARCH_STACK_REPO:-https://github.com/drb253/research-stack.git}"
 REF="${RESEARCH_STACK_REF:-main}"
 DEST="${RESEARCH_STACK_HOME:-$HOME/.research-stack-src}"
 

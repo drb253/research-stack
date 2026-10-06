@@ -18,20 +18,20 @@ free sources silently return nothing.
 **One command** (clones + installs, wires Cline by default):
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/REPLACE_ME/research-stack/main/bootstrap.sh | bash
+curl -fsSL https://raw.githubusercontent.com/drb253/research-stack/main/bootstrap.sh | bash
 ```
 
 **Choose platforms:**
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/REPLACE_ME/research-stack/main/bootstrap.sh | bash -s -- \
+curl -fsSL https://raw.githubusercontent.com/drb253/research-stack/main/bootstrap.sh | bash -s -- \
   --targets cline,claude,opencode --email you@org
 ```
 
 **Or clone and run the installer directly:**
 
 ```bash
-git clone https://github.com/REPLACE_ME/research-stack.git
+git clone https://github.com/drb253/research-stack.git
 cd research-stack
 ./install.sh --targets cline,claude,opencode,gemini,lmstudio --email you@org
 ```
@@ -42,7 +42,7 @@ Then **restart your client(s)** so the MCP servers are spawned, and check:
 ./verify.sh --targets cline,claude,opencode
 ```
 
-> Edit `REPLACE_ME` to your GitHub user/org after you push the repo
+> Edit `drb253` to your GitHub user/org after you push the repo
 > (see [Publishing](#publishing-this-repo)).
 
 ---
@@ -168,7 +168,7 @@ cd research-stack
 ./publish.sh --user <your-github-user>      # stamps owner, sets origin, pushes
 ```
 
-It replaces every `REPLACE_ME`, commits, sets `origin`, and pushes `main`. If you
+It replaces every `drb253`, commits, sets `origin`, and pushes `main`. If you
 are not authenticated yet, add `--no-push` and it prints the exact commands
 (`gh auth login` + `gh repo create research-stack --public --source=. --push`, or a
 manual `git push`).
