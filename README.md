@@ -17,6 +17,12 @@ Built for one promise: **no false citations, no hallucinated numbers, no silent 
 
 </div>
 
+> **TL;DR** — one command installs **5 MCP servers + 12 gated review skills** for
+> Cline, Claude, OpenCode and more, so an agent can run a systematic / scoping /
+> narrative review or a meta-analysis that **cannot cite a paper that does not
+> exist, quote a number nobody computed, or report screening it never performed.**
+> Zero keys needed to start; the three local MCP servers need **no network** (all vendored).
+
 ---
 
 ## Install (one command)
@@ -40,12 +46,31 @@ git clone https://github.com/drb253/research-stack.git && cd research-stack
 ./install.sh --targets cline,claude,opencode --email you@org
 ```
 
+### 60-second quickstart
+
+```text
+1  install        curl … | bash -s -- --targets cline,claude,opencode
+2  restart        the client (MCP servers spawn only at startup)
+3  verify         ~/.research-stack-src/verify.sh --targets cline,claude,opencode
+4  use it         in the client, run:  /sysreview <research question>
+```
+
+`verify.sh` finishes with a single verdict — and it fails loudly rather than
+guessing:
+
+```text
+RESULT: <n> passed, 0 failed
+RESEARCH-STACK VERIFIED
+```
+
 ---
 
 ## Contents
 
+- [How it's different](#how-its-different)
 - [Why this exists](#why-this-exists)
 - [Architecture](#architecture)
+- [Install (one command)](#install-one-command)
 - [Install options](#install-options)
 - [What gets installed](#what-gets-installed)
 - [The MCP layer](#the-mcp-layer)
@@ -55,10 +80,33 @@ git clone https://github.com/drb253/research-stack.git && cd research-stack
 - [Verification & testing](#verification--testing)
 - [Platforms](#platforms)
 - [API keys & access (100% output)](#api-keys--access-how-to-get-100-output)
+- [Worked example](#worked-example)
+- [Command reference](#command-reference)
 - [Updating](#updating)
 - [Repository layout](#repository-layout)
-- [Troubleshooting](#troubleshooting)
+- [Troubleshooting & FAQ](#troubleshooting--faq)
+- [Security & privacy](#security--privacy)
+- [Contributing](#contributing)
+- [Roadmap](#roadmap)
+- [Credits](#credits)
 - [License & provenance](#license--provenance)
+
+---
+
+## How it's different
+
+| Capability | Plain LLM | Search MCPs alone | **research-stack** |
+|---|:---:|:---:|:---:|
+| Finds literature | ⚠️ from memory | ✅ live | ✅ live · 27 sources |
+| Every citation verified against the DOI | ❌ | ❌ | ✅ |
+| Every number traceable to a computed artifact | ❌ | ❌ | ✅ |
+| PRISMA flow reconciles with the search + screening logs | ❌ | ❌ | ✅ |
+| Refuses retracted / unverified / non-included sources | ❌ | ❌ | ✅ |
+| Honest disclosure of AI-run screening | ❌ | ❌ | ✅ |
+| Refuses AI- / plagiarism-detector evasion | ❌ | ✅ | ✅ |
+
+The value is not the prose — it is the **enforced chain** from a research
+question to a verified, reproducible, submission-ready manuscript.
 
 ---
 
@@ -287,10 +335,72 @@ finished, and the gate says so explicitly rather than filling the gap.
 
 ---
 
+## Worked example
+
+> *Illustrative — the shape of a run, not a real dataset. Every number a real run
+> prints is computed and traceable; none is invented.*
+
+```
+You:  /sysreview Do SGLT2 inhibitors reduce heart-failure hospitalisation?
+
+  Stage 0  question + protocol ........ PICO locked, scope + PROSPERO draft
+  Stage 1  registered search .......... plan_search_query → variants + MeSH + routing
+  Stage 2  deduplicate ................ DOI → PMID → title
+  Stage 3  screen (κ ≥ 0.60 gate) ..... title → abstract → full text
+  Stage 4  extract .................... one row per effect, with a locator
+  Stage 5  risk of bias ............... RoB 2 for RCTs, ROBINS-I otherwise
+  Stage 6  synthesise ................. narrate (SWiM) or pool per effect family
+  Stage 7  citation gate .............. every cited DOI resolves + title matches
+  Stage 8  number gate ................ every value traced to results.json
+  Stage 9  PRISMA figure .............. reconciles with search + screening logs
+  Stage 10 manuscript ................. DOCX · PDF · print-ready HTML
+
+  GATE  PASS   → submission-ready        (AI-assisted; CONDUCT_DISCLOSURE attached)
+  GATE  FAIL   → BLOCKED                 (fix the ledger — never waive silently)
+```
+
+The point is the last two lines: a review is finished **only** when the gate
+passes, and the gate is a set of scripts that can each fail.
+
+---
+
+## Command reference
+
+**`install.sh`** (also driven by `bootstrap.sh`):
+
+| Flag | Effect |
+|---|---|
+| `--targets LIST` | `cline,claude,opencode,gemini,lmstudio,trae,cursor,windsurf` (default `cline`) |
+| `--minimal` | skills + paper-search only |
+| `--no-ncbi` · `--no-academic-search` · `--no-render` · `--no-r` | skip one default step |
+| `--no-upstream-skills` | skip the 160+ K-Dense scientific skills |
+| `--from-pypi` | install paper-search from PyPI + apply patches (legacy) |
+| `--reinstall` | rebuild the vendored paper-search tool |
+| `--copy-skills` | copy skills instead of symlinking |
+| `--with-runtime` | also build the Python toolchain venv |
+| `--email` · `--ncbi-key` · `--s2-key` | write API settings |
+| `--dry-run` | print actions, change nothing |
+
+**`verify.sh`** — `--targets LIST`, plus `--help`. **`publish.sh`** —
+`--user <gh> [--repo] [--branch] [--no-push]`.
+
+---
+
 ## Correctness guarantees
 
 The gates are the authority. A gate that cannot fail is not a gate — so every one
 is tested on **both** its pass and its fail path.
+
+```mermaid
+flowchart LR
+    D["Draft + ledgers"] --> C{"citations verified?"}
+    C -- no --> X1["BLOCKED: fix the ledger"]
+    C -- yes --> N{"numbers traced?"}
+    N -- no --> X2["BLOCKED: compute or remove"]
+    N -- yes --> P{"PRISMA reconciles?"}
+    P -- no --> X3["BLOCKED: fix the screening log"]
+    P -- yes --> OK["submission-ready"]
+```
 
 | Gate | Fails when | Script |
 |---|---|---|
@@ -485,17 +595,90 @@ research-stack/
 
 ---
 
-## Troubleshooting
+## Troubleshooting & FAQ
 
 | Symptom | Fix |
 |---|---|
 | A server does not appear after install | Clients spawn MCP servers **only at startup** — fully quit and reopen. |
 | `consensus` / `google-scholar` fail | Install Node.js 18+ (`npx` is required). |
-| paper-search returns nothing / arXiv empty | Re-apply patches: `~/.research-stack-src/install.sh --no-skills`. |
+| paper-search returns nothing / arXiv empty | Rebuild the vendored tool: `~/.research-stack-src/install.sh --reinstall`. |
 | A config was clobbered | Restore the `.bak.<timestamp>` written next to it. |
-| `ncbi` / `academic-search` won't start | Their fork isn't installed — re-run `install.sh` **without** `--no-ncbi` / `--no-academic-search`. |
+| `ncbi` / `academic-search` won't start | Their vendored fork isn't installed — re-run `install.sh` **without** `--no-ncbi` / `--no-academic-search`. |
+| `pydantic_core … system policy` (macOS) | Don't install under `/tmp` — Gatekeeper blocks unsigned `.so` there; use your home dir. |
 | Meta-analysis errors about R packages | Install R, then re-run `install.sh` (it runs `install_r_packages.R`). |
 | `doctor.sh` warns about optional skills | Expected: the 160+ upstream skills are cloned with `--with-upstream-skills`. |
+
+### FAQ
+
+**Is this a replacement for a human reviewer?**
+No — it *enforces* verification. Its `CONDUCT_DISCLOSURE` records when screening
+and extraction were agent-run, and it will not claim a Cochrane/MECIR-compliant or
+human-conducted review.
+
+**Which MCP servers work offline?**
+The three **vendored** ones (`paper-search`, `ncbi`, `academic-search`). Only
+`consensus` / `google-scholar` (remote) and live DOI checks need the network.
+
+**Do I need API keys?**
+No. Keys only widen coverage and raise rate limits — see
+[API keys & access](#api-keys--access-how-to-get-100-output).
+
+**Can it defeat Turnitin / AI detectors?**
+No, by design. `humanizerdrb`, `citecheck`, and `originality-check` refuse
+detector-evasion; they improve writing and fix attribution instead.
+
+---
+
+## Security & privacy
+
+- **No secrets in the repo.** API keys live only in `~/.config/paper-search-mcp/.env`
+  (chmod `600`) and client configs (chmod `600`). The vendored forks deliberately
+  exclude their `.env*` files.
+- **Non-destructive installer.** Existing client configs are backed up
+  (`.bak.<timestamp>`); only managed keys are merged.
+- **Local-first.** The skills are stdlib-only Python; the three local MCP servers
+  run on your machine — nothing is uploaded to a third party.
+- **PHI-aware.** The narrative-review ledger linter flags PHI-like patterns
+  (email, MRN, DOB, phone) and keeps ledgers metadata-only.
+- **No dynamic code.** The local CLIs make no network calls, load no pickle, and
+  eval no code.
+
+---
+
+## Contributing
+
+PRs are welcome. Ground rules:
+
+1. **Every gate needs a pass *and* a fail test** — `check_selftest_coverage.py`
+   enforces it ("a gate that cannot fail is not a gate").
+2. Run the suites before pushing: `doctor.sh`, `selftest.sh` (50),
+   `golden_tests.R` (17), `medical-narrative-review/scripts/selftest.sh` (19),
+   `acceptance_test.py` (17).
+3. **Never** weaken a gate to make a failing fixture pass.
+4. Keep the vendored MCP copies in sync via the recipe in each `UPSTREAM.md`.
+
+---
+
+## Roadmap
+
+- [ ] GitHub Actions CI running the 103 checks on every push
+- [ ] Codex (TOML) MCP config support
+- [ ] A terminal demo / screen recording in the README
+- [ ] Auto re-vendor script (fetch a new upstream tag, re-apply patches)
+- [ ] Windows (WSL) setup notes
+
+---
+
+## Credits
+
+Built on the shoulders of open source:
+
+- **[paper-search-mcp](https://github.com/openags/paper-search-mcp)** (MIT) — vendored at `v0.1.4` + 43 patched modules.
+- **[ncbi-mcp-server](https://github.com/vitorpavinato/ncbi-mcp-server)** (MIT) — vendored fork.
+- **academic-search** — vendored fork `0.8.0+local1`.
+- **[K-Dense scientific-agent-skills](https://github.com/K-Dense-AI/scientific-agent-skills)** (MIT) — the 160+ upstream skills.
+- The bundled review skills (EvidenceForge, MIT) merge methodology from several
+  open projects, credited per-skill in each `NOTICE.md`.
 
 ---
 
