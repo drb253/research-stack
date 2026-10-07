@@ -114,6 +114,25 @@ echo "== 4. optional components =="
 [ -x "$HOME/.local/share/academic-search-mcp/.venv/bin/academic-search" ] && ok "academic-search installed" || info "academic-search not installed (optional)"
 [ -x "$HOME/.local/share/browser-probe/.venv/bin/python" ] && ok "render toolchain installed" || info "render toolchain not installed (optional)"
 
+echo "== 4b. third-party skill packs (informational) =="
+for t in "${TLIST[@]}"; do
+  t="$(echo "$t" | tr -d '[:space:]')"; sdir="$(skills_dir_for "$t")"
+  [ -d "$sdir" ] || continue
+  links="$(find "$sdir" -maxdepth 1 -type l -exec readlink {} \; 2>/dev/null || true)"
+  kd=$(printf '%s\n' "$links" | grep -c 'scientific-agent-skills' || true)
+  ap=$(printf '%s\n' "$links" | grep -c 'aipoch-medical-research-skills' || true)
+  if [ "${kd:-0}" -eq 0 ] && [ "${ap:-0}" -eq 0 ]; then
+    info "$t: no third-party packs (gated core only)"
+  else
+    info "$t: third-party — K-Dense ${kd:-0}, AIPOCH ${ap:-0}"
+    if [ "${ap:-0}" -gt 0 ]; then
+      printf '%s\n' "$links" | grep 'aipoch-medical-research-skills' \
+        | sed 's#.*/scientific-skills/##; s#/.*##' | sort | uniq -c | sort -rn \
+        | while read -r c cat; do [ -n "${cat:-}" ] && info "      AIPOCH · $cat: $c"; done
+    fi
+  fi
+done
+
 echo
 printf 'RESULT: %d passed, %d failed\n' "$pass" "$fail"
 [ "$fail" -eq 0 ] && echo "RESEARCH-STACK VERIFIED" || echo "INCOMPLETE - see failures above"

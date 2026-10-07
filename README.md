@@ -454,6 +454,10 @@ python3 $S/evidence-synthesis-forge/scripts/acceptance_test.py  # 17 — live ad
 ./verify.sh --targets cline,claude,opencode                      # install acceptance
 ```
 
+`verify.sh` reports the **gated core strictly** (pass/fail on the 12 skills) and
+lists any installed **third-party packs** (K-Dense / AIPOCH, with AIPOCH broken
+down by category) as *informational* — they never change the verdict.
+
 The engine is checked against `metafor`'s canonical datasets (`dat.bcg`,
 `dat.normand1999`) plus closed-form maths, so a pooled estimate, τ², I² and Q are
 never merely "plausible" — they are reproduced. The live acceptance run
