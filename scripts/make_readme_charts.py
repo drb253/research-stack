@@ -51,14 +51,14 @@ save(fig, "coverage.svg")
 
 # 2. Repository composition by area (git ls-files counts). -------------------- #
 areas = ["skills/", "mcp/", "tools/", "docs/", "root scripts", "config/", "bin/", "scripts/", "assets/", "meta"]
-files = [198, 133, 24, 5, 4, 1, 1, 1, 3, 3]
+files = [198, 160, 24, 5, 4, 1, 1, 1, 3, 3]
 fig, ax = plt.subplots(figsize=(9, 4.6), dpi=120)
 y = range(len(areas))
 bars = ax.barh(list(y), files, color=BLUE)
 ax.set_yticks(list(y))
 ax.set_yticklabels(areas, color=INK)
 ax.invert_yaxis()
-ax.set_title("Repository composition  (373 tracked files)", fontsize=15, fontweight="bold", color=INK)
+ax.set_title("Repository composition  (400 tracked files)", fontsize=15, fontweight="bold", color=INK)
 ax.set_xlabel("tracked files", color=INK)
 _clean(ax)
 ax.grid(axis="y", alpha=0)

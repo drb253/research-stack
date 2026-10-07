@@ -37,7 +37,6 @@ INSTALL_RENDER=1
 INSTALL_R=1
 REINSTALL=0
 WITH_RUNTIME=0
-NCBI_REPO="${NCBI_REPO:-https://github.com/vitorpavinato/ncbi-mcp-server.git}"
 FROM_PYPI=0
 NCBI_EMAIL="${NCBI_EMAIL:-}"
 NCBI_API_KEY="${NCBI_API_KEY:-}"
@@ -66,7 +65,6 @@ Options:
   --reinstall        reinstall/upgrade the paper-search tool first
   --no-ncbi / --no-academic-search / --no-render / --no-r   skip a default step
   --minimal          skip ncbi, academic-search, render toolchain and R packages
-  --ncbi-repo URL    override the ncbi source repo (default upstream)
   --from-pypi        install paper-search from PyPI + apply patches (legacy) instead of vendored
   --with-runtime     also create the Python toolchain venv (scipy/pandas/...)
   --email ADDR       NCBI / polite-pool email         (env NCBI_EMAIL)
@@ -92,7 +90,6 @@ while [ $# -gt 0 ]; do
     --no-render) INSTALL_RENDER=0; shift;;
     --no-r) INSTALL_R=0; shift;;
     --minimal) INSTALL_NCBI=0; INSTALL_ACADEMIC=0; INSTALL_RENDER=0; INSTALL_R=0; shift;;
-    --ncbi-repo) NCBI_REPO="$2"; shift 2;;
     --from-pypi) FROM_PYPI=1; shift;;
     --copy-skills) COPY_SKILLS=1; shift;;
     --reinstall) REINSTALL=1; shift;;
@@ -124,15 +121,15 @@ skills_dir_for() {
 # ---- optional component installers ----------------------------------------- #
 install_ncbi() {
   DEST="$HOME/.local/share/ncbi-mcp-server"
+  SRC="$ROOT/mcp/ncbi-mcp-server"
+  [ -d "$SRC/src/ncbi_mcp_server" ] || { warn "vendored ncbi source missing in repo (skipping)"; return 1; }
   if [ -x "$DEST/.venv/bin/python" ] && [ -d "$DEST/src/ncbi_mcp_server" ]; then
     info "ncbi already installed"; return 0
   fi
-  info "installing ncbi MCP (clone + reliability patch + venv)..."
-  run "rm -rf '$DEST'"
-  run "git clone --depth 1 '$NCBI_REPO' '$DEST'" || { warn "ncbi clone failed (skipping)"; return 1; }
-  run "git -C '$DEST' apply '$ROOT/mcp/optional/ncbi-mcp-server.patch' 2>/dev/null || patch -d '$DEST' -p1 -N < '$ROOT/mcp/optional/ncbi-mcp-server.patch' >/dev/null 2>&1 || true"
+  info "installing ncbi MCP (vendored source + venv)..."
+  run "rm -rf '$DEST' && mkdir -p '$(dirname "$DEST")' && cp -R '$SRC' '$DEST'"
   run "uv venv '$DEST/.venv'" || { warn "ncbi venv failed"; return 1; }
-  run "uv pip install --python '$DEST/.venv/bin/python' mcp httpx typing-extensions python-dotenv redis aiofiles" \
+  run "uv pip install --python '$DEST/.venv/bin/python' 'mcp>=1.0.0,<2' 'httpx>=0.25.0' typing-extensions python-dotenv aiofiles" \
     || warn "ncbi dependency install failed"
   info "ncbi -> $DEST"
 }
@@ -142,10 +139,10 @@ install_academic_search() {
   if [ -x "$DEST/.venv/bin/academic-search" ]; then
     info "academic-search already installed"; return 0
   fi
-  SRC="$ROOT/mcp/optional/academic-search-mcp"
+  SRC="$ROOT/mcp/academic-search-mcp"
   [ -d "$SRC" ] || { warn "academic-search source missing in repo (skipping)"; return 1; }
-  info "installing academic-search MCP (copy + venv)..."
-  run "rm -rf '$DEST' && cp -R '$SRC' '$DEST'"
+  info "installing academic-search MCP (vendored source + venv)..."
+  run "rm -rf '$DEST' && mkdir -p '$(dirname "$DEST")' && cp -R '$SRC' '$DEST'"
   run "uv venv '$DEST/.venv'" || { warn "academic-search venv failed"; return 1; }
   run "uv pip install --python '$DEST/.venv/bin/python' -e '$DEST'" \
     || warn "academic-search dependency install failed"

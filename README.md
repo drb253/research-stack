@@ -129,7 +129,6 @@ records; the **skills layer** turns them into gated, reproducible artifacts; the
 --minimal        skills + paper-search only (skip ncbi, academic-search, render, R)
 --no-ncbi / --no-academic-search / --no-render / --no-r   skip one default step
 --no-upstream-skills     skip the 160+ K-Dense scientific skills
---ncbi-repo URL  override the ncbi source repo (default: upstream)
 --copy-skills    copy skills instead of symlinking
 --reinstall      reinstall/upgrade the paper-search tool first
 --with-runtime   also create the Python toolchain venv (scipy/pandas/...)
@@ -167,10 +166,10 @@ flowchart LR
 
 | Layer | Contents |
 |---|---|
-| **MCP servers** | `paper-search` (27 free sources; **vendored, pre-patched**), `consensus`, `google-scholar`, `ncbi`, `academic-search` |
+| **MCP servers** | `paper-search`, `ncbi`, `academic-search` (**all three vendored, pre-patched**) + `consensus` / `google-scholar` (remote) |
 | **Review skills** | `sysreview`, `meta-analysis`, `evidence-synthesis-forge`, `meta-analysis-forge`, `medical-narrative-review`, `umbrella-review-skeptic`, `meta-ml-screener`, `environment-life-review-forge` |
 | **Guard skills** | `paper-search`, `citecheck`, `humanizerdrb`, `originality-check` |
-| **vendored source** | the whole `paper-search-mcp` package — upstream `v0.1.4` + 43 patched modules (arXiv / OpenAlex / Zenodo / HAL / J-STAGE / PLOS / WHO-IRIS + the MeSH query-planner) |
+| **vendored MCP source** | `mcp/paper-search-mcp/` (upstream `v0.1.4` + 43 patched modules), `mcp/ncbi-mcp-server/`, `mcp/academic-search-mcp/` — installed with **no network** |
 | **Toolbox & tools** | `originality-toolkit` (23 files), `verification_report.py` |
 | **Render/PDF** | `browser-probe` venv — playwright + chromium, pypdf, pypdfium2, reportlab, pillow |
 | **R engine** | metafor, meta, netmeta, robumeta, clubSandwich, robvis, esc, mvmeta, ggplot2 |
@@ -192,8 +191,8 @@ Five MCP servers give the skills their retrieval and verification surface.
 | Server | Kind | What it adds |
 |---|---|---|
 | **paper-search** | local, `uv` tool | 27 free-first sources, federated search, query planning, retraction check, citation export |
-| **ncbi** | local, venv | E-utilities: PubMed search, MeSH terms, related articles, batch fetch |
-| **academic-search** | local, venv | Semantic Scholar / Crossref / OpenAlex multi-provider search |
+| **ncbi** | local, venv (vendored) | E-utilities: PubMed search, MeSH terms, related articles, batch fetch |
+| **academic-search** | local, venv (vendored) | Semantic Scholar / Crossref / OpenAlex multi-provider search |
 | **consensus** | remote (`npx mcp-remote`) | semantic search over 400M+ papers |
 | **google-scholar** | remote (`npx mcp-remote`) | Google Scholar results, citations, case law |
 
@@ -210,10 +209,11 @@ flowchart LR
     R --> RB["relevance bands<br/>high · medium · low"]
 ```
 
-> **Vendored, not fetched.** The whole `paper-search-mcp` package ships in this
-> repo (`mcp/paper-search-mcp/`, upstream `v0.1.4` + the 43 patched modules), and
-> the installer builds it from that path — so it never depends on PyPI or on
-> upstream HEAD, which has since diverged from the release the patches target.
+> **Vendored, not fetched.** All three local servers ship complete in this repo —
+> `mcp/paper-search-mcp/` (upstream `v0.1.4` + the 43 patched modules),
+> `mcp/ncbi-mcp-server/`, and `mcp/academic-search-mcp/` — so the installer builds
+> them from source with **no network** and never depends on PyPI or a moving
+> upstream HEAD.
 
 > **Audit fix included.** The MeSH query-planner previously expanded common words
 > to a *subheading's* entry terms (e.g. `screening → diagnosis, signs, findings,
@@ -476,9 +476,11 @@ research-stack/
 ├── skills/                         # 12 review/guard skills  (198 files)
 ├── tools/  originality-toolkit/ (23 files) · verification_report.py
 └── mcp/
-    ├── paper-search-mcp/            # vendored, pre-patched package (upstream v0.1.4 + patches)
+    ├── paper-search-mcp/            # vendored, pre-patched (upstream v0.1.4 + 43 patches)
+    ├── ncbi-mcp-server/             # vendored ncbi fork (patched)  + tests
+    ├── academic-search-mcp/         # vendored academic-search fork
     ├── paper-search-patches/        # 43 connectors + apply_patches.py + audit_fix_check.py
-    └── optional/                    # ncbi patch · academic-search source · browser-probe reqs
+    └── optional/browser-probe.requirements.txt   # render/PDF toolchain pins
 ```
 
 ---
