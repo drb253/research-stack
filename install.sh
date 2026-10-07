@@ -31,6 +31,7 @@ DO_SKILLS=1
 DO_MCP=1
 COPY_SKILLS=0
 WITH_UPSTREAM=1
+WITH_AIPOCH=0
 INSTALL_NCBI=1
 INSTALL_ACADEMIC=1
 INSTALL_RENDER=1
@@ -61,6 +62,7 @@ Options:
   --no-skills        configure MCP only
   --with-upstream-skills   (default) also clone the 160+ K-Dense scientific skills
   --no-upstream-skills     skip the upstream scientific skills
+  --with-aipoch-skills     also clone AIPOCH medical-research-skills (550+, third-party, not gated)
   --copy-skills      copy skills instead of symlinking
   --reinstall        reinstall/upgrade the paper-search tool first
   --no-ncbi / --no-academic-search / --no-render / --no-r   skip a default step
@@ -83,6 +85,7 @@ while [ $# -gt 0 ]; do
     --no-skills) DO_SKILLS=0; shift;;
     --with-upstream-skills) WITH_UPSTREAM=1; shift;;
     --no-upstream-skills) WITH_UPSTREAM=0; shift;;
+    --with-aipoch-skills) WITH_AIPOCH=1; shift;;
     --with-ncbi) INSTALL_NCBI=1; shift;;
     --with-academic-search) INSTALL_ACADEMIC=1; shift;;
     --no-ncbi) INSTALL_NCBI=0; shift;;
@@ -247,6 +250,18 @@ if [ "$DO_SKILLS" = 1 ]; then
     fi
   fi
 
+  AIPOCH=""
+  if [ "$WITH_AIPOCH" = 1 ]; then
+    AIPOCH="$HOME/.local/share/aipoch-medical-research-skills"
+    if [ -d "$AIPOCH/.git" ]; then
+      info "AIPOCH medical-research-skills already cloned ($AIPOCH)"
+    else
+      info "cloning AIPOCH medical-research-skills (scientific-skills subset, ~120 MB)..."
+      run "git clone --depth 1 --filter=blob:none --sparse https://github.com/aipoch/medical-research-skills.git '$AIPOCH' && git -C '$AIPOCH' sparse-checkout set scientific-skills" \
+        || run "git clone --depth 1 https://github.com/aipoch/medical-research-skills.git '$AIPOCH'"
+    fi
+  fi
+
   IFS=',' read -ra TLIST <<< "$TARGETS"
   for t in "${TLIST[@]}"; do
     t="$(echo "$t" | tr -d '[:space:]')"
@@ -269,6 +284,20 @@ if [ "$DO_SKILLS" = 1 ]; then
         [ -e "$sdir/$name" ] && continue
         run "ln -s '$d' '$sdir/$name'"
       done
+    fi
+    # link AIPOCH third-party skills (550+), when fetched
+    if [ "$WITH_AIPOCH" = 1 ]; then
+      if [ "$DRY_RUN" = 1 ]; then
+        info "  $t: [dry-run] symlink AIPOCH skills → $sdir"
+      elif [ -d "$AIPOCH" ]; then
+        n=0
+        while IFS= read -r skill_md; do
+          d="$(dirname "$skill_md")"; name="$(basename "$d")"
+          [ -e "$sdir/$name" ] && continue
+          ln -s "$d" "$sdir/$name" 2>/dev/null && n=$((n+1))
+        done < <(find "$AIPOCH" -name SKILL.md -type f -not -path '*/.git/*' 2>/dev/null)
+        info "  $t: +$n AIPOCH skills (third-party, NOT gated by research-stack)"
+      fi
     fi
     info "  $t -> $sdir"
   done

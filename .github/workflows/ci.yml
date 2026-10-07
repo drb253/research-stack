@@ -51,6 +51,8 @@ jobs:
           python3 skills/evidence-synthesis-forge/scripts/cross_verify_citations.py --self-test
       - name: medical-narrative-review selftest (19 checks)
         run: bash skills/medical-narrative-review/scripts/selftest.sh
+      - name: Installer dry-run (defaults + AIPOCH flag)
+        run: bash install.sh --targets cline --dry-run --minimal --no-mcp --with-aipoch-skills >/dev/null
 
   r-tests:
     name: r-tests (engine + gates)

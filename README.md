@@ -178,6 +178,7 @@ records; the **skills layer** turns them into gated, reproducible artifacts; the
 --minimal        skills + paper-search only (skip ncbi, academic-search, render, R)
 --no-ncbi / --no-academic-search / --no-render / --no-r   skip one default step
 --no-upstream-skills     skip the 160+ K-Dense scientific skills
+--with-aipoch-skills     also clone AIPOCH medical-research-skills (460+, third-party, not gated)
 --copy-skills    copy skills instead of symlinking
 --reinstall      reinstall/upgrade the paper-search tool first
 --with-runtime   also create the Python toolchain venv (scipy/pandas/...)
@@ -204,6 +205,23 @@ flowchart LR
     H --> J["restart client(s)"] --> K["verify.sh → 19 checks"]
 ```
 
+### Optional third-party skill packs
+
+Beyond the 12 gated skills, two MIT-licensed packs can be added — they are
+**cloned, not gated by research-stack**:
+
+- **K-Dense scientific skills** — `--with-upstream-skills` (on by default), 160+ skills.
+- **AIPOCH medical-research-skills** — `--with-aipoch-skills`, **460+** skills across
+  **Protocol Design**, **Data Analysis** (differential expression, enrichment, immune
+  infiltration, WGCNA, survival, ML feature selection), and **Academic Writing**
+  (target-journal matcher, reporting-guideline checker, arXiv preflight, medical-English editor).
+
+AIPOCH closes the biggest capability gap — **primary omics / bioinformatics data
+analysis** — which the gated core does not cover. Install is a **sparse, blobless
+checkout of `scientific-skills/` (~120 MB)**. Unlike our 12 skills, AIPOCH's
+skills *generate code and advice* and carry **no verification gates**: treat their
+output as a first draft to check, not a verified result.
+
 ---
 
 ## What gets installed
@@ -223,6 +241,7 @@ flowchart LR
 | **Render/PDF** | `browser-probe` venv — playwright + chromium, pypdf, pypdfium2, reportlab, pillow |
 | **R engine** | metafor, meta, netmeta, robumeta, clubSandwich, robvis, esc, mvmeta, ggplot2 |
 | **Upstream (optional)** | the 160+ K-Dense scientific skills, cloned (MIT), not vendored |
+| **AIPOCH (optional)** | 460+ [AIPOCH medical-research-skills](https://github.com/aipoch/medical-research-skills) (protocol design · omics data analysis · academic writing), cloned (MIT), **not gated** |
 
 ### Requirements
 
@@ -680,6 +699,7 @@ Built on the shoulders of open source:
 - **[ncbi-mcp-server](https://github.com/vitorpavinato/ncbi-mcp-server)** (MIT) — vendored fork.
 - **academic-search** — vendored fork `0.8.0+local1`.
 - **[K-Dense scientific-agent-skills](https://github.com/K-Dense-AI/scientific-agent-skills)** (MIT) — the 160+ upstream skills.
+- **[AIPOCH medical-research-skills](https://github.com/aipoch/medical-research-skills)** (MIT) — 460+ medical-research skills (optional, not gated).
 - The bundled review skills (EvidenceForge, MIT) merge methodology from several
   open projects, credited per-skill in each `NOTICE.md`.
 
