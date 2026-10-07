@@ -13,6 +13,7 @@ Built for one promise: **no false citations, no hallucinated numbers, no silent 
 [![MCP servers](https://img.shields.io/badge/MCP%20servers-5-2f6feb.svg)](#the-mcp-layer)
 [![skills](https://img.shields.io/badge/skills-12-8957e5.svg)](#the-skills-layer)
 [![tests](https://img.shields.io/badge/checks-103%20passing-2ea043.svg)](#verification--testing)
+[![ci](https://github.com/drb253/research-stack/actions/workflows/ci.yml/badge.svg)](https://github.com/drb253/research-stack/actions/workflows/ci.yml)
 [![install](https://img.shields.io/badge/install-one--command-brightgreen.svg)](#install)
 
 </div>
@@ -578,7 +579,9 @@ Prefer the classic PyPI base + runtime patches? Use `install.sh --from-pypi`.
 ```text
 research-stack/
 ├── install.sh · bootstrap.sh · verify.sh · publish.sh
-├── bin/mcp_config.py               # per-client MCP config writer (7 schemas)
+├── CHANGELOG.md · LICENSE · README.md
+├── .github/workflows/ci.yml        # CI: lint (ubuntu+macos) + R engine/gate tests
+├── bin/mcp_config.py               # per-client MCP config writer (8 schemas)
 ├── scripts/make_readme_charts.py   # regenerates assets/*.svg
 ├── assets/                         # coverage · composition · skills (SVG)
 ├── config/paper-search.env.template
