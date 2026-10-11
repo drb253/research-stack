@@ -51,6 +51,13 @@ jobs:
           python3 skills/evidence-synthesis-forge/scripts/cross_verify_citations.py --self-test
       - name: medical-narrative-review selftest (19 checks)
         run: bash skills/medical-narrative-review/scripts/selftest.sh
+      # The offline benchmarks measure the claims in the README (arithmetic gate,
+      # overlap detector vs the ORI guide's expert labels). They need no network,
+      # so they run on every push; the live retraction benchmark does not.
+      - name: Offline benchmarks (measured claims)
+        run: |
+          python3 benchmarks/bench_numeric.py
+          python3 benchmarks/bench_ori_guide.py
       - name: Installer dry-run (defaults + AIPOCH flag)
         run: bash install.sh --targets cline --dry-run --minimal --no-mcp --with-aipoch-skills >/dev/null
 
@@ -70,3 +77,24 @@ jobs:
         run: Rscript skills/meta-analysis-forge/scripts/golden_tests.R
       - name: evidence-synthesis-forge selftest (50 checks)
         run: bash skills/evidence-synthesis-forge/scripts/selftest.sh
+
+  mcp-tests:
+    name: mcp-tests (vendored servers)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      # Both suites shipped in the repo but no CI job ever ran them (103 tests).
+      # `mcp` must stay <2 — the server imports mcp.server.fastmcp, which mcp 2.x
+      # renamed to MCPServer (see mcp/ncbi-mcp-server/requirements.txt).
+      - name: ncbi-mcp-server tests (52 unit; integration deselected by marker)
+        run: |
+          python3 -m pip install --quiet -r mcp/ncbi-mcp-server/requirements.txt
+          python3 -m pip install --quiet pytest pytest-asyncio pytest-cov
+          cd mcp/ncbi-mcp-server && PYTHONPATH=src python3 -m pytest tests/
+      - name: academic-search tests (51, fully offline)
+        run: |
+          python3 -m pip install --quiet fastmcp numpy pandas requests
+          cd mcp/academic-search-mcp && python3 -m unittest discover -s tests

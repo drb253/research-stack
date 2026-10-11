@@ -8,6 +8,17 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --targets) TARGETS="$2"; shift 2;;
     --targets=*) TARGETS="${1#*=}"; shift;;
+    -h|--help)
+      sed -n '2,3p' "$0"
+      cat <<'EOF'
+Usage: bash verify.sh [--targets cline,claude,opencode,gemini,lmstudio,...]
+
+Checks an existing install and prints PASS/FAIL for: the paper-search MCP and
+its patch system, the 12 gated skills, the originality toolkit, the
+narrative-review harness, the client MCP configs, and optional components.
+Third-party skill packs are listed as information and never change the verdict.
+EOF
+      exit 0;;
     *) shift;;
   esac
 done

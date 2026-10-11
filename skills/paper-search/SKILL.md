@@ -17,7 +17,7 @@ are the default, API keys are optional, and every result carries enough provenan
 
 ## Backends available on this machine
 
-1. **MCP server `paper-search`** (preferred inside Cline) — 77 tools exposed directly:
+1. **MCP server `paper-search`** (preferred inside Cline) — 87 tools exposed directly:
    - Federated search: `search_papers` (multi-source, concurrent, deduplicated, **relevance-ranked**;
      accepts `sources="auto"` for topic routing, `expand=True` to union an expanded query, and
      returns per-source `source_status` plus `relevance_bands`)
@@ -234,7 +234,9 @@ Prefer **targeted** sources over `all` — broad fan-out is slow and produces no
   The helper is `config.ncbi_eutils_params()`, so any new E-utilities call should spread it in
   (`**ncbi_eutils_params()`) rather than hard-coding `tool`/`email`.
 - Free keys that lift rate limits: Semantic Scholar, CORE, DOAJ, Zenodo, OpenAIRE, OpenAlex.
-- IEEE/ACM keys are optional and only needed for those paywalled indexes.
+- **IEEE/ACM keys do nothing today.** Both connectors (`academic_platforms/ieee.py`,
+  `acm.py`) are skeletons that raise `NotImplementedError` even when the key is set, so a
+  keyed IEEE/ACM sweep adds no coverage. Do not advertise them as a coverage tier.
 
 ## Cautions
 
@@ -478,16 +480,22 @@ and the MCP tool registry, because all four are broken upstream and unfixable fr
 | `base` | Requires IP allowlisting; its site is also behind Anubis |
 | `google_scholar` | Blocked without a paid proxy |
 
-Consequences: `paper-search sources` lists **27** active sources; `-s all` (and `search_papers`
-with `sources="all"`) fans out to those 23; requesting a retired one returns
-`"No valid sources selected"`; calling `search_dblp` over MCP returns `"Unknown tool"`.
+Consequences: `paper-search sources` and `search_papers(sources="all")` both resolve to the
+**same 28** active sources (verified equal in a keyless environment); 27 of them work with
+zero configuration, because `unpaywall` additionally needs a contact email
+(`PAPER_SEARCH_MCP_UNPAYWALL_EMAIL`) and is skipped without one. Requesting a retired source
+returns `"No valid sources selected"`; calling `search_dblp` over MCP returns `"Unknown tool"`.
 **No silent zeros** — if a source is not in the list, it is not being searched.
 
 Two long-standing fan-out defects were also fixed here: `ALL_SOURCES` had accumulated duplicate
-entries (two patches appended the same names, so sources were queried twice), and the
-`search_papers` fan-out chain had **no branch for the six added sources**, meaning
-`sources="all"` silently skipped `plos`/`jstage`/`figshare`/`datacite`/`whoris`/`osf` entirely.
-Both are now covered by `_build_task_map()` and a de-duplicated `ALL_SOURCES`.
+entries (two patches appended the same names, so sources were queried twice — in the CLI this
+overwrote live coroutines, `RuntimeWarning: coroutine '_async_search' was never awaited`, and
+silently dropped those results), and the `search_papers` fan-out chain had **no branch for the
+six added sources**, meaning `sources="all"` silently skipped
+`plos`/`jstage`/`figshare`/`datacite`/`whoris`/`osf` entirely. Both are now covered by
+`_build_task_map()` and a de-duplicated `ALL_SOURCES` in `server.py` *and* `cli.py`.
+`chemrxiv` was wired into the server but missing from the CLI registry, so the CLI listed 27
+sources against the server's 28; it is now registered in both.
 
 To re-enable a retired source, remove its name from `RETIRED_SOURCES` in both
 `.../paper_search_mcp/cli.py` and `.../paper_search_mcp/server.py` (and, for

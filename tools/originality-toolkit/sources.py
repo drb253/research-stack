@@ -24,8 +24,9 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
+from pathlib import Path
 
-__all__ = ["search", "SOURCES"]
+__all__ = ["search", "SOURCES", "set_corpus"]
 
 _EMAIL = (
     os.environ.get("OPENALEX_EMAIL")
@@ -230,6 +231,115 @@ def _crossref(query, limit):
 
 
 
+# ---------------------------------------------------------------------------
+# Local corpus
+#
+# The five API adapters can only see what those APIs index. Paywalled articles,
+# books, theses, unpublished manuscripts and saved web pages are invisible to
+# them -- which is exactly where the overlap that matters often lives. This
+# adapter lets the caller supply those documents directly, so the same scorer
+# runs over text no API can reach.
+# ---------------------------------------------------------------------------
+
+_LOCAL_CORPUS = None       # None = not configured; [] = configured but empty
+_LOCAL_WARNINGS: list = []
+
+_TEXT_SUFFIXES = {".txt", ".md", ".markdown", ".rst", ".text"}
+_HTML_SUFFIXES = {".html", ".htm", ".xhtml"}
+
+_STOPWORDS = {
+    "the", "a", "an", "of", "and", "or", "in", "to", "for", "with", "on", "by", "is",
+    "are", "was", "were", "be", "been", "that", "this", "these", "those", "as", "at",
+    "from", "it", "its", "we", "our", "they", "their", "has", "have", "had", "not",
+    "but", "which", "who", "than", "then", "there", "here", "also", "such", "can",
+}
+
+
+def _content_tokens(text):
+    """Lowercase content-word list, used only to pre-filter local documents."""
+    words = re.findall(r"[a-z][a-z0-9-]{2,}", (text or "").lower())
+    return [w for w in words if w not in _STOPWORDS]
+
+
+def _read_document(path):
+    """Extract text from one corpus file, or raise with a legible reason."""
+    suffix = path.suffix.lower()
+    if suffix in _TEXT_SUFFIXES:
+        return path.read_text(encoding="utf-8", errors="replace")
+    if suffix in _HTML_SUFFIXES:
+        return _strip_tags(path.read_text(encoding="utf-8", errors="replace"))
+    if suffix == ".pdf":
+        try:
+            from pypdf import PdfReader  # optional dependency
+        except ImportError as exc:
+            raise RuntimeError(
+                "PDF needs the optional 'pypdf' package (pip install pypdf); "
+                "or export the document to .txt first"
+            ) from exc
+        reader = PdfReader(str(path))
+        return "\n".join((page.extract_text() or "") for page in reader.pages)
+    raise RuntimeError("unsupported file type %s" % (suffix or "<none>"))
+
+
+def set_corpus(path):
+    """Load a file or directory as the local comparison corpus.
+
+    Returns ``(n_documents, warnings)``. An unreadable file is reported, never
+    silently dropped: the caller must know if the corpus is smaller than they
+    think, because a quietly-skipped source is a false "no overlap" result.
+    """
+    global _LOCAL_CORPUS, _LOCAL_WARNINGS
+    warnings: list = []
+    root = Path(os.path.expanduser(str(path))).resolve()
+    if not root.exists():
+        _LOCAL_CORPUS, _LOCAL_WARNINGS = [], ["corpus path does not exist: %s" % root]
+        return 0, list(_LOCAL_WARNINGS)
+
+    files = [root] if root.is_file() else sorted(p for p in root.rglob("*") if p.is_file())
+
+    docs = []
+    for p in files:
+        if p.name.startswith("."):
+            continue
+        try:
+            text = _read_document(p)
+        except Exception as exc:  # noqa: BLE001 - report, do not abort the run
+            warnings.append("%s: %s" % (p.name, exc))
+            continue
+        text = re.sub(r"\s+", " ", text).strip()
+        # A user-supplied corpus is an explicit choice, so keep short documents
+        # too: excluding one would silently shrink the corpus and could turn a
+        # real overlap into a false "no overlap". Only near-empty files are cut.
+        if len(text.split()) < 5:
+            warnings.append("%s: skipped (no usable text)" % p.name)
+            continue
+        docs.append(_cand("local", str(p), p.stem, text, "", "", "", "file://%s" % p))
+
+    _LOCAL_CORPUS, _LOCAL_WARNINGS = docs, warnings
+    return len(docs), warnings
+
+
+def _local(query, limit):
+    """Local documents that share vocabulary with the passage.
+
+    Scoring happens downstream, so this filter only has to be generous: it stops
+    a large corpus being SequenceMatcher-ed against every sentence.
+    """
+    docs = _LOCAL_CORPUS or []
+    if not docs:
+        return []
+    wanted = set(_content_tokens(query))
+    if not wanted:
+        return docs[: max(limit, 20)]
+    ranked = []
+    for doc in docs:
+        overlap = len(wanted & set(_content_tokens(doc["abstract"])))
+        if overlap:
+            ranked.append((overlap, doc))
+    ranked.sort(key=lambda pair: -pair[0])
+    return [doc for _, doc in ranked[: max(limit, 20)]]
+
+
 # name -> adapter. Order matters: it is the default query order.
 SOURCES = {
     "openalex": _openalex,
@@ -237,6 +347,7 @@ SOURCES = {
     "arxiv": _arxiv,
     "europepmc": _europepmc,
     "semantic": _semantic,
+    "local": _local,
 }
 
 

@@ -91,6 +91,13 @@ def norm_doi(doi):
     return doi.strip().lower()
 
 
+_RETRACTION_PREFIX = re.compile(
+    r"^\s*(?:retracted\s+article|retracted|withdrawn|expression\s+of\s+concern|"
+    r"editorial\s+expression\s+of\s+concern)\s*[:\-\u2013]\s*",
+    re.IGNORECASE,
+)
+
+
 def _norm_title(t):
     # Crossref returns JATS markup inside titles (<i>, <scp>, <sub>, newlines), sometimes
     # DOUBLE-escaped as &lt;i&gt;. Unescape first, then strip the tags, then normalise --
@@ -98,6 +105,16 @@ def _norm_title(t):
     # which is reported as "DOI resolves to a different paper" when it is the same paper.
     t = _html.unescape(_html.unescape(t or ""))
     t = re.sub(r"<[^>]+>", " ", t)
+    # Same defect class, different cause: Crossref prefixes the title of a retracted
+    # work with "RETRACTED:" / "RETRACTED ARTICLE:", which PubMed's title does not
+    # carry. Comparing them verbatim reported the SAME paper as a wrong citation --
+    # measured on a 120-citation benchmark, 13 of 15 flagged mismatches were exactly
+    # this (similarity >= 0.99 once the prefix was removed).
+    for _ in range(3):
+        stripped = _RETRACTION_PREFIX.sub("", t)
+        if stripped == t:
+            break
+        t = stripped
     return re.sub(r"[^a-z0-9]+", " ", t.lower()).strip()
 
 
@@ -113,11 +130,15 @@ def crossref_retraction(msg):
     """Return (is_retracted, notices) from a Crossref work message."""
     notices = []
     rel = (msg.get("relation") or {})
-    for rel_name in ("update-to", "updated-by"):
+    # "is-retracted-by" is Crossref's canonical relation for "this work was
+    # retracted by X" and is what the vendored retraction.py reads. Without it a
+    # record carrying only that relation was missed here (OpenAlex still caught
+    # the real-world cases, so this is defence in depth, not the only signal).
+    for rel_name in ("is-retracted-by", "update-to", "updated-by"):
         for item in rel.get(rel_name, []) or []:
-            if str(item.get("type", "")).lower() in ("retraction", "retraction-of"):
+            if str(item.get("type", "")).lower() in ("retraction", "retraction-of") or rel_name == "is-retracted-by":
                 notices.append({"source": "crossref-relation",
-                                "type": item.get("type"),
+                                "type": item.get("type") or "retraction",
                                 "doi": item.get("id")})
     for upd in msg.get("update-to", []) or []:
         if str(upd.get("type", "")).lower() == "retraction":
@@ -127,6 +148,35 @@ def crossref_retraction(msg):
     if "retraction" in str(msg.get("type", "")).lower():
         notices.append({"source": "crossref-type", "type": msg.get("type")})
     return (len(notices) > 0, notices)
+
+
+_CORRECTION_TYPES = ("correction", "corrigendum", "erratum", "expression_of_concern",
+                     "expression-of-concern", "withdrawal")
+
+
+def crossref_corrections(msg):
+    """Return correction/erratum notices for a Crossref work message.
+
+    ORI Guideline 17: "Ensure that the cited work has not been subsequently
+    corrected or retracted." Retraction is a hard failure -- the claim is void.
+    A correction is a WARNING: the paper stands, but the version cited may be
+    superseded, so the author should check whether the corrected figures change
+    what they wrote.
+    """
+    notices = []
+    rel = msg.get("relation") or {}
+    for rel_name in ("is-corrected-by", "is-correction-of"):
+        for item in rel.get(rel_name, []) or []:
+            notices.append({"source": "crossref-relation", "relation": rel_name,
+                            "doi": item.get("id")})
+    for upd in msg.get("update-to", []) or []:
+        if str(upd.get("type", "")).lower() in _CORRECTION_TYPES:
+            notices.append({"source": "crossref-update-to",
+                            "type": upd.get("type"), "doi": upd.get("DOI")})
+    kind = str(msg.get("type", "")).lower()
+    if any(k in kind for k in ("correction", "erratum", "corrigendum")):
+        notices.append({"source": "crossref-type", "type": msg.get("type")})
+    return notices
 
 
 def openalex_is_retracted(doi, mailto):
@@ -259,6 +309,44 @@ def pubmed_is_retracted(pmid, mailto):
         return None
 
 
+def apply_retraction_signals(rec, doi, row, mailto, crossref_msg=None):
+    """Attach every retraction signal to ``rec`` and set its status.
+
+    Kept separate from :func:`verify_one` so the "not Crossref-registered" path
+    cannot return early without it. That path used to skip retraction checking
+    entirely, so a retracted paper whose DOI lives outside Crossref was reported
+    as verified even when OpenAlex and PubMed both flagged it -- measured on a
+    920-citation benchmark as the single missed retraction.
+    """
+    notices = []
+    cr_retracted = False
+    if crossref_msg is not None:
+        cr_retracted, notices = crossref_retraction(crossref_msg)
+        # ORI Guideline 17 also asks about CORRECTIONS. A correction is a warning,
+        # not a failure: the paper still stands, but the cited version may be
+        # superseded.
+        corrections = crossref_corrections(crossref_msg)
+        if corrections:
+            rec["corrections"] = corrections
+    oa = None
+    try:
+        oa = openalex_is_retracted(doi, mailto)
+    except Exception as e:  # noqa: BLE001
+        rec["openalex_error"] = str(e)
+    # Third, independent signal: PubMed's publication type for this PMID.
+    pm_retracted = None
+    if row and (row.get("pmid") or "").strip():
+        pm_retracted = pubmed_is_retracted(row.get("pmid"), mailto)
+        if pm_retracted is not None:
+            rec["pubmed_retraction_check"] = pm_retracted
+    rec["retraction_evidence"] = (notices
+                                  + (["openalex:is_retracted"] if oa else [])
+                                  + (["pubmed:retracted-publication-type"] if pm_retracted else []))
+    rec["retracted"] = bool(cr_retracted or oa or pm_retracted)
+    rec["status"] = "retracted" if rec["retracted"] else "verified"
+    return rec
+
+
 def verify_one(doi, mailto, row=None):
     """Resolve one DOI and classify it."""
     rec = {"doi": doi, "s_id": (row or {}).get("s_id"), "status": None,
@@ -283,7 +371,9 @@ def verify_one(doi, mailto, row=None):
             rec["verified_via"] = alt["registry"]
             rec["title"] = alt.get("title", "")
             rec["year"] = alt.get("year")
-            return rec
+            # A DOI outside Crossref still needs its retraction signals checked;
+            # returning here unchecked was the bug.
+            return apply_retraction_signals(rec, doi, row, mailto)
         rec["status"] = "unresolved"
         rec["note"] = "not found at Crossref, DataCite, or doi.org"
         return rec
@@ -297,26 +387,10 @@ def verify_one(doi, mailto, row=None):
     rec["title"] = cr_title
     rec["year"] = cr_year
     rec["type"] = msg.get("type")
-    cr_retracted, notices = crossref_retraction(msg)
-    oa = None
-    try:
-        oa = openalex_is_retracted(doi, mailto)
-    except Exception as e:  # noqa: BLE001
-        rec["openalex_error"] = str(e)
-    ## third, independent signal: PubMed's publication type for this PMID
-    pm_retracted = None
-    if row and (row.get("pmid") or "").strip():
-        pm_retracted = pubmed_is_retracted(row.get("pmid"), mailto)
-        if pm_retracted is not None:
-            rec["pubmed_retraction_check"] = pm_retracted
-    rec["retraction_evidence"] = (notices
-                                  + (["openalex:is_retracted"] if oa else [])
-                                  + (["pubmed:retracted-publication-type"] if pm_retracted else []))
-    rec["retracted"] = bool(cr_retracted or oa or pm_retracted)
+    apply_retraction_signals(rec, doi, row, mailto, crossref_msg=msg)
     if row and row.get("title"):
         if _norm_title(row["title"])[:60] != _norm_title(cr_title)[:60]:
             rec["title_mismatch"] = {"ledger": row["title"], "crossref": cr_title}
-    rec["status"] = "retracted" if rec["retracted"] else "verified"
     return rec
 
 
@@ -353,6 +427,58 @@ def _self_test():
     assert crossref_retraction(typ)[0] is True
     upd = {"type": "journal-article", "update-to": [{"type": "retraction", "DOI": "10.1/x"}]}
     assert crossref_retraction(upd)[0] is True
+    # ORI Guideline 17: a CORRECTION is a warning, never a retraction. Mixing the
+    # two would either void a valid paper or pass a retracted one.
+    corr = {"type": "journal-article",
+            "update-to": [{"type": "correction", "DOI": "10.1/c"}]}
+    assert crossref_corrections(corr) and crossref_retraction(corr)[0] is False
+    assert crossref_corrections({"type": "journal-article", "relation": {}}) == []
+    assert crossref_corrections({"type": "journal-article",
+                                 "relation": {"is-corrected-by": [{"id": "10.1/c"}]}})
+    assert crossref_corrections({"type": "erratum", "relation": {}})
+    # Crossref's canonical "retracted by" relation, as read by retraction.py.
+    isret = {"type": "journal-article",
+             "relation": {"is-retracted-by": [{"id": "10.1/ret"}]}}
+    assert crossref_retraction(isret)[0] is True
+    # Regression guard (offline): a DOI that is NOT Crossref-registered used to
+    # return "verified" before any retraction check ran, so a retracted paper
+    # outside Crossref was reported clean even when OpenAlex and PubMed both
+    # flagged it. apply_retraction_signals() is now the single shared path.
+    global openalex_is_retracted, pubmed_is_retracted
+    _oa, _pm = openalex_is_retracted, pubmed_is_retracted
+    try:
+        openalex_is_retracted = lambda d, m: True
+        pubmed_is_retracted = lambda p, m: True
+        hit = apply_retraction_signals(
+            {"doi": "10.1/x", "status": "verified", "retracted": False,
+             "retraction_evidence": []}, "10.1/x", {"pmid": "1"}, "x@y.z")
+        assert hit["retracted"] is True and hit["status"] == "retracted", hit
+        assert "openalex:is_retracted" in hit["retraction_evidence"], hit
+        openalex_is_retracted = lambda d, m: False
+        pubmed_is_retracted = lambda p, m: None
+        clean = apply_retraction_signals(
+            {"doi": "10.1/x", "status": "verified", "retracted": False,
+             "retraction_evidence": []}, "10.1/x", {}, "x@y.z")
+        assert clean["retracted"] is False and clean["status"] == "verified", clean
+    finally:
+        openalex_is_retracted, pubmed_is_retracted = _oa, _pm
+    # ...and guard the WIRING: verify_one() must run the signals on the
+    # "not Crossref-registered" branch too, not just on the Crossref branch.
+    global _crossref_message, verify_alt_agency
+    _cm, _va = _crossref_message, verify_alt_agency
+    try:
+        _crossref_message = lambda d, m: None          # simulate a Crossref 404
+        verify_alt_agency = lambda d, m: {"registry": "DataCite", "title": "T", "year": 2020}
+        openalex_is_retracted = lambda d, m: True
+        pubmed_is_retracted = lambda p, m: None
+        alt = verify_one("10.1/alt", "x@y.z", {"pmid": "1", "title": "T"})
+        assert alt["status"] == "retracted", alt
+        assert alt.get("verified_via") == "DataCite", alt
+        openalex_is_retracted = lambda d, m: False
+        ok = verify_one("10.1/alt", "x@y.z", {"pmid": "1", "title": "T"})
+        assert ok["status"] == "verified", ok
+    finally:
+        _crossref_message, verify_alt_agency = _cm, _va
     assert _norm_title("Hello, World! (2020)") == "hello world 2020"
     # Crossref returns JATS markup inside titles; a markup difference must not be
     # reported as "DOI resolves to a different paper".
@@ -365,6 +491,13 @@ def _self_test():
     # or the tag's inner letter survives as a token and fakes a title mismatch.
     assert _norm_title("Effect of &lt;i&gt;Lactobacillus GG&lt;/i&gt; supplementation") == \
            _norm_title("Effect of Lactobacillus GG supplementation")
+    # Crossref prefixes retracted titles; PubMed does not. That must not read as a
+    # wrong citation, but a genuinely different title still must.
+    assert _norm_title("RETRACTED: A dual self-regulatory platform") == \
+           _norm_title("A dual self-regulatory platform")
+    assert _norm_title("RETRACTED ARTICLE: Safety in sows") == _norm_title("Safety in sows")
+    assert _norm_title("Withdrawn: Trial of X") == _norm_title("Trial of X")
+    assert _norm_title("RETRACTED: Study A") != _norm_title("Study B")
     import tempfile
     d = tempfile.mkdtemp()
     p = os.path.join(d, "s.csv")
@@ -464,6 +597,15 @@ def main(argv=None):
     # acted on. Downgrading to a warning is now an explicit, logged waiver.
     warnings = ["title differs for %s (%s)" % (m.get("s_id") or m["doi"], m["doi"])
                 for m in mismatches]
+    # ORI Guideline 17: the cited work must not have been subsequently corrected.
+    # A correction is reported as a warning (the paper stands) rather than a
+    # failure (which is what retraction gets), so the author can check whether
+    # the corrected figures change what they wrote.
+    for rec in results:
+        for correction in rec.get("corrections") or []:
+            warnings.append("CORRECTED: %s has a %s notice (%s) - verify the figures you cite"
+                            % (rec.get("doi"), correction.get("type") or correction.get("relation"),
+                               correction.get("doi") or "no DOI given"))
     if args.strict_titles:
         failures += ["%s: DOI resolves to a different paper (%s)"
                      % (m.get("s_id") or "?", m["doi"]) for m in mismatches]

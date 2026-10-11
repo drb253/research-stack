@@ -1,10 +1,15 @@
 """Verify the S2 API key fixes the previously failing path (run WITH S2_API_KEY set)."""
 
 import json
+import os
 import sys
 import time
 
-sys.path.insert(0, "/Users/drb/.local/share/academic-search-mcp/src")
+# Portable: resolve the package from this checkout (override with ACADEMIC_SEARCH_SRC).
+_SRC = os.environ.get("ACADEMIC_SEARCH_SRC") or os.path.normpath(
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir, "src")
+)
+sys.path.insert(0, _SRC)
 
 from academic_search import server  # noqa: E402
 from academic_search.providers.semantic_scholar import (  # noqa: E402

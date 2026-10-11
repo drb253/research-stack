@@ -5,12 +5,30 @@
 present in title or abstract, weighted toward the title). That is an automatic
 proxy for human judgment, applied identically to every source.
 """
+import glob
 import logging
+import os
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 logging.disable(logging.CRITICAL)
-sys.path.insert(0, "/Users/drb/.local/share/uv/tools/paper-search-mcp/lib/python3.11/site-packages")
+
+# Resolve paper_search_mcp portably instead of hard-coding one machine's path:
+# an explicit override, then the vendored checkout, then any uv tool install.
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_CANDIDATES = []
+if os.environ.get("PAPER_SEARCH_MCP_SRC"):
+    _CANDIDATES.append(os.environ["PAPER_SEARCH_MCP_SRC"])
+_CANDIDATES.append(os.path.join(_HERE, os.pardir, "paper-search-mcp"))
+_CANDIDATES.extend(sorted(glob.glob(os.path.expanduser(
+    "~/.local/share/uv/tools/paper-search-mcp/lib/python*/site-packages"))))
+for _candidate in _CANDIDATES:
+    if os.path.isdir(os.path.join(_candidate, "paper_search_mcp")):
+        sys.path.insert(0, os.path.normpath(_candidate))
+        break
+else:
+    sys.exit("ERROR: could not locate paper_search_mcp "
+             "(set PAPER_SEARCH_MCP_SRC or install the uv tool)")
 
 from paper_search_mcp import server
 from paper_search_mcp.source_status import SourceUnavailable

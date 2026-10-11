@@ -17,7 +17,7 @@ mirroring how the `ncbi` and `laya` servers are already configured.
 ~/.local/share/academic-search-mcp/
 ├── pyproject.toml          # packaging (setuptools, src layout)
 ├── src/academic_search/    # patched source
-├── tests/test_fixes.py     # 49 offline regression tests
+├── tests/test_fixes.py     # 51 offline regression tests
 └── .venv/                  # runtime venv
 ```
 

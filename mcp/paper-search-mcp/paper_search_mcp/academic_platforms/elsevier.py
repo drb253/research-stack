@@ -36,7 +36,7 @@ import requests
 
 from ..config import get_env
 from ..paper import Paper
-from ..source_status import SourceUnavailable, request_json
+from ..source_status import SourceUnavailable, assert_usable_bytes, request_json
 from .base import PaperSource
 
 logger = logging.getLogger(__name__)

@@ -102,7 +102,7 @@ _CARE = {"health", "outcome", "clinical", "cost", "visit", "admission", "diagnos
          "survival", "detection", "knowledge", "compliance", "adherence", "practices",
          "delivery", "screening", "uptake", "treatment", "care", "safety", "readmission",
          "hba1c", "vascular", "event", "antibiotic", "glycaemic", "symptom", "workload",
-         "reading", "referral", "follow-up", "follow up"}
+         "reading", "follow-up", "follow up"}
 
 def _perception_only(text):
     t = (text or "").lower()

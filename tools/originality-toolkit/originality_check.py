@@ -133,6 +133,74 @@ def longest_common_run(sentence, candidate):
     return match.size, span
 
 
+# Straight and curly quotes. ORI Guideline 2: any verbatim text taken from
+# another source must be enclosed in quotation marks. A quoted, cited passage is
+# correct practice; the same words unquoted are plagiarism. The scorer used to
+# treat both identically.
+_QUOTED_RE = re.compile(r'[“"]([^”"]{10,}?)[”"]' + r"|'([^']{10,}?)'")
+
+
+def quoted_run(sentence, candidate):
+    """Longest verbatim run that sits INSIDE quotation marks in the draft."""
+    best = 0
+    for match in _QUOTED_RE.finditer(sentence or ""):
+        inner = match.group(1) or match.group(2) or ""
+        run, _ = longest_common_run(inner, candidate)
+        if run > best:
+            best = run
+    return best
+
+
+def is_violation(verdict_text):
+    """Quoted verbatim is correct practice, not a violation (ORI Guideline 2)."""
+    return verdict_text != "ok" and not verdict_text.startswith("QUOTED")
+
+
+# Function words carry the syntactic frame. ORI Guideline 4 requires a paraphrase
+# to use its own STRUCTURE, not merely its own words: swapping every content word
+# while keeping the frame ("whether X are able to Y") is still plagiarism. The
+# lexical score cannot see that -- it finds almost no shared content words -- but
+# the function-word sequence survives the substitution.
+_FUNCTION_WORDS = frozenset("""
+a an the this that these those and or but nor so yet for of in on at by with from to
+into during after before while when where which who whom whose if whether than then
+as is are was were be been being am do does did done have has had having will would
+shall should can could may might must not no there here it its their his her our your
+my we they he she you i them us him one such other more most much many few all both
+each every any some only own same very also however therefore thus hence although
+because since unless until about above below between among within without across
+""".split())
+
+
+def structure_similarity(sentence, candidate):
+    """Similarity of the two function-word FRAMES (order-sensitive).
+
+    REPORTED FOR INFORMATION ONLY -- it does NOT drive any verdict, deliberately.
+
+    ORI Guideline 4 requires a paraphrase to use its own syntactical structure,
+    not merely its own words, so a swap that keeps the frame ("whether X are able
+    to Y") is still plagiarism while scoring near zero on lexical overlap. Two
+    stdlib-only formulations were measured against that case:
+
+      * whole-candidate frame ratio  -> dilutes to ~0.2 when the candidate is a
+        full abstract, so the check never fires in real use;
+      * best-window / best-source-sentence ratio -> over-matches: unrelated text
+        reached 0.857 against frame-copies starting at 0.533.
+
+    Neither separates, because function words are too generic -- two unrelated
+    sentences share a frame. A threshold on either would flag legitimate writing,
+    which is worse than the gap, so the number is exposed for a human to weigh
+    and no verdict depends on it. Frame-copying is therefore a KNOWN LIMITATION.
+    """
+    def frame(text):
+        return [w for w in normalise(text) if w in _FUNCTION_WORDS]
+
+    a, b = frame(sentence), frame(candidate)
+    if len(a) < 3 or len(b) < 3:
+        return 0.0
+    return round(SequenceMatcher(None, a, b, autojunk=False).ratio(), 3)
+
+
 def score(sentence, candidate):
     """Combine lexical overlap and verbatim run into a 0-1 similarity score."""
     body = "%s. %s" % (candidate.get("title", ""), candidate.get("abstract", ""))
@@ -141,12 +209,18 @@ def score(sentence, candidate):
     n_words = max(1, len(normalise(sentence)))
     run_ratio = min(1.0, run_len / float(n_words))
     combined = 0.55 * cos + 0.45 * run_ratio
+    q_run = quoted_run(sentence, body)
     return {
         "score": round(combined, 3),
         "cosine": round(cos, 3),
         "run_words": run_len,
         "run_span": span,
         "run_ratio": round(run_ratio, 3),
+        # True when the whole overlapping run is inside quotation marks.
+        "quoted": bool(q_run >= 3 and q_run >= run_len),
+        "quoted_run": q_run,
+        # Syntactic-frame overlap (ORI Guideline 4). Reported, not yet decisive.
+        "structure": round(structure_similarity(sentence, body), 3),
     }
 
 
@@ -160,6 +234,10 @@ def _cache_path(query, source, limit):
 
 def cached_search(query, source, limit, refresh=False):
     """Search one source with an on-disk cache so re-runs are instant."""
+    if source == "local":
+        # The corpus is already in memory and does not vary by query; a
+        # query-keyed cache could only serve a stale corpus.
+        return sources.search(query, source, limit=limit)
     os.makedirs(CACHE_DIR, exist_ok=True)
     path = _cache_path(query, source, limit)
     if os.path.exists(path) and not refresh:
@@ -203,6 +281,12 @@ def verdict(result, threshold, min_run=3):
     """
     if result is None:
         return "ok"
+    # Quoted verbatim is the correct way to reuse another author's words (ORI
+    # Guideline 2). It is surfaced so the citation can be checked, but it is not
+    # a plagiarism finding -- reporting it as one was a false alarm on correct
+    # practice.
+    if result.get("quoted") and result["run_words"] >= max(min_run, 3):
+        return "QUOTED (verbatim; verify the citation)"
     if result["run_words"] >= 12 and result["run_ratio"] >= 0.6:
         return "QUOTE + CITE (verbatim)"
     if result["score"] >= 0.55:
@@ -213,6 +297,8 @@ def verdict(result, threshold, min_run=3):
 
 
 def _source_ref(candidate):
+    if candidate.get("source") == "local":
+        return "local file %s" % (candidate.get("id") or "")
     bits = [candidate.get("source", "?")]
     if candidate.get("year"):
         bits.append(str(candidate["year"]))
@@ -222,6 +308,8 @@ def _source_ref(candidate):
 def render_report(draft_name, rows, source_names, threshold, statuses):
     checked = len(rows)
     flagged = [r for r in rows if r["verdict"] != "ok"]
+    violations = [r for r in flagged if is_violation(r["verdict"])]
+    quoted = [r for r in flagged if r["verdict"].startswith("QUOTED")]
     verbatim = [r for r in rows if r["verdict"].startswith("QUOTE")]
     top = max([r["best"]["score"] for r in rows if r["best"]], default=0.0)
 
@@ -230,9 +318,10 @@ def render_report(draft_name, rows, source_names, threshold, statuses):
     lines.append("")
     lines.append("Sources queried: %s  |  threshold: %.2f" % (", ".join(source_names), threshold))
     lines.append("")
-    lines.append("Sentences checked: **%d**  |  flagged: **%d**  |  "
+    lines.append("Sentences checked: **%d**  |  violations: **%d**  |  "
+                 "quoted verbatim (OK if cited): **%d**  |  "
                  "verbatim runs (>=12 words): **%d**  |  highest score: **%.3f**"
-                 % (checked, len(flagged), len(verbatim), top))
+                 % (checked, len(violations), len(quoted), len(verbatim), top))
     lines.append("")
     unavailable = sorted(s for s, st in (statuses or {}).items() if st == "unavailable")
     if unavailable:
@@ -260,8 +349,9 @@ def render_report(draft_name, rows, source_names, threshold, statuses):
                         _source_ref(cand)))
         link = cand.get("doi") or cand.get("url")
         if link:
-            if not str(link).startswith("http"):
-                link = "https://doi.org/" + str(link)
+            link = str(link)
+            if not link.startswith(("http", "file://")):
+                link = "https://doi.org/" + link
             lines.append("- **Link:** %s" % link)
         lines.append("- **Overlap:** cosine %.3f, longest verbatim run %d words"
                      % (best["cosine"], best["run_words"]))
@@ -304,8 +394,18 @@ def main(argv=None):
     parser.add_argument("draft", help="path to the draft (.txt/.md)")
     parser.add_argument("--sources", default="openalex,crossref,arxiv,europepmc",
                         help="comma-separated: openalex,crossref,arxiv,europepmc,semantic")
+    parser.add_argument("--corpus", default=None,
+                        help="file or directory to compare against IN ADDITION to the APIs: "
+                             ".txt/.md/.html, or .pdf with the optional pypdf package. "
+                             "Use this for paywalled articles, theses, books, unpublished "
+                             "manuscripts or saved web pages the APIs cannot reach.")
     parser.add_argument("--per-source", type=int, default=5)
-    parser.add_argument("--threshold", type=float, default=0.35)
+    # 0.30, not 0.35: on a 186-case labelled benchmark (120 copying cases, 66
+    # independent/unrelated) the scores separated cleanly -- negatives max 0.115,
+    # positives min 0.319 -- and 0.35 missed a light edit that scored 0.319-0.346.
+    # 0.30 keeps a 2.6x margin over every observed negative while catching all of
+    # them (sensitivity and specificity both 100% on that set).
+    parser.add_argument("--threshold", type=float, default=0.30)
     parser.add_argument("--min-run", type=int, default=3,
                         help="noise floor: verbatim words required for a REVIEW flag")
     parser.add_argument("--keep-tables", action="store_true",
@@ -318,6 +418,17 @@ def main(argv=None):
     args = parser.parse_args(argv)
 
     source_names = [s.strip() for s in args.sources.split(",") if s.strip()]
+    if args.corpus:
+        n_docs, corpus_warnings = sources.set_corpus(args.corpus)
+        if "local" not in source_names:
+            source_names.append("local")
+        for warning in corpus_warnings:
+            sys.stderr.write("corpus: %s\n" % warning)
+        sys.stderr.write("corpus: %d document(s) loaded from %s\n" % (n_docs, args.corpus))
+        if n_docs == 0:
+            sys.stderr.write(
+                "corpus: WARNING - no usable documents loaded; only the APIs will be "
+                "checked. A 'no overlap' result would NOT cover this corpus.\n")
     with open(args.draft, "r", encoding="utf-8", errors="replace") as handle:
         text = handle.read()
     if htmltext.is_html(args.draft):

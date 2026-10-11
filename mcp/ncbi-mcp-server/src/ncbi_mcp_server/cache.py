@@ -225,6 +225,18 @@ class CachedNCBIClient:
             manager.record_cache_event(hit)
         except Exception:
             logger.warning("Failed to record cache event", exc_info=True)
+
+    async def close(self) -> None:
+        """Release the wrapped NCBIClient's HTTP session.
+
+        server.shutdown() awaits ``ncbi_client.close()``. This wrapper had no
+        ``close``, so every shutdown raised AttributeError and the inner
+        httpx.AsyncClient was never closed. Delegate when the inner client
+        supports it, and stay quiet when it does not.
+        """
+        close = getattr(self.ncbi_client, "close", None)
+        if close is not None:
+            await close()
     
     async def search_pubmed(self, query: str, max_results: int = 20, 
                            sort: str = "relevance", date_range: Optional[str] = None) -> Dict[str, Any]:

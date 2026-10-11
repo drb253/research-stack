@@ -1008,7 +1008,7 @@ async def read_arxiv_paper(paper_id: str, save_path: str = "./downloads") -> str
     try:
         return arxiv_searcher.read_paper(paper_id, save_path)
     except Exception as e:
-        print(f"Error reading paper {paper_id}: {e}")
+        logger.error("Error reading paper %s: %s", paper_id, e)
         return ""
 
 
@@ -1075,7 +1075,7 @@ async def read_medrxiv_paper(paper_id: str, save_path: str = "./downloads") -> s
     try:
         return medrxiv_searcher.read_paper(paper_id, save_path)
     except Exception as e:
-        print(f"Error reading paper {paper_id}: {e}")
+        logger.error("Error reading paper %s: %s", paper_id, e)
         return ""
 
 
@@ -1092,7 +1092,7 @@ async def read_iacr_paper(paper_id: str, save_path: str = "./downloads") -> str:
     try:
         return iacr_searcher.read_paper(paper_id, save_path)
     except Exception as e:
-        print(f"Error reading paper {paper_id}: {e}")
+        logger.error("Error reading paper %s: %s", paper_id, e)
         return ""
 
 
@@ -1156,7 +1156,7 @@ async def read_semantic_paper(paper_id: str, save_path: str = "./downloads") -> 
     try:
         return semantic_searcher.read_paper(paper_id, save_path)
     except Exception as e:
-        print(f"Error reading paper {paper_id}: {e}")
+        logger.error("Error reading paper %s: %s", paper_id, e)
         return ""
 
 
@@ -2028,7 +2028,7 @@ async def get_citing_articles(doi: str, limit: int = 50) -> List[Dict]:
         )
         response.raise_for_status()
         data = response.json() or []
-        return data[: max(limit, 1)]
+        return data[: max(limit, 0)]
 
     return await asyncio.to_thread(_run)
 

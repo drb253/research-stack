@@ -50,9 +50,10 @@ Options:
 
 | Flag | Default | Meaning |
 |------|---------|---------|
-| `--sources` | `openalex,crossref,arxiv,europepmc` | which indexes to query (`semantic` optional) |
+| `--sources` | `openalex,crossref,arxiv,europepmc` | which indexes to query (`semantic` optional; `local` is added by `--corpus`) |
+| `--corpus` | off | a file or directory to compare against **in addition** to the APIs — `.txt`/`.md`/`.rst`/`.html`, or `.pdf` with the optional `pypdf`. Use it for paywalled articles, theses, books, unpublished manuscripts and saved web pages, which the APIs cannot reach. Unreadable files are reported, never silently skipped |
 | `--per-source` | `5` | candidates per sentence per source |
-| `--threshold` | `0.35` | score at/above which a passage is flagged |
+| `--threshold` | `0.30` | score at/above which a passage is flagged (measured separation: independent text ≤ 0.115, copying ≥ 0.319) |
 | `--min-run` | `3` | noise floor: verbatim words required for a REVIEW flag |
 | `--keep-tables` | off | keep `<table>` content in HTML drafts (dropped by default) |
 | `--min-words` | `8` | sentences shorter than this are skipped |

@@ -1,4 +1,17 @@
-mcp>=1.0.0
+# Runtime requirements for ncbi-mcp-server.
+# Mirrors [tool.poetry.dependencies] in pyproject.toml. Installing only this file
+# must be enough to import the server; python-dotenv and aiofiles were previously
+# missing, so `pip install -r requirements.txt` produced a server that could not
+# even start (ModuleNotFoundError: No module named 'dotenv').
+# `mcp` must stay <2: the server imports mcp.server.fastmcp, which mcp 2.x
+# renamed to MCPServer. pyproject pins this via "^1.0.0"; the unconstrained
+# ">=1.0.0" here pulled 2.x and broke the import. Same defect class as the one
+# fixed for paper-search-mcp in CHANGELOG.
+mcp>=1.0.0,<2
 httpx>=0.25.0
-asyncio
+python-dotenv>=1.0.0
+aiofiles>=23.0.0
 typing-extensions>=4.0.0
+
+# Optional: only required when REDIS_URL is set (lazily imported in cache.py).
+# redis>=5.0.0

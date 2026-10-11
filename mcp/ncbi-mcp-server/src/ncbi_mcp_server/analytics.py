@@ -308,12 +308,21 @@ class AnalyticsManager:
                 async with aiofiles.open(self.analytics_file, 'r') as f:
                     data = json.loads(await f.read())
                 
-                # Load stats
+                # Load stats. Unknown keys (e.g. written by a newer version) are
+                # ignored rather than raising: a single stray key used to abort the
+                # whole load, which zeroed total_requests AND discarded
+                # query_hashes because that block never ran.
                 if 'stats' in data:
-                    stats_data = data['stats']
+                    stats_data = data['stats'] or {}
+                    known = set(UsageStats.__dataclass_fields__)
+                    unknown = sorted(set(stats_data) - known)
+                    if unknown:
+                        logger.warning(
+                            "Ignoring unknown analytics field(s): %s", ", ".join(unknown)
+                        )
                     self.stats = UsageStats(**{
                         k: datetime.fromisoformat(v) if k in ['start_time', 'last_updated'] and v else v
-                        for k, v in stats_data.items()
+                        for k, v in stats_data.items() if k in known
                     })
                 
                 # Load query hashes

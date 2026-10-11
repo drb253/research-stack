@@ -93,8 +93,6 @@ class OAIPMHSearcher(PaperSource):
         # For simple text queries, we need to filter after retrieval
         # OAI-PMH doesn't support full-text search directly
         # We'll retrieve records and filter locally
-        retry_count = 0
-        max_retries = 3
         resumption_token = None
 
         try:

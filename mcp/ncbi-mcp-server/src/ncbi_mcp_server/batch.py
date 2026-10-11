@@ -178,33 +178,42 @@ class BatchProcessor:
         return [pmids[i:i + chunk_size] for i in range(0, len(pmids), chunk_size)]
     
     async def progressive_search(self, query: str, total_results: int = 1000) -> Dict[str, Any]:
-        """Perform a large search progressively to avoid timeouts"""
-        results = []
+        """Fetch up to ``total_results`` unique PMIDs for a query.
+
+        NCBIClient.search_pubmed exposes no ``retstart``/offset, so this cannot
+        paginate. The previous loop re-sent the same first page on every
+        iteration (despite a comment claiming otherwise) and therefore returned
+        the same PMIDs over and over. It now de-duplicates and stops as soon as
+        a page adds nothing new, so the caller never receives duplicates.
+        """
+        results: List[str] = []
+        seen: set = set()
         batch_size = 100  # Max per API call
-        
+
         for start in range(0, total_results, batch_size):
             remaining = total_results - start
             current_batch_size = min(batch_size, remaining)
-            
+
             try:
-                # Note: NCBI doesn't support offset, so we use retstart parameter
-                # This is a simplified version - full implementation would need more complex logic
                 batch_result = await self.ncbi_client.search_pubmed(
-                    query, 
+                    query,
                     max_results=current_batch_size
                 )
-                
-                if batch_result.get('esearchresult', {}).get('idlist'):
-                    results.extend(batch_result['esearchresult']['idlist'])
-                    logger.info(f"Progressive search: fetched {len(results)}/{total_results}")
-                else:
-                    logger.info("No more results available")
+
+                idlist = (batch_result.get('esearchresult', {}) or {}).get('idlist') or []
+                fresh = [pmid for pmid in idlist if pmid not in seen]
+                if not fresh:
+                    logger.info("No new results available (no pagination support); stopping")
                     break
-                    
+
+                seen.update(fresh)
+                results.extend(fresh)
+                logger.info(f"Progressive search: fetched {len(results)}/{total_results}")
+
             except Exception as e:
                 logger.error(f"Progressive search batch failed at position {start}: {e}")
                 break
-        
+
         return {
             "total_fetched": len(results),
             "requested": total_results,

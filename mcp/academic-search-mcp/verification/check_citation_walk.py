@@ -1,5 +1,11 @@
+import os
 import sys
-sys.path.insert(0, '/Users/drb/.local/share/academic-search-mcp/src')
+
+# Portable: resolve the package from this checkout (override with ACADEMIC_SEARCH_SRC).
+_SRC = os.environ.get("ACADEMIC_SEARCH_SRC") or os.path.normpath(
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir, "src")
+)
+sys.path.insert(0, _SRC)
 from academic_search import server
 f = lambda n: getattr(getattr(server, n), 'fn', getattr(server, n))
 try:

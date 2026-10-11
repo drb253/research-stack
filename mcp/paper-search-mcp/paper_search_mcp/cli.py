@@ -39,6 +39,7 @@ from .academic_platforms.clinicaltrials import ClinicalTrialsSearcher
 from .academic_platforms.bookshelf import BookshelfSearcher
 from .academic_platforms.ictrp import ICTRPSearcher
 from .academic_platforms.ctis import CTISSearcher
+from .academic_platforms.chemrxiv import ChemRxivSearcher
 from .academic_platforms.hal import HALSearcher
 from .academic_platforms.ssrn import SSRNSearcher
 
@@ -86,6 +87,10 @@ def _init_searchers() -> None:
     SEARCHERS["bookshelf"] = BookshelfSearcher()
     SEARCHERS["ictrp"] = ICTRPSearcher()
     SEARCHERS["ctis"] = CTISSearcher()
+    # chemrxiv was wired into server.py but never into the CLI, so
+    # `paper-search search -s all` could not reach it and the CLI listed 27
+    # sources against the server's 28.
+    SEARCHERS["chemrxiv"] = ChemRxivSearcher()
 
     # Optional paid connectors
     ieee_key = get_env("IEEE_API_KEY", "")
@@ -128,18 +133,24 @@ RETIRED_SOURCES = {"dblp", "base", "citeseerx", "google_scholar"}
 
 
 # Sources added by paper-search-mcp-patches (all verified free, no API key).
-ALL_SOURCES = ALL_SOURCES + ["plos", "jstage", "figshare", "datacite", "whoris", "osf", "clinicaltrials", "bookshelf", "ictrp", "ctis"]
+ALL_SOURCES = ALL_SOURCES + ["plos", "jstage", "figshare", "datacite", "whoris", "osf", "clinicaltrials", "bookshelf", "ictrp", "ctis", "chemrxiv"]
 
-
-# Sources added by paper-search-mcp-patches (all verified free, no API key).
-ALL_SOURCES = ALL_SOURCES + ["plos", "jstage", "figshare", "datacite", "whoris"]
+# Tier 1: de-duplicate. A second, identical patch block used to append
+# plos/jstage/figshare/datacite/whoris again. cmd_search keys its task dict by
+# source name, so the duplicate entries silently overwrote live coroutines
+# ("RuntimeWarning: coroutine '_async_search' was never awaited") and dropped
+# those sources' results. server.py:170 already guards this with dict.fromkeys.
+ALL_SOURCES = list(dict.fromkeys(ALL_SOURCES))
 
 
 def _parse_sources(sources: str) -> List[str]:
     if not sources or sources.strip().lower() == "all":
-        return [s for s in ALL_SOURCES if s in SEARCHERS and s not in RETIRED_SOURCES]
-    normalized = [p.strip().lower() for p in sources.split(",") if p.strip()]
-    return [s for s in normalized if s in SEARCHERS and s not in RETIRED_SOURCES]
+        selected = [s for s in ALL_SOURCES if s in SEARCHERS and s not in RETIRED_SOURCES]
+    else:
+        normalized = [p.strip().lower() for p in sources.split(",") if p.strip()]
+        selected = [s for s in normalized if s in SEARCHERS and s not in RETIRED_SOURCES]
+    # De-dup defensively too: `-s crossref,crossref` must not overwrite a task.
+    return list(dict.fromkeys(selected))
 
 
 def _paper_unique_key(paper: Dict[str, Any]) -> str:

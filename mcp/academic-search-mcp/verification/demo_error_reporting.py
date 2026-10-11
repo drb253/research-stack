@@ -5,9 +5,14 @@ out ~200s of real backoff, simulate an HTTP 429 and show the message the caller
 now receives.  time.sleep is neutralised so the run is instant.
 """
 
+import os
 import sys
 
-sys.path.insert(0, "/Users/drb/.local/share/academic-search-mcp/src")
+# Portable: resolve the package from this checkout (override with ACADEMIC_SEARCH_SRC).
+_SRC = os.environ.get("ACADEMIC_SEARCH_SRC") or os.path.normpath(
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir, "src")
+)
+sys.path.insert(0, _SRC)
 
 import requests  # noqa: E402
 

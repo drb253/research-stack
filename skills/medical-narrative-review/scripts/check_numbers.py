@@ -156,15 +156,27 @@ def classify_significance(line: str) -> tuple:
     return positive, negative
 
 
-def check_significance(line: str, location: str) -> list:
+def check_significance(line: str, location: str, continuation: str = "") -> list:
     issues: list = []
     positive, negative = classify_significance(line)
     if not (positive or negative):
         return issues
     if positive and negative:
         issues.append(issue("warning", "CONTRADICTORY_SIGNIFICANCE_WORDING", location=location))
-    p_values = list(P_VALUE_RE.finditer(line))
-    if not p_values and not CI_RE.search(line) and not CI_BARE_RE.search(line):
+    # A wrapped sentence puts its statistic on the following line:
+    #   "...was significantly higher\n(p = 0.40)."
+    # Judging the first line alone found no statistic, downgraded a real
+    # contradiction to the SIGNIFICANCE_WITHOUT_STATISTIC warning, and let the
+    # manuscript PASS. Join the continuation, but only when this line does not
+    # end a sentence -- otherwise a later, unrelated p value would be attached
+    # to this claim.
+    scope = line
+    stripped = line.rstrip()
+    if not (P_VALUE_RE.search(line) or CI_RE.search(line) or CI_BARE_RE.search(line)):
+        if continuation and stripped and stripped[-1] not in ".!?;:":
+            scope = line + " " + continuation
+    p_values = list(P_VALUE_RE.finditer(scope))
+    if not p_values and not CI_RE.search(scope) and not CI_BARE_RE.search(scope):
         issues.append(issue("warning", "SIGNIFICANCE_WITHOUT_STATISTIC", location=location))
         return issues
     for match in p_values:
@@ -175,7 +187,7 @@ def check_significance(line: str, location: str) -> list:
         if value < 0.05 and negative and not positive and operator in ("=", "<", "\u2264"):
             # A stricter pre-specified threshold makes p < 0.05 legitimately non-significant,
             # which is how trials such as KEYNOTE-671 are reported.
-            if not THRESHOLD_RE.search(line):
+            if not THRESHOLD_RE.search(scope):
                 issues.append(
                     issue("error", "NON_SIGNIFICANCE_WITH_SIGNIFICANT_P", location=location)
                 )
@@ -277,7 +289,9 @@ def cli() -> int:
     issues: list = []
     in_fence = False
     scanned = 0
-    for line_number, line in enumerate(text.splitlines(), start=1):
+    lines = text.splitlines()
+    for index, line in enumerate(lines):
+        line_number = index + 1
         stripped = line.strip()
         if stripped.startswith("```"):
             in_fence = not in_fence
@@ -287,11 +301,12 @@ def cli() -> int:
         if not args.include_headings and stripped.startswith(("#", "|")):
             continue
         location = "line:%d" % line_number
+        continuation = lines[index + 1] if index + 1 < len(lines) else ""
         found = (
             check_fraction(line, location)
             + check_interval(line, location)
             + check_percentages(line, location)
-            + check_significance(line, location)
+            + check_significance(line, location, continuation)
         )
         issues.extend(found)
         if found or ANY_PCT_RE.search(line) or "CI" in line:

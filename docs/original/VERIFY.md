@@ -12,7 +12,7 @@ found on the source machine; a failure means that specific defect is present.
 The runnable script is **[verify-setup.sh](verify-setup.sh)** in this folder.
 
 ```bash
-bash cline-setup/verify-setup.sh
+bash verify-setup.sh
 ```
 
 It runs 6 groups of checks and prints `SETUP VERIFIED` or a list of failures.

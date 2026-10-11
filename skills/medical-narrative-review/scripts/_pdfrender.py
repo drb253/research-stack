@@ -270,6 +270,16 @@ def render(blocks: list, meta: dict, counts: dict = None, present: list = None) 
     if counts is not None and not figure_drawn:
         document.new_page()
         draw_screening_figure(document, counts)
+        # This note used to sit after `return`, so it was never drawn.
+        document.space(6)
+        document.para(
+            "Counts are those recorded in prisma_counts.json and are checked arithmetically "
+            "before this figure is drawn.",
+            "F1",
+            CAPTION_SIZE,
+            CAPTION_SIZE * 1.3,
+            gray=0.4,
+        )
     if present:
         document.space(8)
         for line in present:
@@ -283,13 +293,3 @@ def render(blocks: list, meta: dict, counts: dict = None, present: list = None) 
         "substituted_characters": sorted(set(document.dropped)),
     }
     return payload, report
-
-    document.space(6)
-    document.para(
-        "Counts are those recorded in prisma_counts.json and are checked arithmetically "
-        "before this figure is drawn.",
-        "F1",
-        CAPTION_SIZE,
-        CAPTION_SIZE * 1.3,
-        gray=0.4,
-    )

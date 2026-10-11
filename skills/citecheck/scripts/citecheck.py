@@ -18,7 +18,6 @@ import argparse
 import ast
 import json
 import re
-import ssl
 import sys
 import urllib.error
 import urllib.parse
@@ -35,13 +34,12 @@ STOP = {"a", "an", "the", "on", "of", "in", "to", "and", "for", "with", "at", "b
 
 
 def _open(req, timeout):
-    try:
-        return urllib.request.urlopen(req, timeout=timeout)
-    except ssl.SSLError:
-        ctx = ssl.create_default_context()
-        ctx.check_hostname = False
-        ctx.verify_mode = ssl.CERT_NONE
-        return urllib.request.urlopen(req, timeout=timeout, context=ctx)
+    # TLS verification is never disabled. An earlier version caught SSLError and
+    # retried with check_hostname=False / CERT_NONE, which would let a MITM
+    # substitute fabricated Crossref/OpenAlex metadata -- defeating the purpose of
+    # a citation-verification tool. An SSLError now propagates and is reported as
+    # a resolution/retraction-check failure by the caller.
+    return urllib.request.urlopen(req, timeout=timeout)
 
 
 def http_json(url, params=None, timeout=25):
@@ -214,8 +212,11 @@ def enrich_retraction(rec):
             if w.get("is_retracted"):
                 rec["is_retracted"] = True
                 rec["retraction_source"] = "openalex"
-        except Exception:
-            pass
+        except Exception as exc:
+            # Do NOT swallow this. A failed retraction lookup must not look like
+            # "checked and clean": record it so callers can tell the difference
+            # and warn instead of silently clearing a retracted paper.
+            rec["retraction_check_failed"] = "%s: %s" % (type(exc).__name__, exc)
     return rec
 
 
@@ -720,6 +721,10 @@ def report_verify(results, style="text"):
             if rec.get("is_retracted"):
                 tag = "RETRACTED"
                 notes.append("source is retracted (%s)" % (rec.get("retraction_source") or "?"))
+            if rec.get("retraction_check_failed"):
+                notes.append("retraction status NOT verified (%s)"
+                             % rec["retraction_check_failed"])
+                tag = "WARN" if tag == "OK" else tag
             if e:
                 ey = (e.get("year") or "")[:4]
                 if ey and rec.get("year") and ey != str(rec["year"]):

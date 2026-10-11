@@ -98,7 +98,7 @@ RESEARCH-STACK VERIFIED
 
 | Capability | Plain LLM | Search MCPs alone | **research-stack** |
 |---|:---:|:---:|:---:|
-| Finds literature | ⚠️ from memory | ✅ live | ✅ live · 27 sources |
+| Finds literature | ⚠️ from memory | ✅ live | ✅ live · 28 sources |
 | Every citation verified against the DOI | ❌ | ❌ | ✅ |
 | Every number traceable to a computed artifact | ❌ | ❌ | ✅ |
 | PRISMA flow reconciles with the search + screening logs | ❌ | ❌ | ✅ |
@@ -138,7 +138,7 @@ flowchart TB
     U(["You / coding agent"]) --> CL[Cline] & CD[Claude] & OC[OpenCode] & MORE[Gemini · LM Studio · Trae · Cursor · Windsurf]
 
     subgraph MCP["MCP layer — retrieval & verification"]
-        PS["paper-search · 27 free sources + 43 patched connectors"]
+        PS["paper-search · 28 sources + 43 patched modules"]
         NC["ncbi"]
         AS["academic-search"]
         CO["consensus"]
@@ -202,7 +202,7 @@ flowchart LR
     C --> G["2b · render/PDF toolchain"]
     C --> H["3 · write client MCP configs"]
     C --> I["4 · API keys  ·  5 · R packages"]
-    H --> J["restart client(s)"] --> K["verify.sh → 19 checks"]
+    H --> J["restart client(s)"] --> K["verify.sh → 20 checks"]
 ```
 
 ### Optional third-party skill packs
@@ -258,7 +258,7 @@ Five MCP servers give the skills their retrieval and verification surface.
 
 | Server | Kind | What it adds |
 |---|---|---|
-| **paper-search** | local, `uv` tool | 27 free-first sources, federated search, query planning, retraction check, citation export |
+| **paper-search** | local, `uv` tool | 28 sources (27 work with zero config), federated search, query planning, retraction check, citation export |
 | **ncbi** | local, venv (vendored) | E-utilities: PubMed search, MeSH terms, related articles, batch fetch |
 | **academic-search** | local, venv (vendored) | Semantic Scholar / Crossref / OpenAlex multi-provider search |
 | **consensus** | remote (`npx mcp-remote`) | semantic search over 400M+ papers |
@@ -271,7 +271,7 @@ with a wall-clock budget, and **never reports a failed source as "no results"**:
 flowchart LR
     Q["query"] --> P["plan_search_query<br/>variants · MeSH · domain routing"]
     P --> F{"federated fan-out"}
-    F --> S1[PubMed] & S2[Europe PMC] & S3[OpenAlex] & S4[Crossref] & S5[arXiv] & S6[bioRxiv] & SX["… 27 sources"]
+    F --> S1[PubMed] & S2[Europe PMC] & S3[OpenAlex] & S4[Crossref] & S5[arXiv] & S6[bioRxiv] & SX["… 28 sources"]
     S1 & S2 & S3 & S4 & S5 & S6 & SX --> R["relevance-ranked, deduped"]
     R --> ST["source_status per source<br/>ok · empty · unavailable"]
     R --> RB["relevance bands<br/>high · medium · low"]
@@ -309,7 +309,7 @@ others; each stage is gated and ledgered, and no stage is skipped.
 | **paper-search** | how to drive the retrieval MCPs correctly | query routing, retraction, export |
 | **citecheck** | audit & build citations; flag retractions | reference list in 7 styles; A1–A10 audit |
 | **humanizerdrb** | de-slop prose without changing meaning | "What changed" list; refuses detector evasion |
-| **originality-check** | attribution check for your own drafts | verified BibTeX + paraphrase worksheet |
+| **originality-check** | attribution check for your own drafts | verified BibTeX + paraphrase worksheet; overlap against 5 open APIs **plus any local corpus** (`--corpus` covers paywalled PDFs, theses, books, unpublished manuscripts, saved web pages) |
 
 ### Choosing a review type
 
@@ -466,6 +466,71 @@ DOI, a false human-screening claim, an unwaived completeness gap, a stale
 waiver, mixed estimands): every adversarial case **must fail**, and the run
 passes only when each one does.
 
+### Measured results
+
+The check count says the gates *run*. These numbers say how well they *work*,
+measured against ground truth **independent of the tool** (NLM publication types for
+retraction; the US ORI guide's own verdicts for paraphrasing). Every figure comes from
+a script in `benchmarks/`; none is asserted without a run.
+
+| Component | Measured | 95% CI |
+|---|---|---|
+| Retraction detection — 920 real citations, NLM-labelled | **100%** sensitivity, **100%** specificity | **[99.17%, 100%]** each |
+| Citation resolution | 916 / 920 = 99.6% resolved | [98.9%, 99.8%] |
+| Arithmetic gate — 17 labelled manuscripts | 100% sensitivity, 100% specificity | [67.6%, 100%] / [70.1%, 100%] |
+| Overlap detection — **real** preprint/published pairs | 100% (54/54), specificity 100% (61/61) | [93.4%, 100%] / [94.1%, 100%] |
+| Overlap detection — 186-case labelled stress set | 100%, specificity 100% | [96.9%, 100%] / [94.5%, 100%] |
+| Agreement with the **US ORI guide's** expert verdicts | **6 / 6** | [61%, 100%] |
+
+**Unsafe accepts: 0 / 920.** In the whole benchmark the citation gate never passed a
+bad citation. The retraction claim is statistically earned: a zero-failure result needs
+n ≥ 381 for a 99% Wilson lower bound, and this set has 459 positives and 457 negatives.
+
+**External validation.** `benchmarks/bench_ori_guide.py` tests the overlap detector
+against the Office of Research Integrity guide's own paraphrasing exercise, which
+publishes six rewrites of one paragraph together with the ORI's verdicts — four it calls
+plagiarism, two it calls correct. The detector agrees on all six.
+
+**Known limitation — state this when reporting.** A paraphrase that changes every content
+word but keeps the source's *sentence structure* (ORI Guideline 4) is **not** caught. Two
+stdlib-only frame measures were implemented and measured; neither separates frame-copying
+from unrelated text (unrelated reached 0.857 against frame-copies from 0.533), so the frame
+number is reported but drives no verdict. **A clean report does not cover frame-copying.**
+
+```bash
+cd benchmarks
+python3 bench_numeric.py        # offline, instant — arithmetic gate
+python3 bench_ori_guide.py      # offline, instant — ORI expert labels
+python3 bench_accuracy.py fetch && SHARDS=6 python3 bench_accuracy.py score   # 920 citations
+```
+
+Method, caveats and the full per-record output: [`docs/BENCHMARK-RESULTS.md`](docs/BENCHMARK-RESULTS.md).
+A separate code/docs audit with every defect found and fixed is in
+[`docs/AUDIT-FINDINGS.md`](docs/AUDIT-FINDINGS.md).
+
+### What the overlap and citation checks now cover
+
+Aligned with the **US Office of Research Integrity** guide *"Avoiding Plagiarism,
+Self-plagiarism, and Other Questionable Writing Practices"* (Roig, 3rd rev. 2015):
+
+- **Overlap beyond the open indexes.** `originality_check.py --corpus PATH` scores a
+  draft against any local text — paywalled PDFs, theses, books, unpublished manuscripts,
+  saved web pages — in addition to the five APIs, or alone (`--sources ""`, fully
+  offline). Unreadable files are **reported, never silently skipped**, and a corpus that
+  loads zero documents warns loudly: a quietly-empty corpus would make "no overlap found"
+  meaningless.
+- **Quoted material is not a violation** (ORI Guideline 2). A properly quoted passage
+  returns `QUOTED (verbatim; verify the citation)` and is not counted as a finding; the
+  same words unquoted remain `QUOTE + CITE (verbatim)`.
+- **Corrections as well as retractions** (ORI Guideline 17: *"has not been subsequently
+  corrected or retracted"*). Retraction is a hard failure; a correction/erratum is a
+  **warning** so you can check whether the corrected figures change what you wrote.
+  Validated on 6/6 real corrected papers.
+- **Body citations ↔ reference list, both directions** (ORI Guideline 15) via
+  `audit_citations.py`: `UNCITED_REFERENCE` and `CITATION_EXCEEDS_REFERENCE_LIST`.
+- **Text recycling / self-plagiarism** (Guidelines 11/14): add your own prior papers to
+  `--corpus`.
+
 ---
 
 ## Platforms
@@ -503,8 +568,9 @@ from the working setup, so the search tools do not need per-call approval.
 
 ## API keys & access (how to get 100% output)
 
-The stack is **free-first**: with **zero keys** you already get the full 27-source
-search, DOI/PMID resolution, retraction checks, and every skill and gate. Keys do
+The stack is **free-first**: with **zero keys** you already get 27 of the 28-source
+search (only Unpaywall additionally wants a contact email), plus DOI/PMID resolution,
+retraction checks, and every skill and gate. Keys do
 not unlock *correctness* — they unlock **coverage, rate limits, and PDF access**.
 To reach **100% of the repo's retrieval output**, add the settings below.
 
@@ -543,7 +609,7 @@ Free sources, Crossref / OpenAlex / DataCite resolution, retraction checks, the
 |---|---|---|---|---|
 | **Springer Nature** (two keys) | `PAPER_SEARCH_MCP_SPRINGER_NATURE_META_API_KEY` + `…_OPENACCESS_API_KEY` | https://dev.springernature.com | 2 extra sources incl. **Springer OA full text (JATS)** | 500/day **per key** |
 | **Elsevier / Scopus** | `PAPER_SEARCH_MCP_ELSEVIER_API_KEY` (+ `…_ELSEVIER_INSTTOKEN`) | https://dev.elsevier.com | Scopus metadata search | full text needs the institutional token |
-| IEEE / ACM (paid corpora) | `PAPER_SEARCH_MCP_IEEE_API_KEY` / `…_ACM_API_KEY` | IEEE / ACM developer portals | paid-index coverage | paid |
+| IEEE / ACM (**not implemented**) | `PAPER_SEARCH_MCP_IEEE_API_KEY` / `…_ACM_API_KEY` | — | nothing yet: both connectors are skeletons that raise `NotImplementedError` even with a key set | — |
 | Google Scholar proxy | `PAPER_SEARCH_MCP_GOOGLE_SCHOLAR_PROXY_URL` | a scraping proxy | optional — use the `google-scholar` MCP instead | — |
 
 > ⚠️ **Quota note:** Springer and Elsevier keys make `sources="all"` spend their
@@ -607,15 +673,16 @@ research-stack/
 ├── bin/mcp_config.py               # per-client MCP config writer (8 schemas)
 ├── scripts/make_readme_charts.py   # regenerates assets/*.svg
 ├── assets/                         # coverage · composition · skills (SVG)
+├── benchmarks/                     # measured results: 6 harnesses + README (see below)
 ├── config/paper-search.env.template
-├── docs/  PLATFORMS.md · original/ (SETUP.md · AGENT_PROMPT.md · VERIFY.md)
+├── docs/  PLATFORMS.md · BENCHMARK-RESULTS.md · AUDIT-FINDINGS.md · original/ (SETUP.md · AGENT_PROMPT.md · VERIFY.md)
 ├── skills/                         # 12 review/guard skills  (198 files)
 ├── tools/  originality-toolkit/ (23 files) · verification_report.py
 └── mcp/
     ├── paper-search-mcp/            # vendored, pre-patched (upstream v0.1.4 + 43 patches)
     ├── ncbi-mcp-server/             # vendored ncbi fork (patched)  + tests
     ├── academic-search-mcp/         # vendored academic-search fork
-    ├── paper-search-patches/        # 43 connectors + apply_patches.py + audit_fix_check.py
+    ├── paper-search-patches/        # 43 patched modules + apply_patches.py + audit_fix_check.py
     └── optional/browser-probe.requirements.txt   # render/PDF toolchain pins
 ```
 
@@ -666,8 +733,9 @@ detector-evasion; they improve writing and fix attribution instead.
   run on your machine — nothing is uploaded to a third party.
 - **PHI-aware.** The narrative-review ledger linter flags PHI-like patterns
   (email, MRN, DOB, phone) and keeps ledgers metadata-only.
-- **No dynamic code.** The local CLIs make no network calls, load no pickle, and
-  eval no code.
+- **No dynamic code.** The local CLIs load no pickle and eval no code. Network
+  use is explicit and confined to documented resolver subcommands (for example
+  `citecheck.py resolve`, which fetches Crossref metadata).
 
 ---
 
@@ -705,14 +773,15 @@ Built on the shoulders of open source:
 - **[K-Dense scientific-agent-skills](https://github.com/K-Dense-AI/scientific-agent-skills)** (MIT) — the 160+ upstream skills.
 - **[AIPOCH medical-research-skills](https://github.com/aipoch/medical-research-skills)** (MIT) — 460+ medical-research skills (optional, not gated).
 - The bundled review skills (EvidenceForge, MIT) merge methodology from several
-  open projects, credited per-skill in each `NOTICE.md`.
+  open projects, credited in a `NOTICE.md` where the merged work requires it
+  (`meta-analysis`, `sysreview`, `evidence-synthesis-forge`).
 
 ---
 
 ## License & provenance
 
 MIT — see [LICENSE](LICENSE). The bundled review skills are MIT (EvidenceForge)
-with merged methodology credited in each skill's `NOTICE.md`; the upstream
+with merged methodology credited in the skills' `NOTICE.md` files; the upstream
 scientific-skills pack (K-Dense Inc., MIT) is **cloned, not vendored**. Nothing
 here defeats AI- or plagiarism-detectors; the guard skills explicitly refuse that.
 

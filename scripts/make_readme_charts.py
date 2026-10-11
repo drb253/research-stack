@@ -10,6 +10,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from pathlib import Path
+import subprocess
 
 OUT = Path(__file__).resolve().parent.parent / "assets"
 OUT.mkdir(exist_ok=True)
@@ -50,15 +51,45 @@ for b, v in zip(bars, vals):
 save(fig, "coverage.svg")
 
 # 2. Repository composition by area (git ls-files counts). -------------------- #
-areas = ["skills/", "mcp/", "tools/", "docs/", "root scripts", "config/", "bin/", "scripts/", "assets/", "meta"]
-files = [198, 160, 24, 5, 4, 1, 1, 1, 3, 3]
+# Derived from git rather than hand-typed: a hard-coded list silently goes stale
+# as files are added (it had drifted to 400 against 402 tracked files).
+def _tracked_files():
+    try:
+        out = subprocess.check_output(["git", "ls-files"], cwd=OUT.parent, text=True)
+    except (OSError, subprocess.CalledProcessError) as exc:
+        raise SystemExit(f"ERROR: `git ls-files` failed ({exc}); run from the repo.")
+    return [line for line in out.splitlines() if line.strip()]
+
+
+_TOP_LEVEL = ["skills/", "mcp/", "tools/", "docs/", "assets/", "config/", "bin/",
+              "scripts/", ".github/"]
+_tracked = _tracked_files()
+_counts = {p: sum(1 for f in _tracked if f.startswith(p)) for p in _TOP_LEVEL}
+_root = [f for f in _tracked if "/" not in f]
+_counts["root scripts"] = sum(1 for f in _root if f.endswith(".sh"))
+_counts["meta"] = len(_root) - _counts["root scripts"]
+
+areas = _TOP_LEVEL + ["root scripts", "meta"]
+files = [_counts[a] for a in areas]
+order = sorted(range(len(areas)), key=lambda i: -files[i])   # largest first
+areas = [areas[i] for i in order]
+files = [files[i] for i in order]
+
+total_files = sum(files)
+if total_files != len(_tracked):
+    raise SystemExit(
+        f"ERROR: categories account for {total_files} files but git tracks "
+        f"{len(_tracked)}; add the missing top-level area to _TOP_LEVEL."
+    )
+
 fig, ax = plt.subplots(figsize=(9, 4.6), dpi=120)
 y = range(len(areas))
 bars = ax.barh(list(y), files, color=BLUE)
 ax.set_yticks(list(y))
 ax.set_yticklabels(areas, color=INK)
 ax.invert_yaxis()
-ax.set_title("Repository composition  (400 tracked files)", fontsize=15, fontweight="bold", color=INK)
+ax.set_title(f"Repository composition  ({total_files} tracked files)",
+             fontsize=15, fontweight="bold", color=INK)
 ax.set_xlabel("tracked files", color=INK)
 _clean(ax)
 ax.grid(axis="y", alpha=0)

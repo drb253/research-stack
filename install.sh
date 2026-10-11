@@ -9,7 +9,8 @@
 #   --targets LIST     comma list: cline,claude,opencode,gemini,lmstudio  (default: cline)
 #   --no-mcp           install skills only
 #   --no-skills        configure MCP only
-#   --with-upstream-skills  also clone the 160+ K-Dense scientific skills
+#   --with-upstream-skills  clone the K-Dense scientific skills (default)
+#   --no-upstream-skills    skip the upstream scientific skills
 #   --with-ncbi / --with-academic-search   include those servers in the config
 #   --copy-skills      copy skills instead of symlinking
 #   --reinstall        reinstall/upgrade the paper-search tool first
@@ -62,7 +63,7 @@ Options:
   --no-skills        configure MCP only
   --with-upstream-skills   (default) also clone the 160+ K-Dense scientific skills
   --no-upstream-skills     skip the upstream scientific skills
-  --with-aipoch-skills     also clone AIPOCH medical-research-skills (550+, third-party, not gated)
+  --with-aipoch-skills     also clone AIPOCH medical-research-skills (460+, third-party, not gated)
   --copy-skills      copy skills instead of symlinking
   --reinstall        reinstall/upgrade the paper-search tool first
   --no-ncbi / --no-academic-search / --no-render / --no-r   skip a default step
@@ -270,6 +271,10 @@ if [ "$DO_SKILLS" = 1 ]; then
     run "mkdir -p '$sdir'"
     # link each research-stack skill
     for d in "$STORE"/skills/*/; do
+      # Guard against an unexpanded glob: with no skills present, bash leaves the
+      # pattern literal (".../skills/*/"), which is not a directory. Without this
+      # the loop would run once and create a symlink literally named "*".
+      [ -d "$d" ] || continue
       name="$(basename "$d")"
       if [ "$COPY_SKILLS" = 1 ]; then
         run "rm -rf '$sdir/$name' && cp -R '$d' '$sdir/$name'"
@@ -280,6 +285,9 @@ if [ "$DO_SKILLS" = 1 ]; then
     # link upstream skills too, when fetched
     if [ "$WITH_UPSTREAM" = 1 ] && [ -d "$HOME/.local/share/scientific-agent-skills/skills" ]; then
       for d in "$HOME/.local/share/scientific-agent-skills/skills"/*/; do
+        # Same unexpanded-glob guard as above: an empty upstream skills/ dir must
+        # be a no-op, not a symlink named "*".
+        [ -d "$d" ] || continue
         name="$(basename "$d")"
         [ -e "$sdir/$name" ] && continue
         run "ln -s '$d' '$sdir/$name'"

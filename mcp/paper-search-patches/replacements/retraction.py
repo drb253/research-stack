@@ -194,7 +194,12 @@ def check_retraction(doi: str, title: str = "", timeout: float = 25) -> Dict[str
                     "notice_doi": notice["notice_doi"],
                 })
     except Exception as exc:
-        logger.debug("Crossref retraction-notice search failed: %s", exc)
+        # The module docstring promises "every failed lookup is recorded in
+        # sources_unavailable". This one was logged at debug only, so a failed
+        # notice search still reported status "ok" -- exactly the silent-failure
+        # shape the retraction check exists to prevent.
+        logger.warning("Crossref retraction-notice search failed: %s", exc)
+        result["sources_unavailable"]["crossref-notice-search"] = {"detail": str(exc)[:200]}
 
     if result["sources_checked"] and not result["sources_unavailable"]:
         result["status"] = "ok"

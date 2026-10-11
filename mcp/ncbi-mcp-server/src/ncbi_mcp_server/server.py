@@ -379,9 +379,13 @@ class NCBIClient:
             pub_type_queries = [f"{pub_type}[pt]" for pub_type in publication_types]
             query_parts.append(f"({' OR '.join(pub_type_queries)})")
         
-        # Add date range
-        if date_from and date_to:
-            query_parts.append(f"({date_from}[pdat]:{date_to}[pdat])")
+        # Add date range. A one-sided range must be honoured, not dropped: the
+        # previous `if date_from and date_to` silently ignored date_from-only and
+        # date_to-only calls, returning unfiltered results with no warning.
+        if date_from or date_to:
+            start = date_from or "1800"
+            end = date_to or "3000"
+            query_parts.append(f"({start}[pdat]:{end}[pdat])")
         
         # Combine all parts
         final_query = " AND ".join(query_parts)

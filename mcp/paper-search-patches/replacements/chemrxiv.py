@@ -50,15 +50,9 @@ class ChemRxivSearcher(CrossRefSearcher):
         # NOTE: `prefix:` is a valid /works filter; `from-publisher:` is not.
         base_filter = f"type:posted-content,prefix:{CHEMRXIV_DOI_PREFIX}"
 
-        # Add subject filter for chemistry if not already specified
-        if 'subject' not in kwargs:
-            # Chemistry-related subjects
-            chemistry_subjects = [
-                'chemistry', 'chemical', 'biochemistry', 'organic chemistry',
-                'inorganic chemistry', 'physical chemistry', 'analytical chemistry'
-            ]
-            # But we'll let Crossref handle subject filtering
-            pass
+        # Subject filtering is left to Crossref: the /works filter set has no
+        # subject predicate for this prefix, so no local subject list is built.
+        base_filter = f"type:posted-content,prefix:{CHEMRXIV_DOI_PREFIX}"
 
         # Update kwargs with ChemRxiv-specific filter
         if 'filter' in kwargs:

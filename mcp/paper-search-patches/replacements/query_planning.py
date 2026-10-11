@@ -396,7 +396,12 @@ def relevance_score(
     meta_fraction = len(meta_hits) / len(term_list)
 
     phrase_text = _normalized(query.strip().strip('"'))
-    phrase_in_title = bool(phrase_text) and phrase_text in title
+    # Word-boundary match, consistent with _term_pattern(). A raw `in` test made
+    # the query "base" report an exact-phrase hit on "Database systems...",
+    # pushing an irrelevant paper into the high band.
+    phrase_in_title = bool(phrase_text) and re.search(
+        r"(?<!\w)" + re.escape(phrase_text) + r"(?!\w)", title, re.IGNORECASE
+    ) is not None
     all_in_title = len(title_hits) == len(term_list)
     all_somewhere = len(set(title_hits) | set(abstract_hits)) == len(term_list)
 

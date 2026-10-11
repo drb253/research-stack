@@ -6,10 +6,29 @@ distributions, mirroring the logic from literature_review_bulk.py.
 
 from __future__ import annotations
 
+import math
 from typing import Any
 
 import numpy as np
 import pandas as pd
+
+
+def _num(value: Any, ndigits: int = 3) -> Any:
+    """Round a statistic for JSON output.
+
+    ``pandas`` returns NaN for the sample standard deviation of a single
+    observation (ddof=1), and ``round(float('nan'), 3)`` is still NaN — which
+    makes ``json.dumps(..., allow_nan=False)`` raise "Out of range float values
+    are not JSON compliant". NaN/inf are reported as ``None`` (honestly
+    "undefined") so the payload always serialises as strict JSON.
+    """
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return None
+    if math.isnan(number) or math.isinf(number):
+        return None
+    return round(number, ndigits)
 
 
 def compute_stats(papers: list[dict[str, Any]]) -> dict[str, Any]:
@@ -63,12 +82,12 @@ def compute_stats(papers: list[dict[str, Any]]) -> dict[str, Any]:
                 "co_authors": int((ac > 1).sum()),
                 "min": int(ac.min()),
                 "max": int(ac.max()),
-                "mean": round(float(ac.mean()), 3),
-                "std": round(float(ac.std()), 3),
-                "median": round(float(ac.quantile(0.5)), 3),
+                "mean": _num(ac.mean()),
+                "std": _num(ac.std()),
+                "median": _num(ac.quantile(0.5)),
                 "iqr": [
-                    round(float(ac.quantile(0.25)), 3),
-                    round(float(ac.quantile(0.75)), 3),
+                    _num(ac.quantile(0.25)),
+                    _num(ac.quantile(0.75)),
                 ],
             }
 
@@ -85,12 +104,12 @@ def compute_stats(papers: list[dict[str, Any]]) -> dict[str, Any]:
                 },
                 "min": int(yr.min()),
                 "max": int(yr.max()),
-                "mean": round(float(yr.mean()), 3),
-                "std": round(float(yr.std()), 3),
-                "median": round(float(yr.quantile(0.5)), 3),
+                "mean": _num(yr.mean()),
+                "std": _num(yr.std()),
+                "median": _num(yr.quantile(0.5)),
                 "iqr": [
-                    round(float(yr.quantile(0.25)), 3),
-                    round(float(yr.quantile(0.75)), 3),
+                    _num(yr.quantile(0.25)),
+                    _num(yr.quantile(0.75)),
                 ],
             }
 

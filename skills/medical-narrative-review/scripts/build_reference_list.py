@@ -184,6 +184,10 @@ def format_reference(row: dict, style: str) -> tuple:
             reference += " https://doi.org/" + doi
         return reference.strip(), warnings
 
+    # Fail loudly on an unknown style. Previously this fell through and returned
+    # None, so the caller's `entry, entry_warnings = format_reference(...)` died
+    # with "cannot unpack non-sequence NoneType" instead of a usable message.
+    raise ValueError("unsupported citation style: %r" % (style,))
 
 
 def load_ledger(path: str) -> tuple:
@@ -281,8 +285,6 @@ def assign_numbers(cited_order: list, ledger: dict) -> tuple:
             continue
         numbering[source_id] = len(set(numbering.values())) + 1
     return numbering, issues
-
-    raise ValueError("unsupported citation style")
 
 
 
