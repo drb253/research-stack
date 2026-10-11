@@ -468,44 +468,121 @@ passes only when each one does.
 
 ### Measured results
 
-The check count says the gates *run*. These numbers say how well they *work*,
-measured against ground truth **independent of the tool** (NLM publication types for
-retraction; the US ORI guide's own verdicts for paraphrasing). Every figure comes from
-a script in `benchmarks/`; none is asserted without a run.
+Most tool READMEs tell you *which* checks exist. This section tells you *how well
+they work* — because "the gate ran" and "the gate was right" are two different
+claims, and only the second one matters when a citation is about to go into a
+manuscript.
 
-| Component | Measured | 95% CI |
-|---|---|---|
-| Retraction detection — 920 real citations, NLM-labelled | **100%** sensitivity, **100%** specificity | **[99.17%, 100%]** each |
-| Citation resolution | 916 / 920 = 99.6% resolved | [98.9%, 99.8%] |
-| Arithmetic gate — 17 labelled manuscripts | 100% sensitivity, 100% specificity | [67.6%, 100%] / [70.1%, 100%] |
-| Overlap detection — **real** preprint/published pairs | 100% (54/54), specificity 100% (61/61) | [93.4%, 100%] / [94.1%, 100%] |
-| Overlap detection — 186-case labelled stress set | 100%, specificity 100% | [96.9%, 100%] / [94.5%, 100%] |
-| Agreement with the **US ORI guide's** expert verdicts | **6 / 6** | [61%, 100%] |
+Every number below comes from running this code against **answers we already
+knew**, where those answers were taken from a source *other than the tool itself*.
+Nothing here is estimated, and nothing is taken on trust: each figure is produced
+by a script in [`benchmarks/`](benchmarks/) that you can run yourself, on your own
+machine, in a few minutes.
 
-**Unsafe accepts: 0 / 920.** In the whole benchmark the citation gate never passed a
-bad citation. The retraction claim is statistically earned: a zero-failure result needs
-n ≥ 381 for a 99% Wilson lower bound, and this set has 459 positives and 457 negatives.
+#### First, the two words that matter
 
-**External validation.** `benchmarks/bench_ori_guide.py` tests the overlap detector
-against the Office of Research Integrity guide's own paraphrasing exercise, which
-publishes six rewrites of one paragraph together with the ORI's verdicts — four it calls
-plagiarism, two it calls correct. The detector agrees on all six.
+Almost everything below is summarised by two numbers:
 
-**Known limitation — state this when reporting.** A paraphrase that changes every content
-word but keeps the source's *sentence structure* (ORI Guideline 4) is **not** caught. Two
-stdlib-only frame measures were implemented and measured; neither separates frame-copying
-from unrelated text (unrelated reached 0.857 against frame-copies from 0.533), so the frame
-number is reported but drives no verdict. **A clean report does not cover frame-copying.**
+- **Sensitivity — "did we catch the bad ones?"** Out of every genuinely retracted
+  paper we tested, how many did the gate flag? **Missing one is the dangerous
+  error**: it means a retracted paper could be cited as though it were sound.
+- **Specificity — "did we leave the good ones alone?"** Out of every sound paper
+  we tested, how many did the gate correctly *not* flag? **Getting this wrong is
+  the annoying error**: legitimate work gets blocked, and you waste an afternoon
+  chasing a false alarm.
+
+A tool that flags everything scores 100% sensitivity and is worthless — so the two
+numbers are only meaningful together. Both are reported for every component.
+
+#### The results
+
+| What was measured | Cases | Caught the bad (sensitivity) | Left the good alone (specificity) |
+|---|:--:|---|---|
+| **Retraction detection** — real citations, labels from the US National Library of Medicine | 920 | **100%** — 459 of 459<br><sub>95% CI [99.17%, 100%]</sub> | **100%** — 457 of 457<br><sub>95% CI [99.17%, 100%]</sub> |
+| **Citation resolution** — did the DOI actually resolve to a real paper? | 920 | 99.6% — 916 of 920 resolved<br><sub>95% CI [98.9%, 99.8%]</sub> | — |
+| **Arithmetic gate** — manuscripts with deliberate number errors | 17 | **100%** — 8 of 8 errors found<br><sub>95% CI [67.6%, 100%]</sub> | **100%** — 9 of 9 clean texts passed<br><sub>95% CI [70.1%, 100%]</sub> |
+| **Overlap detection** — real preprint → published pairs | 61 pairs<br><sub>54 audited positives</sub> | **100%** — 54 of 54<br><sub>95% CI [93.4%, 100%]</sub> | **100%** — 61 of 61<br><sub>95% CI [94.1%, 100%]</sub> |
+| **Overlap detection** — labelled stress set (verbatim, light edits, rewrites) | 186 | **100%** — 120 of 120<br><sub>95% CI [96.9%, 100%]</sub> | **100%** — 66 of 66<br><sub>95% CI [94.5%, 100%]</sub> |
+| **Agreement with the US ORI guide's** own expert verdicts | 6 | **6 of 6**<br><sub>95% CI [61%, 100%]</sub> | — |
+
+**In plain terms:** across 920 real citations, the gate **never once let a bad
+citation through** — zero missed retractions, zero false alarms, and zero cases
+where a DOI resolved to the wrong paper without being flagged. That figure is
+**0 unsafe accepts out of 920**.
+
+#### Why you can trust the labels
+
+The hard part of any accuracy claim is the answer key. If the tool grades its own
+homework, the number is meaningless. So the answers came from elsewhere:
+
+- **Retraction** was judged against the **US National Library of Medicine's** own
+  curated publication types (`Retracted Publication`), assigned by NLM librarians —
+  *not* from OpenAlex or Crossref, which is what the gate itself reads.
+- **Paraphrasing** was judged against the **US Office of Research Integrity's**
+  published guide, which sets out six rewrites of one paragraph with the ORI's own
+  verdicts (four it calls plagiarism, two it calls correct).
+- **Overlap on real text** uses **61 genuine bioRxiv/medRxiv preprint → published
+  journal pairs** — real authors revising real manuscripts, not transformations
+  written by me. That benchmark also audits its own labels: it measures the actual
+  text overlap independently, because "preprint vs published" turned out **not** to
+  guarantee shared wording (7 of 61 published abstracts were heavily rewritten).
+
+#### What the confidence intervals mean
+
+You will notice the measurements say 100% while the intervals start lower, at
+99.17%. That is not hedging — it is arithmetic, and it is the honest way to report
+a sample.
+
+A **95% confidence interval** answers: *"if this experiment were repeated many
+times, where would the true value fall?"* We tested 920 papers. We got everything
+right. But 920 papers is a sample, not the entire literature, so the statistics can
+only promise that the real-world rate is **at least 99.17%** — not that it is
+exactly 100%. Hence the claim is *"99%+"*, never *"perfect"*.
+
+The sample size was chosen deliberately for that. To claim "at least 99%" with 95%
+confidence after a flawless run, you need **at least 381 cases**. This benchmark
+used 459 retracted and 457 sound papers — comfortably past the bar. A study of only
+50 papers could also show 100% and would justify a claim of just ~94%. That is why
+the count is stated next to every number.
+
+#### External validation
+
+`benchmarks/bench_ori_guide.py` checks the overlap detector against the ORI guide's
+own paraphrasing exercise. All six of the ORI's verdicts are reproduced — the four
+it calls plagiarism are flagged, the two it calls correct are left clean. That is a
+rare thing to be able to say: the tool agrees with an external authority's
+hand-labelled judgement, not just with our own expectations.
+
+#### Known limitation — please repeat this when reporting results
+
+One class of plagiarism is **not** caught: a paraphrase that changes every word but
+keeps the source's **sentence structure**. The ORI guide calls this plagiarism
+(Guideline 4), and it is invisible to word-overlap checks by construction — the
+words are all different.
+
+Two different structural measures were implemented and measured, and neither could
+tell frame-copying apart from unrelated text: unrelated sentences scored up to
+0.857 while genuine frame-copies started at 0.533. Since a threshold in that range
+would flag legitimate writing, the structural score is **reported for a human to
+weigh but drives no verdict**.
+
+**A clean report does not cover frame-copying.** Say so when you pass results on.
+
+#### Reproduce any of it
 
 ```bash
 cd benchmarks
-python3 bench_numeric.py        # offline, instant — arithmetic gate
-python3 bench_ori_guide.py      # offline, instant — ORI expert labels
+python3 bench_numeric.py        # offline, instant  — arithmetic gate
+python3 bench_ori_guide.py      # offline, instant  — ORI expert labels
+python3 bench_originality_scaled.py   # offline after a one-time fetch
 python3 bench_accuracy.py fetch && SHARDS=6 python3 bench_accuracy.py score   # 920 citations
 ```
 
-Method, caveats and the full per-record output: [`docs/BENCHMARK-RESULTS.md`](docs/BENCHMARK-RESULTS.md).
-A separate code/docs audit with every defect found and fixed is in
+Each script prints the full confusion matrix, sensitivity, specificity and the
+Wilson confidence intervals, so you can check the arithmetic rather than trust it.
+
+Method, caveats and per-record output: [`docs/BENCHMARK-RESULTS.md`](docs/BENCHMARK-RESULTS.md).
+The code and documentation audit — every defect found, fixed and re-verified — is in
 [`docs/AUDIT-FINDINGS.md`](docs/AUDIT-FINDINGS.md).
 
 ### What the overlap and citation checks now cover
