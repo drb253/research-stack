@@ -244,6 +244,7 @@ def main():
         print(f"\n  RECOMMENDED OPERATING POINT: threshold={thr} "
               f"-> sensitivity {s2:.1%} (95% CI [{lo:.1%}, {hi:.1%}]), specificity {sp2:.1%}")
 
+    Path("/tmp/bench/orig_scaled.json").parent.mkdir(parents=True, exist_ok=True)
     Path("/tmp/bench/orig_scaled.json").write_text(
         json.dumps(rows, indent=1), encoding="utf-8")
     print("\n  detail -> /tmp/bench/orig_scaled.json")

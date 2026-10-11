@@ -219,6 +219,7 @@ def main():
         ok = sum(1 for r in sub if r["correct"])
         print(f"    {v:14s} {ok}/{len(sub)}")
 
+    Path("/tmp/bench/orig_scored.json").parent.mkdir(parents=True, exist_ok=True)
     Path("/tmp/bench/orig_scored.json").write_text(json.dumps(rows, indent=1), encoding="utf-8")
     print("\n  detail -> /tmp/bench/orig_scored.json")
 

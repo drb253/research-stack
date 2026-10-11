@@ -121,6 +121,7 @@ def main():
     for c, (n, ok) in sorted(cats.items()):
         print(f"    {c:24s} {ok}/{n}")
 
+    Path("/tmp/bench/numeric_scored.json").parent.mkdir(parents=True, exist_ok=True)
     Path("/tmp/bench/numeric_scored.json").write_text(json.dumps(rows, indent=1), encoding="utf-8")
     print("\n  detail -> /tmp/bench/numeric_scored.json")
 
