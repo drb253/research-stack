@@ -49,6 +49,53 @@ def _search_sources(root):
                    if (r.get("source") or "").strip()})
 
 
+#: Column names a search log may use for the per-source status.
+_STATUS_COLUMNS = ("source_status", "availability", "status", "source_availability")
+#: A status meaning the source was never queried. Its record count is unknown, not zero, so
+#: it must not enter the identified total as a searched source that found nothing.
+_UNREACHED = {"unavailable", "error", "failed", "timeout", "not_available", "down",
+              "not_searched", "no_access"}
+_REACHED = {"", "available", "ok", "searched", "returned", "success", "complete"}
+SINGLE_SOURCE_UNREACHED = "_unreached_source"
+
+
+def unreached_sources(root):
+    """Logged sources that were never reached, from search_log.csv.
+
+    A review's PRISMA flow counts what the databases returned. A database that was down
+    returned nothing *because it was never asked*, so its records are unknown rather than
+    zero, and the flow's identified total is a floor rather than a total. This is an input
+    condition -- reported, never folded into the count.
+    """
+    path = os.path.join(root, "search_log.csv")
+    if not os.path.exists(path):
+        return []
+    with open(path, encoding="utf-8-sig") as fh:
+        reader = csv.DictReader(fh)
+        cols = {(c or "").strip().lower(): c for c in (reader.fieldnames or [])}
+        status_col = next((cols[c] for c in _STATUS_COLUMNS if c in cols), None)
+        if status_col is None:
+            return []
+        out = []
+        for i, row in enumerate(reader, start=2):
+            status = (row.get(status_col) or "").strip().lower()
+            if status in _REACHED:
+                continue
+            if status in _UNREACHED or status:
+                out.append({
+                    "row": i,
+                    "source": (row.get("source") or row.get("database") or "?").strip(),
+                    "status": status or "blank",
+                    "reason": (
+                        "logged as '%s': this source was not searched, so the records it "
+                        "would have contributed are unknown. It must not be counted as a "
+                        "source that returned nothing." % (status or "blank")),
+                    "action": ("re-run the search for this source, or report it as a "
+                               "limitation and state which database was unavailable"),
+                })
+        return out
+
+
 def _nested(pc):
     """Return the nested PRISMA sections, accepting the flat prisma_flow shape."""
     if isinstance(pc.get("screening"), dict):
@@ -177,17 +224,37 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description="Fail an incomplete review.")
     ap.add_argument("--root", default=".")
     ap.add_argument("--waivers", default=None, help="path to the waiver JSON")
+    ap.add_argument("--allow-insufficient", action="store_true",
+                    help="exit 0 although a logged source was never reached. The gap is still "
+                         "reported, so the override is logged rather than silent.")
     args = ap.parse_args(argv)
 
     if not os.path.exists(os.path.join(args.root, "prisma_counts.json")):
         print("ERROR: prisma_counts.json not found under %s" % args.root, file=sys.stderr)
         return 1
     probs, gaps = check(args.root, args.waivers)
+    unreached = unreached_sources(args.root)
+    if unreached:
+        print("SOURCES NOT REACHED (%d) - an input gap, not a finding about the review:"
+              % len(unreached))
+        for row in unreached:
+            print("  - %s (row %d): %s" % (row["source"], row["row"], row["reason"]))
+        print("  The identified total is a floor, not a total: these sources contributed "
+              "nothing because they were never asked.")
+        print("  status: insufficient_evidence")
     if probs:
         print("FAIL - review is not complete (%d problem(s)):" % len(probs))
         for p in probs:
             print("  - %s" % p)
+    if unreached and not args.allow_insufficient:
+        # An input gap outranks a finding: the review's completeness cannot be judged while a
+        # logged source was never searched.
+        return 3
+    if probs:
         return 2
+    if unreached:
+        print("     --allow-insufficient given: the gaps above are recorded, not waived.")
+        return 0
     waived = {k: v for k, v in gaps.items() if v}
     if waived:
         print("OK - every completeness gap is covered by an explicit waiver: %s"

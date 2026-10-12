@@ -78,7 +78,12 @@ knowledge.** If it can be checked against a live authoritative source, check it 
 4. `verification_status=verified` requires a `verifier` (a human id, **or** the agent id +
    model version in autonomous mode), a `verified_date`, and a `locator`.
 5. A source that is **down must never look like a source that found nothing** — record
-   `unavailable`, never `0 results`.
+   `unavailable`, never `0 results`. This is enforced, not just asked for: when any logged source's
+   status says it was not reached (`unavailable`, `error`, `failed`, `timeout`, or an unrecognised
+   value), `prisma_s_appendix.py` renders `unavailable (not reached)` in the Records column instead
+   of a count, and both it and `check_completeness.py` exit **3** with the sources named. The
+   identified total is then a floor, not a total, and the gate says so. `--allow-insufficient`
+   exits 0 while still recording the condition.
 6. Distinguish PRISMA (a *reporting* guideline) from how the review is *conducted*.
 7. No claim enters the manuscript without a resolvable, non-retracted source (see Gate D).
  8. Cross-artifact integrity is enforced by `../evidence-synthesis-forge/scripts/check_review_integrity.py`

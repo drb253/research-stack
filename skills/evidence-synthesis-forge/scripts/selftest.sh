@@ -106,6 +106,38 @@ printf 'source,platform,query,date_run,hits,limits\npubmed,NCBI,x,2026-09-20,412
 expect_exit 0 "complete search log passes" python3 "$ESF/prisma_s_appendix.py" --search-log "$TMP/sl_ok.csv" --outdir "$TMP/ps1"
 printf 'source,query,date_run,hits\nscopus,x,,\n' > "$TMP/sl_bad.csv"
 expect_exit 2 "search missing date/hits FAILS" python3 "$ESF/prisma_s_appendix.py" --search-log "$TMP/sl_bad.csv" --outdir "$TMP/ps2"
+# A source that was never reached has NO hit count because nobody asked it. That is an input
+# gap, not a reproducibility failure, and it must never render as 0 records -- sysreview's own
+# rule: "a source that is down must never look like a source that found nothing."
+printf 'source,platform,query,date_run,hits,limits,source_status\npubmed,NCBI,x,2026-09-20,412,en,\nembase,Elsevier,x,2026-09-20,0,none,unavailable\n' > "$TMP/sl_unreached.csv"
+printf 'source,platform,query,date_run,hits,limits,source_status\npubmed,NCBI,x,2026-09-20,412,en,available\nembase,Elsevier,x,2026-09-20,0,none,available\n' > "$TMP/sl_empty_ok.csv"
+expect_exit 3 "an unreached source is an INPUT GAP (exit 3)" \
+  python3 "$ESF/prisma_s_appendix.py" --search-log "$TMP/sl_unreached.csv" --outdir "$TMP/ps3"
+expect_exit 0 "--allow-insufficient is the logged opt-out" \
+  python3 "$ESF/prisma_s_appendix.py" --search-log "$TMP/sl_unreached.csv" --outdir "$TMP/ps4" \
+  --allow-insufficient
+expect_exit 0 "a searched-and-empty source is a finding, not a gap: 0 still passes" \
+  python3 "$ESF/prisma_s_appendix.py" --search-log "$TMP/sl_empty_ok.csv" --outdir "$TMP/ps5"
+if grep -q "unavailable (not reached)" "$TMP/ps4/prisma_s_appendix.md" \
+   && ! grep -qE "^\| 2 \| embase .* \| 0 \|" "$TMP/ps4/prisma_s_appendix.md"; then
+  ok "the appendix renders 'unavailable', never a record count of 0"
+else
+  no "the appendix rendered an unreached source as 0 records"
+fi
+# The same condition, one level up: the completeness gate must not report OK over a source
+# that was never searched, because the flow's identified total is then a floor, not a total.
+mkdir -p "$TMP/comp_unreached"
+printf '{"identified_databases":100,"duplicates_removed":0,"screened":100,"excluded_ta":98,"sought":2,"not_retrieved":0,"assessed":2,"included_studies":2}\n' > "$TMP/comp_unreached/prisma_counts.json"
+cp "$TMP/sl_unreached.csv" "$TMP/comp_unreached/search_log.csv"
+expect_exit 3 "completeness gate: unreached source is an INPUT GAP (exit 3)" \
+  python3 "$ESF/check_completeness.py" --root "$TMP/comp_unreached"
+expect_exit 0 "completeness gate --allow-insufficient opt-out" \
+  python3 "$ESF/check_completeness.py" --root "$TMP/comp_unreached" --allow-insufficient
+mkdir -p "$TMP/comp_reached"
+cp "$TMP/comp_unreached/prisma_counts.json" "$TMP/comp_reached/prisma_counts.json"
+printf 'source,platform,query,date_run,hits,limits,source_status\npubmed,NCBI,x,2026-09-20,412,en,\nembase,Elsevier,x,2026-09-20,0,none,available\n' > "$TMP/comp_reached/search_log.csv"
+expect_exit 0 "completeness gate unchanged when every source was reached" \
+  python3 "$ESF/check_completeness.py" --root "$TMP/comp_reached"
 
 echo "== 6. Numeric provenance =="
 Rscript "$MAF/cochrane_meta.R" --input "$TMP/none.csv" --outdir "$TMP/o" >/dev/null 2>&1 || true
