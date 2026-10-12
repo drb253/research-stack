@@ -1,0 +1,23 @@
+{
+  "_comment": "Example advisory file for scripts/report.py --advisory. Every grade here is advisory only: it is stored beside the deterministic verdict, is labelled 'advisory, model-generated, not a gate input' in every format, and can never set, change or veto a state, a severity or the gate exit code. See references/verdict-rules.md.",
+  "grades": {
+    "N0002": {
+      "grade": "direct_support",
+      "quote": "Statin therapy reduced major adverse cardiovascular events compared with placebo",
+      "source_id": "S001",
+      "model": "example-not-a-real-classifier"
+    },
+    "N0003": {
+      "grade": "synthesis",
+      "quote": "randomised controlled trial adults with hyperlipidaemia 1000",
+      "source_id": "S001",
+      "model": "example-not-a-real-classifier"
+    },
+    "N0004": {
+      "grade": "contradictory",
+      "quote": "RR 0.70 (95% CI 0.55-0.89)",
+      "source_id": "S002",
+      "model": "example-not-a-real-classifier"
+    }
+  }
+}

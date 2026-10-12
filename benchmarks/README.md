@@ -14,6 +14,7 @@ intervals**, so the honest range is visible rather than a bare point estimate.
 | `bench_originality_scaled.py` | Overlap detector on 186 labelled cases (verbatim, light edit, rewrite, unrelated) | no |
 | `bench_originality_real.py` | Overlap detector on **real** bioRxiv/medRxiv preprint → published pairs | yes |
 | `bench_originality.py` | The original 24-case hand-built overlap set (kept for continuity) | no |
+| `bench_verdicts.py` | `citation-report` deterministic channel vs 23 hand-labelled sentences; asserts **conflict precision = 1.000** | no |
 
 ## Running
 
@@ -21,6 +22,7 @@ intervals**, so the honest range is visible rather than a bare point estimate.
 cd benchmarks
 python3 bench_numeric.py            # instant, offline
 python3 bench_ori_guide.py          # instant, offline
+python3 bench_verdicts.py           # instant, offline
 python3 bench_originality_scaled.py # instant, offline (uses cached abstracts)
 python3 bench_originality_real.py   # fetches once, then cached
 python3 bench_accuracy.py fetch     # builds the labelled citation set from PubMed

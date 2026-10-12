@@ -11,14 +11,14 @@ Built for one promise: **no false citations, no hallucinated numbers, no silent 
 [![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-lightgrey.svg)](#requirements)
 [![MCP servers](https://img.shields.io/badge/MCP%20servers-5-2f6feb.svg)](#the-mcp-layer)
-[![skills](https://img.shields.io/badge/skills-12-8957e5.svg)](#the-skills-layer)
-[![tests](https://img.shields.io/badge/checks-103%20passing-2ea043.svg)](#verification--testing)
+[![skills](https://img.shields.io/badge/skills-13-8957e5.svg)](#the-skills-layer)
+[![tests](https://img.shields.io/badge/checks-198%20passing-2ea043.svg)](#verification--testing)
 [![ci](https://github.com/drb253/research-stack/actions/workflows/ci.yml/badge.svg)](https://github.com/drb253/research-stack/actions/workflows/ci.yml)
 [![install](https://img.shields.io/badge/install-one--command-brightgreen.svg)](#install)
 
 </div>
 
-> **TL;DR** — one command installs **5 MCP servers + 12 gated review skills** for
+> **TL;DR** — one command installs **5 MCP servers + 13 gated review skills** for
 > Cline, Claude, OpenCode and more, so an agent can run a systematic / scoping /
 > narrative review or a meta-analysis that **cannot cite a paper that does not
 > exist, quote a number nobody computed, or report screening it never performed.**
@@ -145,7 +145,7 @@ flowchart TB
         GS["google-scholar"]
     end
 
-    subgraph SK["Skills layer — 12 skills"]
+    subgraph SK["Skills layer — 13 skills"]
         SR["sysreview / meta-analysis (orchestrators)"]
         EV["evidence-synthesis-forge · meta-analysis-forge"]
         NR["medical-narrative-review"]
@@ -198,7 +198,7 @@ flowchart LR
     B --> C["install.sh"]
     C --> D["1 · paper-search + 43 patches"]
     C --> E["1b · ncbi + academic-search forks"]
-    C --> F["2 · 12 skills (+ toolkit, + upstream)"]
+    C --> F["2 · 13 skills (+ toolkit, + upstream)"]
     C --> G["2b · render/PDF toolchain"]
     C --> H["3 · write client MCP configs"]
     C --> I["4 · API keys  ·  5 · R packages"]
@@ -207,7 +207,7 @@ flowchart LR
 
 ### Optional third-party skill packs
 
-Beyond the 12 gated skills, two MIT-licensed packs can be added — they are
+Beyond the 13 gated skills, two MIT-licensed packs can be added — they are
 **cloned, not gated by research-stack**:
 
 - **K-Dense scientific skills** — `--with-upstream-skills` (on by default), 160+ skills.
@@ -218,7 +218,7 @@ Beyond the 12 gated skills, two MIT-licensed packs can be added — they are
 
 AIPOCH closes the biggest capability gap — **primary omics / bioinformatics data
 analysis** — which the gated core does not cover. Install is a **sparse, blobless
-checkout of `scientific-skills/` (~120 MB)**. Unlike our 12 skills, AIPOCH's
+checkout of `scientific-skills/` (~120 MB)**. Unlike our 13 skills, AIPOCH's
 skills *generate code and advice* and carry **no verification gates**: treat their
 output as a first draft to check, not a verified result.
 
@@ -235,7 +235,7 @@ output as a first draft to check, not a verified result.
 |---|---|
 | **MCP servers** | `paper-search`, `ncbi`, `academic-search` (**all three vendored, pre-patched**) + `consensus` / `google-scholar` (remote) |
 | **Review skills** | `sysreview`, `meta-analysis`, `evidence-synthesis-forge`, `meta-analysis-forge`, `medical-narrative-review`, `umbrella-review-skeptic`, `meta-ml-screener`, `environment-life-review-forge` |
-| **Guard skills** | `paper-search`, `citecheck`, `humanizerdrb`, `originality-check` |
+| **Guard skills** | `paper-search`, `citecheck`, `humanizerdrb`, `originality-check`, `citation-report` |
 | **vendored MCP source** | `mcp/paper-search-mcp/` (upstream `v0.1.4` + 43 patched modules), `mcp/ncbi-mcp-server/`, `mcp/academic-search-mcp/` — installed with **no network** |
 | **Toolbox & tools** | `originality-toolkit` (23 files), `verification_report.py` |
 | **Render/PDF** | `browser-probe` venv — playwright + chromium, pypdf, pypdfium2, reportlab, pillow |
@@ -310,6 +310,24 @@ others; each stage is gated and ledgered, and no stage is skipped.
 | **citecheck** | audit & build citations; flag retractions | reference list in 7 styles; A1–A10 audit |
 | **humanizerdrb** | de-slop prose without changing meaning | "What changed" list; refuses detector evasion |
 | **originality-check** | attribution check for your own drafts | verified BibTeX + paraphrase worksheet; overlap against 5 open APIs **plus any local corpus** (`--corpus` covers paywalled PDFs, theses, books, unpublished manuscripts, saved web pages) |
+| **citation-report** | sentence-by-sentence citation support report — *is the citation support actually there?* | colour-coded PDF / DOCX / HTML with printed margin notes, real Word comments, coverage `n/N`, and a gate that re-opens every artifact |
+
+### What is the difference between `citecheck`, `originality-check` and `citation-report`?
+
+Three different questions, three different tools, and mixing them up is how a "plagiarism-free"
+claim quietly becomes meaningless:
+
+| Question | Tool |
+|---|---|
+| Does this citation exist, is it retracted, and is the reference list correct? | `citecheck` |
+| Does this passage closely track some published text, whatever it cites? | `originality-check` |
+| Is the support this sentence claims from *these* sources actually there? | `citation-report` |
+
+A sentence can be heavily paraphrased from an uncited source (invisible to `citation-report`), and a
+verbatim quotation with a correct citation is properly attributed (invisible to `originality-check`).
+`citation-report` answers neither of those: it checks the join between a sentence and the sources the
+sentence cites, and it never certifies a document as citation-clean — it reports which sentences it
+could check and which it could not.
 
 ### Choosing a review type
 
@@ -379,6 +397,48 @@ You:  /sysreview Do SGLT2 inhibitors reduce heart-failure hospitalisation?
   GATE  FAIL   → BLOCKED                 (fix the ledger — never waive silently)
 ```
 
+### The citation report, in one screen
+
+`citation-report` answers a different question from the gate above — not "does this DOI resolve?"
+but "is the support this sentence claims actually there?" — and shows the answer **next to the
+sentence**:
+
+```bash
+python3 skills/citation-report/scripts/report.py report \
+    --document draft.docx --bib refs.bib --pdf-dir sources/ \
+    --format pdf,docx,html --out-dir citation-report/
+python3 skills/citation-report/scripts/report_gate.py \
+    --dir citation-report/ --document draft.docx
+```
+
+```
+Citation coverage: 6/8 = 75.0%   ((attributed + synthesis) / all sentences carrying a claim)
+
+STATE                 COUNT  SHARE
+attributed                3   37.5%   every value is present in a cited source's evidence
+synthesis                 3   37.5%   cited and resolvable; no independently checkable value
+unverifiable              1   12.5%   cited and identified, but no evidence was held
+unattributed              0    0.0%   a checkable claim with no resolvable citation
+conflict                  1   12.5%   a citation that resolves to nothing, a retracted
+                                      source, or a value that contradicts the source
+no_citation_needed        0    0.0%   nothing to attribute; excluded from the denominator
+```
+
+Every sentence in the PDF carries its colour as a **painted background** and its finding as a
+**printed margin note** naming the source, the page (`p.13`) and the quoted evidence — not an
+annotation, so it survives printing and every viewer. The DOCX carries the same colour as exact
+run shading plus a **real Word comment**. The gate then re-opens all three artifacts and counts what
+is actually in them, including requiring the PDF's notes to be findable in its text layer.
+
+It never paints green without evidence, never paints red without a quote, and never certifies a
+document as clean: it reports which sentences it could check and which it could not.
+
+**And it will not dress an input gap up as a result.** If the sources it needs are not readable, the run
+is `insufficient_evidence` (**exit 3**) — not `0%` coverage in the shape of a verdict — and it writes a
+worklist naming exactly which files to supply. A document it could not parse is `insufficient_input`
+(exit 4). Both block by default. The rule, and why it exists, is
+[`docs/EVIDENCE-INVARIANT.md`](docs/EVIDENCE-INVARIANT.md); it applies to every gate in this repo.
+
 The point is the last two lines: a review is finished **only** when the gate
 passes, and the gate is a set of scripts that can each fail.
 
@@ -442,7 +502,7 @@ flowchart LR
 
 <div align="center"><img src="assets/coverage.svg" width="620" alt="automated checks by suite"></div>
 
-**103 automated checks, all passing.** Run them after any change:
+**198 automated checks, all passing.** Run them after any change:
 
 ```bash
 S=~/.research-stack/skills
@@ -450,11 +510,12 @@ bash  $S/evidence-synthesis-forge/scripts/doctor.sh              # toolchain rep
 bash  $S/evidence-synthesis-forge/scripts/selftest.sh            # 50 — every gate, pass+fail
 Rscript $S/meta-analysis-forge/scripts/golden_tests.R           # 17 — engine vs metafor
 bash  $S/medical-narrative-review/scripts/selftest.sh           # 19 — narrative-review chain
+bash  $S/citation-report/scripts/selftest.sh                    # 95 — citation report, pass+fail
 python3 $S/evidence-synthesis-forge/scripts/acceptance_test.py  # 17 — live adversarial
 ./verify.sh --targets cline,claude,opencode                      # install acceptance
 ```
 
-`verify.sh` reports the **gated core strictly** (pass/fail on the 12 skills) and
+`verify.sh` reports the **gated core strictly** (pass/fail on the 13 skills) and
 lists any installed **third-party packs** (K-Dense / AIPOCH, with AIPOCH broken
 down by category) as *informational* — they never change the verdict.
 
@@ -661,7 +722,7 @@ All paper-search settings live in one auto-loaded file:
 ### Tier 0 — no keys (works out of the box)
 
 Free sources, Crossref / OpenAlex / DataCite resolution, retraction checks, the
-12 skills and all gates. **≈90% of output.**
+13 skills and all gates. **≈90% of output.**
 
 ### Tier 1 — recommended, free (~2 minutes) → unlocks the rest of the free tier
 
@@ -750,10 +811,10 @@ research-stack/
 ├── bin/mcp_config.py               # per-client MCP config writer (8 schemas)
 ├── scripts/make_readme_charts.py   # regenerates assets/*.svg
 ├── assets/                         # coverage · composition · skills (SVG)
-├── benchmarks/                     # measured results: 6 harnesses + README (see below)
+├── benchmarks/                     # measured results: 7 harnesses + README (see below)
 ├── config/paper-search.env.template
-├── docs/  PLATFORMS.md · BENCHMARK-RESULTS.md · AUDIT-FINDINGS.md · original/ (SETUP.md · AGENT_PROMPT.md · VERIFY.md)
-├── skills/                         # 12 review/guard skills  (198 files)
+├── docs/  PLATFORMS.md · EVIDENCE-INVARIANT.md · BENCHMARK-RESULTS.md · AUDIT-FINDINGS.md · original/ (SETUP.md · AGENT_PROMPT.md · VERIFY.md)
+├── skills/                         # 13 review/guard skills  (incl. citation-report)
 ├── tools/  originality-toolkit/ (23 files) · verification_report.py
 └── mcp/
     ├── paper-search-mcp/            # vendored, pre-patched (upstream v0.1.4 + 43 patches)
@@ -832,7 +893,7 @@ PRs are welcome. Ground rules:
 
 ## Roadmap
 
-- [ ] GitHub Actions CI running the 103 checks on every push
+- [x] GitHub Actions CI running the 198 checks on every push
 - [ ] Codex (TOML) MCP config support
 - [ ] A terminal demo / screen recording in the README
 - [ ] Auto re-vendor script (fetch a new upstream tag, re-apply patches)

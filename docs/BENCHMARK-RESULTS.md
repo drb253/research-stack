@@ -200,7 +200,224 @@ code path *no* benchmark had exercised — which is the honest argument against 
 
 ---
 
-## 5. Caveats
+## 5. citation-report deterministic channel — 100% on a hand-labelled set, and what that is worth
+
+`benchmarks/bench_verdicts.py` runs the real CLI against 23 hand-labelled sentences covering every
+rule in `skills/citation-report/references/verdict-rules.md`, plus six adversarial cases that must
+**not** be flagged. Ground truth is the rule id each sentence is supposed to earn.
+
+Every rate below is a confusion matrix with a Wilson 95% interval, because accuracy alone hides the
+asymmetry that matters: for an accusation, a false positive accuses someone, while a false negative
+merely leaves a sentence ungraded. Sensitivity and specificity are therefore always reported together,
+and never collapsed into one number.
+
+**A. On the 26 constructed cases** (written to exercise every rule)
+
+| Decision | Accuracy | Sensitivity | Specificity | Precision | F1 |
+|---|---|---|---|---|---|
+| Any state, one against the rest | 1.000 [0.871, 1.000] | 1.000 per class (see below) | 1.000 per class | 1.000 | 1.000 |
+| **The accusation decision** (conflict vs not) | **1.000** [0.871, 1.000] | **1.000** [0.510, 1.000] | **1.000** [0.851, 1.000] | 1.000 [0.510, 1.000] | 1.000 |
+| The trigger decision (needs attribution?) | 1.000 [0.871, 1.000] | 1.000 [0.839, 1.000] | 1.000 [0.610, 1.000] | 1.000 [0.839, 1.000] | 1.000 |
+
+Per-state one-vs-rest, all at sensitivity 1.000 and specificity 1.000: `attributed` (3 positives of 26),
+`synthesis` (3), `unverifiable` (5), `unattributed` (5), `conflict` (4), `no_citation_needed` (6).
+The interval on each is wide — sensitivity 3/3 gives a lower bound of 0.438 — which is the honest
+reading of a 26-case set.
+
+**B. On 40 unseen real sentences** (drawn at a fixed interval from a real 34-page PTSD review, so it is
+not a set written to fit the rules; hand-labelled by reading each sentence)
+
+| Decision | Accuracy | Sensitivity | Specificity | Precision | F1 |
+|---|---|---|---|---|---|
+| Trigger: does the sentence need attribution? | **0.900** [0.769, 0.960] | **0.867** [0.703, 0.947] | **1.000** [0.722, 1.000] | 1.000 [0.871, 1.000] | 0.929 |
+| The accusation path (every sentence is a true negative) | 1.000 [0.912, 1.000] | n/a — no contradiction occurs | **1.000** [0.912, 1.000] | n/a | n/a |
+
+The real sample cannot measure conflict *sensitivity*: the document contains no contradiction, so there
+is no positive to find. It measures the specificity of the accusation path on prose the rules were not
+written against, and that is 40/40.
+
+### The metrics found a real defect, and the fix is measured
+
+The first run of these metrics scored the trigger at **accuracy 0.475, sensitivity 0.300, specificity
+1.000** on the real sample: the rules never accused wrongly, but they missed 70% of the sentences that
+did need attribution. Reading the 21 misses showed why — the signal list required exact phrases
+("studies show"), so "research has documented", "investigations describe", "observations indicate",
+"models ... show" and "instruments ... operationalise" were all invisible, as were associational claims
+("is associated with", "correlate with", "prevent") and statistical nouns whose digits had not survived
+extraction ("prevalence of", "scores were higher").
+
+Three measured defects were fixed:
+
+1. **Exact-phrase attribution.** A named body of evidence plus a reporting verb is now recognised, with
+   up to four intervening words and an optional auxiliary or adverb, so a qualifying phrase cannot hide
+   the claim. Capped at four, so the subject cannot drift into another clause.
+2. **No association signal.** A claim that X is associated with, predicts, prevents, reduces or requires
+   Y is now a trigger. `produce`/`produced` is deliberately excluded: "might have produced" is the
+   author's own hedged inference, and including it was measured to cost a true negative.
+3. **Two false triggers.** `ICD-11`, `DSM-5` and `PCL-5` digits were being read as statistics (a
+   numbered label is a name, not a figure), and the hedge list contained the bare word `about`, which
+   matched the *preposition* in "thinking about how chronic violence ... might have produced".
+
+| Trigger on 40 unseen real sentences | Accuracy | Sensitivity | Specificity |
+|---|---|---|---|
+| before | 0.475 | 0.300 | 1.000 |
+| **after** | **0.900** | **0.867** | **1.000** |
+
+Sensitivity nearly tripled with no loss of specificity, and the constructed set stayed at 1.000. On the
+real 1,027-sentence document the same change moved `unattributed` from **174 to 311** sentences — the
+old rules had been silently ignoring 137 attribution-requiring sentences, which is exactly the kind of
+under-reporting the metrics exist to expose.
+
+### The metrics also found false *greens* — 12 of them
+
+Chasing the trigger exposed the opposite error, which matters more. `attributed` requires every
+checkable value in a sentence to be present in a cited source's evidence. Two classes of token were
+being read as values:
+
+* **numbered labels** — `ICD-11`, `DSM-5`, `PCL-5`. Their digits were treated as statistics.
+* **bare small integers and structural pointers** — `metalloproteinase 9` (a protein name), `Figure 2`,
+  `phase 2`, `Table 3`. A small integer is everywhere in extracted text, so finding one proves nothing
+  and finding none proves nothing.
+
+On the real document, **11 of 12 `attributed` verdicts rested on the digits of `ICD-11` or `DSM-5`, and
+the twelfth on a protein name.** Every one was a sentence reported as supported on the strength of a
+value that was never checked — the precise failure the tool exists to prevent, produced by the tool.
+After masking labels and structural references, and requiring a bare number to be large or fractional
+before it may serve as a value, the count of greens on that document is **zero**, which is the correct
+answer: with those sources, no sentence's distinctive value could be confirmed.
+
+**C. The safety properties**, both asserted rather than merely printed:
+
+```
+SAFETY PROPERTIES HOLD:
+  conflict precision is 1.000 over 4 conflict case(s) -- no false accusation
+  trigger specificity is 1.000 over 40 unseen real sentences -- no sentence was
+    told it needs a citation when it did not
+```
+
+Per state, all at precision 1.000 and recall 1.000: `attributed` (3), `synthesis` (3),
+`unverifiable` (5), `unattributed` (5), `conflict` (4), `no_citation_needed` (6).
+
+### The red bar, measured separately
+
+Three cases decide whether an accusation is allowed, each in its own source configuration:
+
+| Case | Evidence | Link | Expected | Result |
+|---|---|---|---|---|
+| contradiction against a value copied verbatim into the ledger | `recorded_estimate` | exact | `conflict` (D08) | ✅ |
+| contradiction against the extractor's own prose | `prose_summary` | exact | `unverifiable` (D12) | ✅ |
+| contradiction against a source linked only by a title match | `primary` | inferred | `unverifiable` (D11) | ✅ |
+
+The benchmark also asserts the bar **structurally**: no conflict in any group may carry
+`link_confidence != exact` or evidence weaker than primary text or a recorded value. Precision alone
+would not catch a red that reached the right answer through the wrong door.
+
+The cost is real and is reported rather than absorbed: **conflict recall falls**, because a contradiction
+visible only through a prose summary is no longer asserted. That is the trade — an accusation must be
+defensible — and the case is named in the table above so the loss is visible.
+
+**Why conflict precision is the number that matters.** A red finding asserts a citation to a work
+that does not exist, a citation to a retracted source, or a value that contradicts the source. Each is
+an accusation, and a tool that produces false accusations is worse than one that produces none. The
+benchmark therefore fails loudly if conflict precision drops below 1.000, and the design keeps red
+narrow on purpose: a number merely *absent* from extracted evidence is a warning, never a conflict,
+because PDF extraction routinely loses tables and figures.
+
+### What this does not show — read this before quoting the 100%
+
+The labelled set was written by the same author as the rule table, from the same reading of the
+requirements. A perfect score therefore shows the rules **do what they were designed to do**; it does
+not show they generalise to prose the author did not choose. There is also only one case per
+distinction in several classes, so the Wilson lower bound is as weak as 43.9% for conflict precision.
+
+The honest complement is the **unlabelled** distribution over a real 1,027-sentence document (a
+34-page PTSD review, `--offline`, no source PDFs supplied):
+
+| State | Sentences | Share |
+|---|---|---|
+| `synthesis` | 143 | 13.9% |
+| `no_citation_needed` | 524 | 51.0% |
+| `unattributed` | 306 | 29.8% |
+| `unverifiable` | 54 | 5.3% |
+| `attributed` | **0** | 0% |
+| `conflict` | 0 | 0% |
+
+(391 of the 1,027 sentences require a citation; the coverage denominator is 503, and coverage is
+143/503 = 28.4%. These are the figures after both accuracy fixes above. For comparison, the same
+document under the first revision reported `attributed` 12, `unattributed` 174 and
+`no_citation_needed` 656 — twelve false greens and 132 missed attribution-requiring sentences.)
+
+Zero conflicts is the correct result for that document, not a good one: with no source evidence held,
+every cited sentence is `unverifiable`, which is exactly where the limitation shows. Supply the source
+PDFs and the `unverifiable` block converts into `attributed`, `synthesis`, or a genuine finding.
+
+Three defects were found by running the tools rather than by inspection, and all three are now fixed:
+
+1. **47 false conflicts from a bibliography.** The reference list of the source document was being
+   graded as prose, so `[Internet]` and `[cited 2026]` became fabricated citations. Reference entries
+   are now marked structural, recognised by a long trailing numbered run or a `References` heading.
+2. **DOIs truncated at a parenthesis.** `10.1016/s2215-0366(22)00375-3` is a real Lancet DOI; a
+   trailing-`)` strip silently resolved citation `[1]` to the wrong paper.
+3. **`n_participants` and `follow_up` were not treatable as evidence**, so "1000 adults were
+   randomised" could never be `attributed` against a ledger that recorded exactly that.
+4. **A one-entry bibliography was not recognised.** A `References` heading with a single numbered entry
+   fell below the run-length floor, so the entry was graded as prose and the document's own citation
+   became a **fabricated-citation** finding — the most damaging thing this tool can say. Short
+   bibliographies are now recognised when the entries look bibliographic, and the end-to-end harness
+   builds a DOCX with a numbered bibliography so the path is covered.
+5. **Short titles never matched a bibliography entry.** A title under five words was skipped, creating a
+   *second*, evidence-less source for the same work, so the citation resolved to a source with no
+   evidence and the sentence became `unverifiable` instead of being checked. Titles of three or more
+   content words now match, with a token-overlap fallback.
+6. **A ledger's context-only row could never be upgraded.** A row holding only
+   `population`/`intervention` has text but no finding, and the attachment check tested for *absent
+   text* rather than insufficient strength — so the worklist could never close for exactly the sources
+   it named.
+
+### Evidence acquisition, measured on a real reference list
+
+`_acquire.py` was measured against all 60 DOIs of a real clinical bibliography, using the module's own
+harness with the network enabled and a warm cache.
+
+| Tier | Mechanism | Yield |
+|---|---|---|
+| B | Europe PMC open-access full text (keyless) | **20 / 60 = 33.3%** |
+| C | open-access PDF via OpenAlex | **0 / 60** |
+| D | optional `paper-search` CLI subprocess | **0 / 60** |
+| | identity mismatches | **0** |
+
+Tier C fails because publisher `/pdf` endpoints answer a non-browser client with `403` or an HTML error
+page, and where OpenAlex holds no `pdf_url` the fallback is a bare `doi.org` resolver — a landing page
+rather than a file, which the module refuses to fetch. Tier D only works by re-reading a PMCID that
+tier B has already established is open access. Both are kept because they cost nothing when they fail
+and carry other corpora, and both are reported at zero rather than quietly dropped.
+
+The failures: 26 records Europe PMC reports as not open access, 13 with no Europe PMC record, 28 with
+no OpenAlex `pdf_url`, and 12 whose `pdf_url` is on a publisher host that refuses. An earlier probe of
+14 of the same DOIs suggested ~14%; the measured 20/60 replaced it, because a figure extrapolated from
+a tenth of the list was wrong in both directions.
+
+Two consequences that matter more than the number: acquisition took the run from **0 to 32 checkable
+citing sources**, and a source upgraded from an abstract to full text changes what it may support —
+an abstract can never convict a contradiction, full text can. The wiring bug that made acquisition skip
+those upgrades (it gated on "has any checkable evidence" rather than "has primary evidence") was found
+by the harness that measured the yield, not by inspection.
+
+### The advisory channel is not measured for accuracy
+
+No calibrated grader ships with `citation-report`, so there is nothing whose accuracy could be
+measured. That is deliberate: the repository's own measurement of a comparable classifier found
+**21.6%** on a seven-way choice against a **20.6%** majority baseline, and it **failed a causality
+trap** that a regular expression caught
+(`skills/medical-narrative-review/references/advisory_decision_plan.md`). The advisory channel is
+therefore measured for **inertness** instead, by `skills/citation-report/scripts/selftest.sh`:
+rendering with `--advisory off` and with grades supplied must leave the deterministic verdicts, the
+coverage arithmetic, the gate verdict, the process exit code, and the sequence of painted states
+identical. It does.
+
+---
+
+## 6. Caveats
 
 - Retraction and resolution tests are **live** (network-dependent), run on one day.
 - Ground truth for retraction is NLM's labels; where NLM and OpenAlex disagree, neither is

@@ -7,6 +7,107 @@ versioning follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- **Evidence acquisition** (`citation-report/scripts/_acquire.py`): when a cited source has no readable
+  evidence, three open-access tiers are tried in order — keyless full text from Europe PMC, an
+  open-access PDF resolved through OpenAlex, and the vendored `paper-search` package as an optional
+  subprocess — with a downloadable-file cache, polite pacing, and bounded IO. Every attempt is recorded
+  whether it succeeds or fails, and **text is used only after its identity is confirmed against the
+  cited work**; on any disagreement it is discarded and recorded as `mismatch`. Paywalls are never
+  bypassed. Measured on a real 60-DOI clinical reference list: **20/60 = 33.3%** yielded usable full
+  text, all from the Europe PMC tier, with **zero identity mismatches** — tier C scored 0/60 because
+  publisher `/pdf` endpoints answer a non-browser client with 403, and tier D 0/60 because its only
+  working route needs a PMCID that tier B established first. Both are kept, reported at zero, and never
+  overstated. Flags: `--acquire`, `--no-download`, `--cache-dir`.
+- **A transient lookup failure is no longer recorded as absent evidence.** A live run in which Europe
+  PMC returned `HTTP 503` for sixty consecutive lookups produced a worklist telling the user to supply
+  sixty PDFs; the honest instruction is to retry. DOI resolution is now paced, the failure is stored
+  separately (`Resolution.abstract_error`), and the worklist distinguishes "this lookup failed, retry"
+  from "this source is not available, supply it". Same class of error as the parent rule: an input
+  condition must not be worded as a finding about the artefact.
+- **The citation-report benchmark now reports accuracy, sensitivity and specificity**, as a confusion
+  matrix with Wilson 95% intervals, instead of a single "agreement" figure — matching the convention of
+  the other benchmarks in this directory. It scores two decisions separately, because they fail
+  differently: the **accusation** decision (a false positive accuses someone) and the **trigger**
+  decision (a false positive tells an author they failed to cite). It also carries a second labelled
+  set: **40 sentences drawn at a fixed interval from a real 34-page review**, hand-labelled by reading
+  them, so the measurement is not taken only on cases written to fit the rules. Measured: accusation
+  accuracy/sensitivity/specificity **1.000/1.000/1.000** on 26 constructed cases and accusation
+  specificity **1.000** on 40 unseen real sentences; trigger accuracy **0.900**, sensitivity **0.867**,
+  specificity **1.000**. Specificity is now an asserted safety property.
+- **The metrics found two real defects, in opposite directions.**
+  1. **False negatives:** the trigger scored accuracy **0.475** and sensitivity **0.300** on the real
+     sample — it never accused wrongly but missed 70% of sentences needing attribution, because the
+     signal list demanded exact phrases ("studies show") and had no association signal. Attribution is
+     now recognised as a named body of evidence plus a reporting verb with bounded interpolation
+     ("research has documented", "investigations describe", "models of prolonged stress similarly
+     show"), association and causation are triggers ("is associated with", "correlate with", "prevents"),
+     and a statistical noun carrying a quantity counts even when the digits did not survive extraction.
+     Sensitivity rose to **0.867** with no loss of specificity, and on the real document `unattributed`
+     rose from 174 to 311 — the old rules had been silently ignoring 132 attribution-requiring sentences.
+  2. **False positives in the greens, which matter more:** `ICD-11`, `DSM-5` and `PCL-5` digits were
+     read as statistics, and a small bare integer (`metalloproteinase 9`, `Figure 2`, `phase 2`) was
+     treated as a measured value. **11 of 12 `attributed` verdicts on the real document rested on a
+     label digit and the twelfth on a protein name** — support claimed for a value never checked.
+     Numbered labels and structural pointers are now masked, and a bare number must be ≥ 20 or
+     fractional before it may serve as a value. The count of greens on that document is now **zero**,
+     which is the correct answer for its sources.
+- **`docs/EVIDENCE-INVARIANT.md`** — the repository-wide rule that a gap in the inputs must never be
+  reported in the same channel, shape or exit status as a finding about the artefact. Stated once, with
+  the failure that produced it and the question to ask each remaining gate.
+- **Evidence sufficiency and the input/result boundary.** `citation-report` no longer reports a run it
+  could not check as though it had. A cited source with no readable evidence now makes the run
+  `insufficient_evidence` (**exit 3**) and a document the tool could not parse makes it
+  `insufficient_input` (**exit 4**); both block by default, both still write every artifact, and both
+  write `evidence_worklist.csv` naming exactly what to supply. `--allow-insufficient` proceeds while
+  keeping the status visible. A new `worklist` mode re-checks the list and exits non-zero until every
+  gap is closed. Artifacts carry an `INPUT-BOUND — NOT A FINDING` banner in its own colour, and the
+  coverage line states the reason beside the figure instead of a bare percentage.
+- **A red finding now requires defensible evidence.** `conflict` requires an **identity-verified link**
+  (a declared id, a supplied file, or a resolved DOI — never a title match) and **machine-comparable
+  evidence** (the source's own text, or a value copied verbatim into a ledger). A prose summary written
+  by a human may support a positive claim but may never convict, so rules **D11** and **D12** downgrade
+  such a contradiction to `unverifiable` with the reason and with what would confirm it. The gate
+  re-checks both bars (`CONFLICT_LINK_INFERRED`, `CONFLICT_EVIDENCE_TOO_WEAK`), and every verdict records
+  `evidence_strength`, `evidence_origin` and `link_confidence` so a colour never hides what it rested on.
+  Accepted cost: conflict recall falls, and the benchmark reports the change rather than absorbing it.
+- **Evidence provenance is enforced.** Evidence text may not appear in a verdict without a record of
+  where it came from; a verdict whose evidence cannot be traced is a gate error
+  (`EVIDENCE_WITHOUT_PROVENANCE`). Support that rests only on an extractor's prose raises a countable
+  `SUMMARY_ONLY_SUPPORT` warning and is separated in the coverage summary
+  (`attributed_by_strength`).
+- **Four intake preconditions**, because each failure makes findings meaningless rather than merely
+  incomplete: `CITATION_STYLE_UNRECOGNISED`, `TRIGGER_LANGUAGE_UNSUPPORTED`, `SENTENCE_SPLIT_SUSPECT`,
+  `NO_SOURCE_LIST`. Each records its observed value whether it passes or fails.
+- **Superscript numeric citations** (Nature style) are now read from DOCX `w:vertAlign`, where the
+  formatting is recorded. Previously every checkable sentence in such a document became `unattributed` —
+  an accusation that the author failed to cite, thousands of times over.
+- **`citation-report`** — a new skill that grades a document sentence by sentence against the
+  sources you supply, and renders the result as a colour-coded citation report in **PDF**
+  (painted sentence highlights plus printed margin notes), **DOCX** (exact-colour run shading plus
+  real Word comments) and **HTML** (coloured spans, hover notes, coverage bar). Every sentence gets
+  one of six states assigned by a **named deterministic rule** from a recorded source registry:
+  `attributed`, `synthesis`, `unverifiable`, `unattributed`, `conflict`, `no_citation_needed`.
+  - Resolves DOIs through Crossref/OpenAlex/Europe PMC (keyless, and fully disabled by `--offline`),
+    reads source PDFs via `pdftotext` or optional `pypdf` with a **legible refusal** rather than
+    grading against unreadable evidence, and links sources from a BibTeX `file = {...}` manifest, a
+    PDF directory, the document's own numbered reference list, a `sources.csv` ledger, or a DOI list.
+  - **Never paints green without evidence** and **never paints red without a quote.** A number merely
+    absent from extracted text is a warning, not a contradiction, because extraction loses tables and
+    figures. Red is reserved for a citation that resolves to nothing, a retracted source, or a value
+    that contradicts the same named measure in a source actually held.
+  - The semantic grade is a **separate advisory channel** that can never set, change or veto a
+    verdict — matching the existing `ADVISORY_` contract in `medical-narrative-review`. A selftest
+    asserts the deterministic verdicts, coverage arithmetic, gate verdict, exit code and painted
+    states are identical with the channel on and off.
+  - `report_gate.py` recomputes the coverage arithmetic from the verdict list, re-locates every span
+    in the document, and **re-opens each artifact** to count what is actually in it — including
+    requiring the PDF's notes to be findable in its text layer, so a regression to annotations fails.
+  - Measured: **23/23 hand-labelled sentences** correct at rule and state level, trigger precision and
+    recall **1.000**, and **conflict precision 1.000** (the safety property). Caveats, including why
+    a hand-labelled set written by the author of the rules cannot show generalisation, are in
+    `docs/BENCHMARK-RESULTS.md` §5.
+  - Wired into `verify.sh` (harness runs with the other gates) and CI (`lint` job), and picked up
+    automatically by `install.sh`.
 - GitHub Actions CI (`.github/workflows/ci.yml`): a `lint` job on Ubuntu + macOS
   (shell syntax, Python syntax, offline logic self-tests, the medical-narrative
   selftest) and an `r-tests` job that runs the meta-analysis golden tests and the

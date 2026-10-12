@@ -1,0 +1,8 @@
+claim_id,section,claim_kind,direction,claim_summary,source_ids,verification_status,certainty,analysis_intent,notes
+C001,Results,treatment_effect,supports,Statin therapy reduced major adverse cardiovascular events in adults with hyperlipidaemia,S001,verified,high,confirmatory,
+C002,Results,treatment_effect,supports,Statin therapy was studied in a large randomised trial,S001,verified,moderate,descriptive,
+C003,Results,treatment_effect,supports,Vitamin D supplementation reduced all-cause mortality,S002,verified,high,confirmatory,
+C004,Results,treatment_effect,supports,Statin therapy reduced mortality by 55 percent,S001,verified,low,exploratory,"Deliberately unsupported by S001's recorded effect estimate: exercises the D07 warning"
+C005,Results,guideline,supports,Statin therapy is first-line treatment for hyperlipidaemia,S003,verified,moderate,descriptive,
+C006,Results,treatment_effect,neutral,An exploratory analysis suggested statins may reduce stroke risk,S001,verified,very_low,exploratory,"Registered claim with no resolvable source in the manuscript"
+C007,Discussion,contextual,neutral,These findings are consistent with previous work,S001,verified,moderate,descriptive,

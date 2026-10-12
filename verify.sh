@@ -67,14 +67,15 @@ fi
 echo "== 2. skills =="
 SKILLS="sysreview meta-analysis evidence-synthesis-forge meta-analysis-forge \
 medical-narrative-review umbrella-review-skeptic meta-ml-screener \
-environment-life-review-forge paper-search citecheck humanizerdrb originality-check"
+environment-life-review-forge paper-search citecheck humanizerdrb originality-check \
+citation-report"
 IFS=',' read -ra TLIST <<< "$TARGETS"
 for t in "${TLIST[@]}"; do
   t="$(echo "$t" | tr -d '[:space:]')"; sdir="$(skills_dir_for "$t")"
   [ -z "$sdir" ] && continue
   missing=0
   for s in $SKILLS; do [ -e "$sdir/$s/SKILL.md" ] || missing=$((missing+1)); done
-  if [ "$missing" -eq 0 ]; then ok "$t: all 12 review skills present"; else bad "$t: $missing skill(s) missing in $sdir"; fi
+  if [ "$missing" -eq 0 ]; then ok "$t: all 13 review skills present"; else bad "$t: $missing skill(s) missing in $sdir"; fi
 done
 
 echo "== 2b. originality toolkit (required by originality-check) =="
@@ -99,6 +100,23 @@ if [ -n "$MNR" ]; then
   fi
 else
   info "narrative-review selftest not found"
+fi
+
+echo "== 2d. citation-report harness =="
+CR=""
+for cand in "$ROOT/skills/citation-report/scripts/selftest.sh" \
+            "$HOME/.research-stack/skills/citation-report/scripts/selftest.sh"; do
+  [ -f "$cand" ] && { CR="$cand"; break; }
+done
+if [ -n "$CR" ]; then
+  if bash "$CR" >/tmp/cr_selftest.out 2>&1; then
+    ok "citation-report selftest passes ($(grep -oE 'RESULT: [0-9]+ passed, [0-9]+ failed' /tmp/cr_selftest.out | tail -1))"
+  else
+    bad "citation-report selftest FAILED"
+    grep -E 'FAIL' /tmp/cr_selftest.out | head -6 | sed 's/^/        /'
+  fi
+else
+  info "citation-report selftest not found"
 fi
 
 echo "== 3. MCP config =="

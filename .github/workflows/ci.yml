@@ -51,6 +51,11 @@ jobs:
           python3 skills/evidence-synthesis-forge/scripts/cross_verify_citations.py --self-test
       - name: medical-narrative-review selftest (19 checks)
         run: bash skills/medical-narrative-review/scripts/selftest.sh
+      # citation-report writes its own PDF and DOCX, and verifies both by re-opening
+      # them, so this passes with no poppler and no pypdf: the PDF text-layer check
+      # degrades to a reported skip rather than a failure.
+      - name: citation-report selftest (95 checks)
+        run: bash skills/citation-report/scripts/selftest.sh
       # The offline benchmarks measure the claims in the README (arithmetic gate,
       # overlap detector vs the ORI guide's expert labels). They need no network,
       # so they run on every push; the live retraction benchmark does not.
@@ -58,6 +63,7 @@ jobs:
         run: |
           python3 benchmarks/bench_numeric.py
           python3 benchmarks/bench_ori_guide.py
+          python3 benchmarks/bench_verdicts.py
       - name: Installer dry-run (defaults + AIPOCH flag)
         run: bash install.sh --targets cline --dry-run --minimal --no-mcp --with-aipoch-skills >/dev/null
 

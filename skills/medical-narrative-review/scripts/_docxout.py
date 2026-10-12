@@ -3,8 +3,12 @@
 A .docx is an Open Packaging Convention zip of XML parts. This module writes the
 minimum set that Word (and Pages, LibreOffice, and Google Docs) open correctly:
 
-  [Content_Types].xml, _rels/.rels, word/document.xml, word/document.xml.rels,
+  [Content_Types].xml, _rels/.rels, word/document.xml, word/_rels/document.xml.rels,
   word/styles.xml, word/footer1.xml, word/media/*, docProps/core.xml, docProps/app.xml
+
+The relationship part is `word/_rels/document.xml.rels`, which is where OPC puts the
+relationships *for* `word/document.xml`. A part named `word/document.xml.rels` is read
+by no consumer, so styles, images and footers added there would silently not apply.
 
 Output includes heading styles (so Word can build a table of contents), real Word
 tables with repeating header rows, hanging-indent references, page numbers in the
