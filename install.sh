@@ -239,6 +239,10 @@ if [ "$DO_SKILLS" = 1 ]; then
   # ship the originality-check toolkit (the skill depends on it)
   if [ -d "$ROOT/tools/originality-toolkit" ]; then
     run "rm -rf '$STORE/originality-toolkit' && cp -R '$ROOT/tools/originality-toolkit' '$STORE/originality-toolkit'"
+    # Strip bytecode caches the same way the skills copy does. `cp -R` does not
+    # preserve mtimes, so shipping a stale __pycache__ imports bytecode whose
+    # recorded source time no longer matches the file beside it.
+    run "find '$STORE/originality-toolkit' -name '__pycache__' -type d -prune -exec rm -rf {} + 2>/dev/null || true"
     info "installed originality-toolkit -> $STORE/originality-toolkit"
   fi
 

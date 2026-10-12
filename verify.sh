@@ -14,7 +14,7 @@ while [ $# -gt 0 ]; do
 Usage: bash verify.sh [--targets cline,claude,opencode,gemini,lmstudio,...]
 
 Checks an existing install and prints PASS/FAIL for: the paper-search MCP and
-its patch system, the 12 gated skills, the originality toolkit, the
+its patch system, the gated review skills, the originality toolkit, the
 narrative-review harness, the client MCP configs, and optional components.
 Third-party skill packs are listed as information and never change the verdict.
 EOF
@@ -69,20 +69,29 @@ SKILLS="sysreview meta-analysis evidence-synthesis-forge meta-analysis-forge \
 medical-narrative-review umbrella-review-skeptic meta-ml-screener \
 environment-life-review-forge paper-search citecheck humanizerdrb originality-check \
 citation-report"
+NSKILLS="$(echo $SKILLS | wc -w | tr -d ' ')"
 IFS=',' read -ra TLIST <<< "$TARGETS"
 for t in "${TLIST[@]}"; do
   t="$(echo "$t" | tr -d '[:space:]')"; sdir="$(skills_dir_for "$t")"
   [ -z "$sdir" ] && continue
   missing=0
   for s in $SKILLS; do [ -e "$sdir/$s/SKILL.md" ] || missing=$((missing+1)); done
-  if [ "$missing" -eq 0 ]; then ok "$t: all 13 review skills present"; else bad "$t: $missing skill(s) missing in $sdir"; fi
+  if [ "$missing" -eq 0 ]; then ok "$t: all $NSKILLS review skills present"; else bad "$t: $missing skill(s) missing in $sdir"; fi
 done
 
 echo "== 2b. originality toolkit (required by originality-check) =="
-if [ -f "$HOME/.research-stack/originality-toolkit/originality_check.py" ]; then
+# The skill resolves ~/.research-stack/originality-toolkit, so the deployed copy
+# is what decides whether originality-check can run. But "not deployed" and "not
+# in this checkout either" are different conditions and must not share a message:
+# the first is an install step away, the second means the checkout is incomplete.
+TOOLKIT_DEPLOYED="$HOME/.research-stack/originality-toolkit/originality_check.py"
+TOOLKIT_CHECKOUT="$ROOT/tools/originality-toolkit/originality_check.py"
+if [ -f "$TOOLKIT_DEPLOYED" ]; then
   ok "originality-toolkit present ($HOME/.research-stack/originality-toolkit)"
+elif [ -f "$TOOLKIT_CHECKOUT" ]; then
+  bad "originality-toolkit not installed: $HOME/.research-stack/originality-toolkit is absent, so originality-check cannot run. It IS present in this checkout ($ROOT/tools/originality-toolkit) -> run ./install.sh"
 else
-  bad "originality-toolkit MISSING -> originality-check cannot run"
+  bad "originality-toolkit MISSING from both the checkout and $HOME/.research-stack -> originality-check cannot run"
 fi
 
 echo "== 2c. medical-narrative-review harness =="

@@ -136,6 +136,22 @@ versioning follows [Semantic Versioning](https://semver.org/).
   not a failure. Retraction remains a hard failure.
 
 ### Fixed
+- **`verify.sh` reported the originality toolkit as MISSING when it was present in the
+  checkout.** The `2b` block tested only the deployed path
+  (`~/.research-stack/originality-toolkit`), so a run from a git checkout whose toolkit had not
+  been installed yet printed `MISSING -> originality-check cannot run` — a claim about the
+  *repository* that was false, when the toolkit was sitting in `tools/originality-toolkit/`. The
+  block now separates three conditions, following the same pattern as the `2c`/`2d` harness
+  blocks: deployed (PASS), not deployed but present in this checkout (FAIL with the actionable
+  `run ./install.sh`, since the skill resolves the deployed path and would still not work), and
+  absent from both (FAIL). The stale `12 gated skills` in the usage text and the hard-coded
+  `all 13 review skills present` message are now derived from the `SKILLS` list, so the next skill
+  added cannot leave a wrong count behind.
+- **`install.sh` shipped a stale `__pycache__` with the originality toolkit.** The skills copy
+  strips bytecode caches (`find … -name __pycache__ … -exec rm -rf`), but the toolkit copy at
+  `install.sh:` did not, and `cp -R` does not preserve mtimes — so the deployed toolkit carried
+  `.pyc` files whose recorded source time no longer matched the source beside them. The toolkit
+  copy now strips them the same way.
 - **Documentation stated a measurement under the wrong conditions.** The real-document
   distribution in `docs/BENCHMARK-RESULTS.md` §5 (`synthesis` 143, `unverifiable` 54, coverage
   28.4%) was labelled "`--offline`, no source PDFs supplied", but that is the
