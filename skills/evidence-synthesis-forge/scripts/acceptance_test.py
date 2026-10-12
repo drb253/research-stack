@@ -45,11 +45,23 @@ BROKEN_DOI = "10.3760/cma.j.issn.0578-1426.2017.06.003"   # registered, flaky ta
 RESULTS = []
 
 
-def run(name, argv, expect_zero=True, cwd=None):
+def run(name, argv, expect_zero=True, cwd=None, expect_code=None):
+    """Run one adversarial case.
+
+    `expect_code` pins the exact exit code, which is what an adversarial case needs when
+    "non-zero" is not a strong enough claim: a gate that answers 2 ("this citation is bad")
+    and a gate that answers 3 ("I could not reach the resolver") are both non-zero, and only
+    the first one shows the guard working. A live test that accepted either would report PASS
+    during a network outage -- a false green in the suite that exists to catch false greens.
+    """
     p = subprocess.run(argv, cwd=cwd, capture_output=True, text=True)
-    ok = (p.returncode == 0) if expect_zero else (p.returncode != 0)
-    RESULTS.append({"phase": name, "rc": p.returncode,
-                    "expected": "0" if expect_zero else "non-zero", "ok": ok})
+    if expect_code is not None:
+        ok = p.returncode == expect_code
+        expected = str(expect_code)
+    else:
+        ok = (p.returncode == 0) if expect_zero else (p.returncode != 0)
+        expected = "0" if expect_zero else "non-zero"
+    RESULTS.append({"phase": name, "rc": p.returncode, "expected": expected, "ok": ok})
     print("  %-56s rc=%-3d %s" % (name, p.returncode, "PASS" if ok else "MISBEHAVED"))
     if not ok:
         for line in (p.stdout + p.stderr).strip().splitlines()[:4]:
@@ -202,20 +214,24 @@ def main():
 
 
     # ---------------- G / H : citation gate on REAL bad DOIs -----------------
+    # expect_code=2, not merely "non-zero": exit 3 means "the resolver was never reached",
+    # which is an input gap and proves nothing about the guard. Pinning 2 keeps an outage
+    # from satisfying an adversarial test.
     print("\n[G] adversarial: a REAL retracted DOI must fail the citation gate")
     run("retracted Lancet HCQ DOI fails the gate",
         ["python3", os.path.join(ESF, "cross_verify_citations.py"),
          "--doi", RETRACTED_DOI, "--out", os.path.join(root, "gate_retracted.json")],
-        expect_zero=False)
+        expect_code=2)
     print("\n[H] adversarial: a definitively unregistered DOI must fail the citation gate")
     run("unregistered DOI fails the gate",
         ["python3", os.path.join(ESF, "cross_verify_citations.py"),
          "--doi", UNREGISTERED_DOI, "--out", os.path.join(root, "gate_unreg.json")],
-        expect_zero=False)
+        expect_code=2)
     run("unregistered DOI passes ONLY under an explicit waiver",
         ["python3", os.path.join(ESF, "cross_verify_citations.py"),
          "--doi", UNREGISTERED_DOI, "--allow-unresolved",
-         "--out", os.path.join(root, "gate_unreg_waived.json")])
+         "--out", os.path.join(root, "gate_unreg_waived.json")],
+        expect_code=0)
 
     print("\n[H2] determinism: the SAME flaky real DOI must give the SAME verdict twice")
     verdicts = []

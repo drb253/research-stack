@@ -26,8 +26,59 @@ fi
 
 echo "== 2. Citation gate (cross_verify_citations.py) =="
 expect_exit 0 "self-test" python3 "$ESF/cross_verify_citations.py" --self-test
-expect_exit 2 "fake DOI must FAIL" python3 "$ESF/cross_verify_citations.py" \
-  --doi 10.9999/definitely-not-real.1 --out "$TMP/g.json"
+# A DOI that does not exist is a FINDING (exit 2). A resolver we could not reach is an INPUT
+# GAP (exit 3). Scored as a bare `expect_exit 2`, a network outage used to satisfy this test
+# for the wrong reason; now an outage fails it, loudly and accurately.
+python3 "$ESF/cross_verify_citations.py" --doi 10.9999/definitely-not-real.1 \
+  --out "$TMP/g.json" >/dev/null 2>&1
+case $? in
+  2) ok "fake DOI is a finding (exit 2; resolver was reached)" ;;
+  3) no "fake-DOI check could not run: resolver unreachable (an input gap, NOT a pass)" ;;
+  *) no "fake DOI gave an unexpected exit code" ;;
+esac
+# The evidence invariant, asserted with a dead proxy so it is deterministic and offline:
+# a refused connection produces a different status, a different gate word, a different key
+# and a different exit code from a 404, and no waiver turns it into a pass.
+DEADPROXY="https_proxy=http://127.0.0.1:9 http_proxy=http://127.0.0.1:9 all_proxy=http://127.0.0.1:9"
+expect_exit 3 "unreachable resolver -> input gap (exit 3)" \
+  env $DEADPROXY python3 "$ESF/cross_verify_citations.py" --doi 10.9999/x --out "$TMP/gap.json"
+expect_exit 3 "--allow-unresolved must NOT waive an input gap" \
+  env $DEADPROXY python3 "$ESF/cross_verify_citations.py" --doi 10.9999/x \
+  --allow-unresolved --out "$TMP/gap2.json"
+expect_exit 0 "--allow-insufficient is the logged opt-out" \
+  env $DEADPROXY python3 "$ESF/cross_verify_citations.py" --doi 10.9999/x \
+  --allow-insufficient --out "$TMP/gap3.json"
+expect_exit 3 "recheck keeps the gap open while the resolver is unreachable" \
+  env $DEADPROXY python3 "$ESF/cross_verify_citations.py" --recheck "$TMP/gap.json"
+cat > "$TMP/check_gap.py" <<'PY'
+import json, sys
+gap, waived = json.load(open(sys.argv[1])), json.load(open(sys.argv[2]))
+problems = []
+if gap["status"] != "insufficient_evidence":
+    problems.append("status=%s" % gap["status"])
+if gap["gate"] != "INCOMPLETE":
+    problems.append("gate=%s" % gap["gate"])
+if gap["unresolved"]:
+    problems.append("gap counted as unresolved: %s" % gap["unresolved"])
+if gap["failures"]:
+    problems.append("gap counted as a failure: %s" % gap["failures"])
+if len(gap["input_gaps"]) != 1:
+    problems.append("input_gaps=%d" % len(gap["input_gaps"]))
+elif not gap["input_gaps"][0].get("action"):
+    problems.append("gap entry carries no action")
+for key in ("status", "gate", "unresolved", "failures"):
+    if waived[key] != gap[key]:
+        problems.append("--allow-unresolved changed %s" % key)
+if len(waived["input_gaps"]) != 1:
+    problems.append("waived input_gaps=%d" % len(waived["input_gaps"]))
+print("; ".join(problems))
+sys.exit(1 if problems else 0)
+PY
+if python3 "$TMP/check_gap.py" "$TMP/gap.json" "$TMP/gap2.json" >"$TMP/gapcheck.log" 2>&1; then
+  ok "input gap kept out of unresolved[] and failures[]; no waiver touches it"
+else
+  no "input gap leaked into the findings ($(cat "$TMP/gapcheck.log"))"
+fi
 
 echo "== 3. PRISMA flow (reconciliation) =="
 cat > "$TMP/counts.json" <<'JSON'

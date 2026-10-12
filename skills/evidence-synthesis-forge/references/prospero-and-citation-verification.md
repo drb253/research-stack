@@ -82,3 +82,26 @@ adjacent citations and assuming the others.
 `scripts/cross_verify_citations.py` turns these rules into a machine gate over the review
 ledger: it resolves each cited DOI at Crossref, flags retractions (OpenAlex `is_retracted`),
 and fails loudly on unresolved or retracted citations, emitting `GATE_REPORT.json`.
+
+### A citation that is wrong and a resolver that is unreachable are different claims
+
+The gate keeps them in different channels, because the reader acts on them differently:
+
+| Condition | `status` | `gate` | exit | waived by |
+|---|---|---|---|---|
+| a DOI that resolves nowhere | `fail` | `FAIL` | 2 | `--allow-unresolved` |
+| a ledger row with no identifier | `fail` | `FAIL` | 2 | `--allow-unresolved` |
+| a retracted source | `fail` | `FAIL` | 2 | `--allow-retracted` |
+| **the resolver was never reached** | `insufficient_evidence` | `INCOMPLETE` | **3** | `--allow-insufficient` only |
+
+An unreachable resolver is recorded in `input_gaps[]` — one entry per identifier, with the
+reason and the action — and is deliberately **absent** from `unresolved[]` and `failures[]`,
+so it can never be counted as evidence that a citation is bad. `--allow-unresolved` does not
+waive it: there is nothing to waive, because no check was made. `--allow-insufficient` is the
+documented opt-out, and it still records `status: insufficient_evidence` and
+`gate: INCOMPLETE` in the report, so the override is logged rather than silent.
+
+`--recheck PREVIOUS_REPORT.json` re-queries only the identifiers an earlier run could not
+check and exits 3 while any remain, so a gap can be shown to be *closed* rather than
+re-asserted. Run it after restoring network access; do not re-run the whole gate and read the
+absence of failures as a pass.

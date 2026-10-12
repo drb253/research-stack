@@ -202,7 +202,12 @@ def score() -> None:
         exp = r["expected_retracted"] == "true"
         res = by_doi.get(doi)
         status = (res or {}).get("status", "MISSING")
-        resolved = status not in ("unresolved", "MISSING")
+        # An unreachable resolver is NOT a resolved citation. Reading the gate's old
+        # generic "error" status as resolved meant a lookup failure on a retracted paper
+        # counted as a missed retraction -- silently moving the one number this benchmark
+        # exists to certify. Both input-side statuses are now counted as unresolved here,
+        # and a shard that exits 3 is rejected outright above.
+        resolved = status not in ("unresolved", "MISSING", "unreachable", "error")
         got = doi in retracted_set
         if not resolved:
             if exp:

@@ -51,6 +51,19 @@ ALT_AGENCIES = {"10.48550": "arXiv", "10.5281": "DataCite", "10.5061": "DataCite
                 "10.31219": "OSF", "10.6084": "DataCite"}
 
 
+class Unreachable(RuntimeError):
+    """The registry could not be reached at all.
+
+    This is a fact about our inputs, not about the citation. A DOI that returns 404
+    does not exist; a resolver that refuses the connection tells us nothing about the
+    DOI. Before this class existed the two produced byte-identical output -- the same
+    "1 unresolved", the same ``gate: FAIL``, the same DOI in ``unresolved[]`` -- so a
+    reader was told a citation was wrong when the tool never asked. It was worse under
+    ``--allow-unresolved``, where a total network outage reported ``gate: PASS`` and
+    exited 0.
+    """
+
+
 def _get(url, mailto, timeout=30, tries=3):
     """GET JSON with polite backoff. 404 -> None (a fact, not a retry)."""
     req = urllib.request.Request(
@@ -72,7 +85,7 @@ def _get(url, mailto, timeout=30, tries=3):
         except Exception as e:  # noqa: BLE001 - network variety
             last = e
         time.sleep(1.5 * (i + 1))
-    raise RuntimeError("network failure for %s: %s" % (url, last))
+    raise Unreachable("resolver unreachable for %s: %s" % (url, last))
 
 
 SENTINELS = {"", "none", "n/a", "na", "null", "-", "nil", "not_reported", "not reported", "unknown"}
@@ -350,6 +363,9 @@ def apply_retraction_signals(rec, doi, row, mailto, crossref_msg=None):
 def verify_one(doi, mailto, row=None):
     """Resolve one DOI and classify it."""
     rec = {"doi": doi, "s_id": (row or {}).get("s_id"), "status": None,
+           # Carried so a re-check can rebuild the query from the report alone, and so an
+           # input gap can name the PMID it could not look up.
+           "pmid": (row or {}).get("pmid") or "",
            "retracted": False, "retraction_evidence": [], "title_mismatch": None}
     if not doi:
         pm = pmid_verified((row or {}).get("pmid"), mailto)
@@ -411,6 +427,83 @@ def load_rows(path):
                 "pmid": (r.get(pmid_col, "") if pmid_col else "").strip(),
             })
     return rows
+
+
+def partition_results(results):
+    """Split results into findings about the citations and conditions of our inputs.
+
+    The distinction is the whole point. ``unresolved``, ``no_identifier``, ``retracted``
+    and a title mismatch are claims about the cited work or the ledger. ``unreachable``
+    and ``error`` are claims about our ability to ask. They are returned separately so
+    that nothing downstream can add them into one count.
+    """
+    unresolved = [r for r in results if r["status"] == "unresolved"]
+    unreachable = [r for r in results if r["status"] in ("unreachable", "error")]
+    missing = [r for r in results if r["status"] == "no_identifier"]
+    return unresolved, unreachable, missing
+
+
+def input_gap_entry(rec):
+    """One row of the worklist: what could not be checked, why, and what to do."""
+    return {
+        "doi": rec.get("doi") or "",
+        "s_id": rec.get("s_id") or "",
+        "pmid": rec.get("pmid") or "",
+        "status": rec.get("status") or "",
+        "reason": rec.get("note") or "",
+        "action": ("re-run when the resolver is reachable, or pass --recheck with this "
+                   "report to re-check only these identifiers"),
+    }
+
+
+def recheck(args):
+    """Re-verify only the identifiers a previous report recorded as input gaps.
+
+    The invariant asks for a mode that re-checks the worklist, so that a gap can be shown
+    to be closed rather than quietly forgotten. This reads a previous report, re-queries
+    exactly the identifiers it could not check, and exits 3 while any of them remain
+    uncheckable. It never turns an uncheckable identifier into a finding.
+    """
+    try:
+        with open(args.recheck, encoding="utf-8") as fh:
+            prior = json.load(fh)
+    except Exception as e:  # noqa: BLE001
+        print("recheck: cannot read %s: %s" % (args.recheck, e))
+        return 1
+    gaps = prior.get("input_gaps") or []
+    if not gaps:
+        print("recheck: %s recorded no input gaps -- there is nothing to re-check"
+              % args.recheck)
+        return 0
+
+    print("recheck: %d identifier(s) previously unchecked; re-querying now" % len(gaps))
+    still = []
+    for i, gap in enumerate(gaps):
+        if i:
+            time.sleep(0.4)
+        row = {"s_id": gap.get("s_id") or "", "pmid": gap.get("pmid") or "",
+               "doi": gap.get("doi") or ""}
+        label = row["doi"] or ("(no DOI) %s" % (row["s_id"] or row["pmid"] or "?"))
+        try:
+            rec = verify_one(row["doi"], args.mailto, row)
+        except Unreachable as e:
+            rec = {"doi": row["doi"], "status": "unreachable", "note": str(e)}
+        except Exception as e:  # noqa: BLE001
+            rec = {"doi": row["doi"], "status": "error", "note": str(e)}
+        if rec["status"] in ("unreachable", "error"):
+            still.append(input_gap_entry(dict(rec, s_id=row["s_id"], pmid=row["pmid"])))
+            print("  STILL UNCHECKABLE  %s  %s" % (label, (rec.get("note") or "")[:90]))
+        else:
+            print("  CLOSED             %s -> %s" % (label, rec["status"]))
+
+    if still:
+        print("recheck: %d of %d still cannot be checked -- the input gap is NOT closed"
+              % (len(still), len(gaps)))
+        print("  the status remains insufficient_evidence; find the identifiers that are still")
+        print("  uncheckable in the report above rather than reading this as a clean run")
+        return 3
+    print("recheck: every previously uncheckable identifier was reached; the gap is closed")
+    return 0
 
 
 def _self_test():
@@ -512,6 +605,30 @@ def _self_test():
     assert "10.48550/arxiv.2410.20168".split("/")[0] in ALT_AGENCIES
     assert "10.9999/nothing".split("/")[0] not in ALT_AGENCIES
     assert "10.5281/zenodo.18550755".split("/")[0] in ("10.5281", "10.5061", "10.6084")
+    # --- The evidence invariant: an uncheckable identifier is not an unresolved one. ---
+    # Synthetic results, so the routing is pinned offline and cannot regress. This is the
+    # regression guard for the defect where a refused connection produced the same
+    # "unresolved" count, the same failures[] and the same exit code as a DOI that really
+    # does not exist -- and where --allow-unresolved turned a total outage into gate PASS.
+    findings, gaps, absent = partition_results([
+        {"status": "unresolved", "doi": "10.1/a"},
+        {"status": "unreachable", "doi": "10.1/b"},
+        {"status": "error", "doi": "10.1/c"},
+        {"status": "no_identifier", "doi": ""},
+        {"status": "verified", "doi": "10.1/d"},
+    ])
+    assert [r["doi"] for r in findings] == ["10.1/a"], findings
+    assert [r["doi"] for r in gaps] == ["10.1/b", "10.1/c"], gaps
+    assert len(absent) == 1, absent
+    # A refusal must be its own exception type, distinguishable from a 404 that _get
+    # deliberately turns into None.
+    assert issubclass(Unreachable, RuntimeError)
+    assert _get.__doc__ and "404 -> None" in _get.__doc__
+    # The worklist entry says what to do, not only what failed.
+    gap = input_gap_entry({"doi": "10.1/b", "s_id": "S002", "pmid": "9",
+                           "status": "unreachable", "note": "connection refused"})
+    assert gap["reason"] == "connection refused" and gap["pmid"] == "9", gap
+    assert gap["action"] and "recheck" in gap["action"], gap
     print("self-test: OK")
 
 
@@ -533,11 +650,25 @@ def main(argv=None):
                     help="downgrade title differences to warnings (explicit, logged waiver - "
                          "use only for a known benign case such as a subtitle change)")
     ap.add_argument("--self-test", action="store_true")
+    ap.add_argument(
+        "--allow-insufficient",
+        action="store_true",
+        help="proceed when the resolver could not be reached. The report still records "
+             "status=insufficient_evidence and gate=INCOMPLETE, so the override is logged "
+             "rather than silent. --allow-unresolved does NOT waive an input gap.")
+    ap.add_argument(
+        "--recheck",
+        metavar="REPORT.json",
+        help="re-check only the identifiers a previous run could not check, so a gap can be "
+             "shown to be closed rather than merely re-asserted. Exits 3 while any remain.")
     args = ap.parse_args(argv)
 
     if args.self_test:
         _self_test()
         return 0
+
+    if args.recheck:
+        return recheck(args)
 
     rows = load_rows(args.sources) if args.sources else []
     if args.doi:
@@ -569,13 +700,28 @@ def main(argv=None):
         if i:
             time.sleep(0.4)  # be a polite API citizen
         try:
-            results.append(verify_one(row["doi"], args.mailto, row))
+            rec = verify_one(row["doi"], args.mailto, row)
+        except Unreachable as e:
+            # The resolver was never reached. Recorded as an input condition, in its own
+            # status, so it cannot be counted as "unresolved" below.
+            rec = {"doi": row["doi"], "s_id": row.get("s_id"), "pmid": row.get("pmid") or "",
+                   "status": "unreachable", "retracted": False, "note": str(e)}
         except Exception as e:  # noqa: BLE001
-            results.append({"doi": row["doi"], "status": "error",
-                            "retracted": False, "note": str(e)})
+            # Not a transport failure, but still "we could not check" rather than "it is wrong".
+            rec = {"doi": row["doi"], "s_id": row.get("s_id"), "pmid": row.get("pmid") or "",
+                   "status": "error", "retracted": False, "note": str(e)}
+        # "Could not look up" must never be reported as "does not exist". The PMID lookup
+        # already failed once (row["pmid_lookup_error"]); if the fallback also finds no
+        # record, the honest reading is that the lookup did not happen, not that no
+        # identifier exists for this work.
+        if row.get("pmid_lookup_error") and rec["status"] == "no_identifier":
+            rec["status"] = "unreachable"
+            rec["note"] = ("PMID %s could not be looked up (%s), so no DOI was resolved and "
+                           "no PMID verified. This is a failure to look, not a missing "
+                           "identifier." % (row.get("pmid") or "?", row["pmid_lookup_error"]))
+        results.append(rec)
 
-    unresolved = [r for r in results if r["status"] in ("unresolved", "error")]
-    missing = [r for r in results if r["status"] == "no_identifier"]
+    unresolved, unreachable, missing = partition_results(results)
     retracted = [r for r in results if r["retracted"]]
     mismatches = [dict(r["title_mismatch"], doi=r["doi"], s_id=r.get("s_id"))
                   for r in results if r.get("title_mismatch")]
@@ -632,7 +778,14 @@ def main(argv=None):
         "doi_resolvable_but_absent": resolvable,
         "retracted": [{"doi": r["doi"], "evidence": r["retraction_evidence"]} for r in retracted],
         "title_mismatches": mismatches,
-        "gate": "FAIL" if failures else "PASS",
+        # A gap in the inputs, kept in its own key so no consumer can add it to a count of
+        # findings. `status` carries it, and the exit code carries it too.
+        "input_gaps": [input_gap_entry(r) for r in unreachable],
+        "status": ("insufficient_evidence" if unreachable
+                   else ("fail" if failures else "pass")),
+        # "INCOMPLETE" rather than "PASS": a run that could not ask must not print the word a
+        # reader scans for to mean "checked and clean".
+        "gate": ("FAIL" if failures else ("INCOMPLETE" if unreachable else "PASS")),
         "failures": failures,
         "warnings": warnings,
         "results": results,
@@ -648,7 +801,22 @@ def main(argv=None):
             print("    %s  pmid:%s -> %s" % (r["s_id"] or "?", r["pmid"], r["doi"]))
     for w in warnings:
         print("  warn:", w)
+    if report["input_gaps"]:
+        print("  INPUT GAP - %d identifier(s) could not be checked. This is a statement about"
+              % len(report["input_gaps"]))
+        print("  our inputs, NOT a finding about the citations. --allow-unresolved does not")
+        print("  waive it, because there is nothing to waive: no check was made.")
+        for gap in report["input_gaps"]:
+            print("    %s  %s" % (gap["doi"] or "(no DOI) %s" % gap["s_id"], gap["reason"][:110]))
+        print("  action: restore network access and re-run, or re-check only these with")
+        print("          --recheck %s" % args.out)
     print("gate: %s -> %s" % (report["gate"], args.out))
+    if report["status"] == "insufficient_evidence":
+        print("status: insufficient_evidence (an input gap, outranking the findings below)")
+        if not args.allow_insufficient:
+            return 3
+        print("  --allow-insufficient given: the status stays insufficient_evidence in the")
+        print("  report; only the exit code falls back to the findings.")
     return 2 if failures else 0
 
 
