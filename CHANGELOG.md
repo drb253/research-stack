@@ -136,6 +136,22 @@ versioning follows [Semantic Versioning](https://semver.org/).
   not a failure. Retraction remains a hard failure.
 
 ### Fixed
+- **Documentation stated a measurement under the wrong conditions.** The real-document
+  distribution in `docs/BENCHMARK-RESULTS.md` §5 (`synthesis` 143, `unverifiable` 54, coverage
+  28.4%) was labelled "`--offline`, no source PDFs supplied", but that is the
+  **acquisition-enabled** run. Re-measured against the committed code: with no sources supplied the
+  same document gives `unverifiable` **197**, `synthesis` **0** and coverage **0/503 = 0.0%**; with
+  open-access acquisition it gives `synthesis` 143, `unverifiable` 54 and coverage 143/503 = 28.4%,
+  still exiting 3 because 12 of 48 citing sources could not be obtained. Both runs are now printed
+  side by side in `docs/BENCHMARK-RESULTS.md` and the README, because the difference — a coverage
+  figure is a statement about the source bundle, not the manuscript — is the point rather than a
+  footnote. Two arithmetic slips in the same section are corrected with it: the trigger fix moved
+  `unattributed` 174 → **306** (not 311), so it unmasked **132** attribution-requiring sentences
+  (not 137), matching the `no_citation_needed` fall of 656 → 524. The acquisition section's "0 to 32
+  checkable citing sources" is likewise corrected to the re-measured end-to-end figure, **36**, with
+  the module harness's own 20/60 yield (and the 47 sources holding abstract-or-better evidence) stated
+  separately so two different measurements are no longer printed as one. No rule, test or metric
+  changed — only the labels and the numbers in the documentation.
 - `cross_verify_citations.py` — a DOI that is **not Crossref-registered** took an
   alternative-agency branch that returned *before any retraction check ran*, so a
   retracted paper could be reported `verified`. The three signals now run on both

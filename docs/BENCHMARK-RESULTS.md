@@ -264,9 +264,24 @@ Three measured defects were fixed:
 | **after** | **0.900** | **0.867** | **1.000** |
 
 Sensitivity nearly tripled with no loss of specificity, and the constructed set stayed at 1.000. On the
-real 1,027-sentence document the same change moved `unattributed` from **174 to 311** sentences — the
-old rules had been silently ignoring 137 attribution-requiring sentences, which is exactly the kind of
-under-reporting the metrics exist to expose.
+real 1,027-sentence document the same change moved `unattributed` from **174 to 306** sentences
+(`no_citation_needed` fell 656 → 524) — the old rules had been silently ignoring 132
+attribution-requiring sentences, which is exactly the kind of under-reporting the metrics exist to
+expose.
+
+**The four remaining misses are named, not averaged away.** All four put more than four words between
+the evidence noun and its reporting verb, which is the window the rule deliberately refuses to cross:
+
+* "Developmental trauma research in children and adolescents with childhood maltreatment (CM)
+  histories provides…"
+* "A large study of postpartum women addressed this gap by examining…"
+* "One approach interprets scores at or above as indicative…"
+* "High-dose psilocybin produced marked improvements…"
+
+`produce`/`produced` is excluded on purpose (defect 2 above), so the fourth is a costing decision rather
+than an oversight. The other three are the price of the four-word cap: widening it is the obvious next
+experiment, and it has to be measured, because the cap is what keeps a subject from drifting into a
+neighbouring clause and triggering falsely.
 
 ### The metrics also found false *greens* — 12 of them
 
@@ -331,25 +346,47 @@ not show they generalise to prose the author did not choose. There is also only 
 distinction in several classes, so the Wilson lower bound is as weak as 43.9% for conflict precision.
 
 The honest complement is the **unlabelled** distribution over a real 1,027-sentence document (a
-34-page PTSD review, `--offline`, no source PDFs supplied):
+34-page PTSD review). It was measured twice, and the difference between the two runs is the point
+rather than a footnote.
+
+**Run 1 — 62 sources identified, no source text supplied at all (`--offline`).** Every cited sentence
+is `unverifiable`: a citation that cannot be checked is not a citation that passed.
 
 | State | Sentences | Share |
 |---|---|---|
-| `synthesis` | 143 | 13.9% |
 | `no_citation_needed` | 524 | 51.0% |
 | `unattributed` | 306 | 29.8% |
-| `unverifiable` | 54 | 5.3% |
+| `unverifiable` | 197 | 19.2% |
+| `synthesis` | **0** | 0% |
 | `attributed` | **0** | 0% |
 | `conflict` | 0 | 0% |
 
-(391 of the 1,027 sentences require a citation; the coverage denominator is 503, and coverage is
-143/503 = 28.4%. These are the figures after both accuracy fixes above. For comparison, the same
-document under the first revision reported `attributed` 12, `unattributed` 174 and
-`no_citation_needed` 656 — twelve false greens and 132 missed attribution-requiring sentences.)
+Coverage: **0/503 = 0.0%**. The run exits **3 (`insufficient_evidence`)**.
 
-Zero conflicts is the correct result for that document, not a good one: with no source evidence held,
-every cited sentence is `unverifiable`, which is exactly where the limitation shows. Supply the source
-PDFs and the `unverifiable` block converts into `attributed`, `synthesis`, or a genuine finding.
+**Run 2 — the same 62 sources, with open-access acquisition enabled** (Europe PMC full text; no rule
+changed). 47 sources end up with evidence and 36 of the 48 citing sources become checkable:
+
+| State | Run 1 (no sources) | Run 2 (open access fetched) |
+|---|---|---|
+| `synthesis` | 0 | **143** (13.9%) |
+| `unverifiable` | 197 | **54** (5.3%) |
+| `no_citation_needed` | 524 | 524 (51.0%) |
+| `unattributed` | 306 | 306 (29.8%) |
+| `attributed` | 0 | 0 |
+| `conflict` | 0 | 0 |
+| **coverage** (attributed + synthesis) / sentences carrying a claim | **0/503 = 0.0%** | **143/503 = 28.4%** |
+
+(391 of the 1,027 sentences require a citation, and 503 carry a claim. These are the figures after
+both accuracy fixes above. For comparison, the same document under the first revision reported
+`attributed` 12, `unattributed` 174 and `no_citation_needed` 656 — twelve false greens and 132 missed
+attribution-requiring sentences.)
+
+Run 2 still exits **3**: 12 of the 48 citing sources could not be obtained (11 of them transiently),
+so the evidence gap is recorded rather than absorbed, and the worklist names each one. Zero conflicts
+in both runs is the correct result for that document, not a good one: `conflict` requires evidence
+strong enough to convict, and no sentence's value could be confirmed against a source the tool holds
+in full. Supply the remaining PDFs and the `unverifiable` block converts into `attributed`,
+`synthesis`, or a genuine finding.
 
 Three defects were found by running the tools rather than by inspection, and all three are now fixed:
 
@@ -397,11 +434,13 @@ no OpenAlex `pdf_url`, and 12 whose `pdf_url` is on a publisher host that refuse
 14 of the same DOIs suggested ~14%; the measured 20/60 replaced it, because a figure extrapolated from
 a tenth of the list was wrong in both directions.
 
-Two consequences that matter more than the number: acquisition took the run from **0 to 32 checkable
-citing sources**, and a source upgraded from an abstract to full text changes what it may support —
-an abstract can never convict a contradiction, full text can. The wiring bug that made acquisition skip
-those upgrades (it gated on "has any checkable evidence" rather than "has primary evidence") was found
-by the harness that measured the yield, not by inspection.
+Two consequences that matter more than the number: acquisition took the run from **0 to 36 checkable
+citing sources** (re-measured end to end on the same document; the module harness alone reports 20/60
+DOIs yielding usable full text, and 47 of the 62 sources end up with abstract-or-better evidence), and
+a source upgraded from an abstract to full text changes what it may support — an abstract can never
+convict a contradiction, full text can. The wiring bug that made acquisition skip those upgrades (it
+gated on "has any checkable evidence" rather than "has primary evidence") was found by the harness that
+measured the yield, not by inspection.
 
 ### The advisory channel is not measured for accuracy
 

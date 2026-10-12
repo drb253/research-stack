@@ -494,6 +494,8 @@ flowchart LR
 | Appraisal honesty | a risk-of-bias tool is named but the appraisal is a placeholder | `check_appraisal.py` |
 | Review integrity | template/placeholder leakage into a rendered deliverable | `check_review_integrity.py` |
 | Gate coverage | any gate is exercised on only one path | `check_selftest_coverage.py` |
+| Sentence-level support | a recorded verdict no longer locates its own sentence, the coverage arithmetic disagrees with the verdict list, or a rendered artifact does not actually contain the notes it claims | `citation-report/scripts/report_gate.py` |
+| Evidence invariant | a missing input is presented in the same status, shape or colour as a finding about the document | `citation-report/scripts/sufficiency.py`, `preconditions.py` |
 | Acceptance (live) | any adversarial case (retracted DOI, unregistered DOI, false human-screening claim, stale waiver, mixed estimands) does **not** fail | `acceptance_test.py` |
 
 ---
@@ -565,11 +567,29 @@ numbers are only meaningful together. Both are reported for every component.
 | **Overlap detection** — real preprint → published pairs | 61 pairs<br><sub>54 audited positives</sub> | **100%** — 54 of 54<br><sub>95% CI [93.4%, 100%]</sub> | **100%** — 61 of 61<br><sub>95% CI [94.1%, 100%]</sub> |
 | **Overlap detection** — labelled stress set (verbatim, light edits, rewrites) | 186 | **100%** — 120 of 120<br><sub>95% CI [96.9%, 100%]</sub> | **100%** — 66 of 66<br><sub>95% CI [94.5%, 100%]</sub> |
 | **Agreement with the US ORI guide's** own expert verdicts | 6 | **6 of 6**<br><sub>95% CI [61%, 100%]</sub> | — |
+| **Citation gate** — did the sentence need a source at all? Sentences drawn from a real 34-page clinical review the rules were *not* written against | 40 | **86.7%** — 26 of 30 genuine gaps caught<br><sub>95% CI [70.3%, 94.7%]</sub> | **100%** — 10 of 10 sound sentences left alone<br><sub>95% CI [72.2%, 100%]</sub> |
 
 **In plain terms:** across 920 real citations, the gate **never once let a bad
 citation through** — zero missed retractions, zero false alarms, and zero cases
 where a DOI resolved to the wrong paper without being flagged. That figure is
 **0 unsafe accepts out of 920**.
+
+On the citation-gate row the framing inverts in a way worth knowing: there the
+dangerous error is the **false accusation** — telling an author they needed a
+citation when they did not — so its relevant number is the specificity, **40 of
+40**. The 4 misses out of 30 run the other way and under-report rather than accuse.
+All four are multi-clause subjects that the signal rule deliberately refuses to
+reach across, because reaching further was measured to cost true negatives:
+
+> "Developmental trauma research in children and adolescents with childhood
+> maltreatment (CM) histories provides…" · "A large study of postpartum women
+> addressed this gap by examining…" · "One approach interprets scores at or above
+> as indicative…" · "High-dose psilocybin produced marked improvements…"
+
+The miss rate is published rather than tuned away: the rule needs the evidence noun
+and its reporting verb within four words of each other, and a sentence whose
+subject swallows a whole clause will slip past. Widening the window is the obvious
+next experiment, and it is a trade to be measured, not assumed.
 
 #### Why you can trust the labels
 
@@ -614,6 +634,105 @@ it calls plagiarism are flagged, the two it calls correct are left clean. That i
 rare thing to be able to say: the tool agrees with an external authority's
 hand-labelled judgement, not just with our own expectations.
 
+#### The citation gate, measured the same way
+
+`citation-report` is the newest component, and it gets the same treatment rather
+than a pass on the strength of its own test suite. `benchmarks/bench_verdicts.py`
+runs the **real CLI** against labelled sentences and prints the same confusion
+matrices and intervals:
+
+| What was measured | Cases | Accuracy | Sensitivity | Specificity |
+|---|:--:|---|---|---|
+| Every state, one against the rest — cases written to exercise each rule | 26 | **100%**<br><sub>[87.1%, 100%]</sub> | 100% per class | 100% per class |
+| **The accusation decision** — is a citation being called false? | 26 | **100%**<br><sub>[87.1%, 100%]</sub> | **100%**<br><sub>[51.0%, 100%]</sub> | **100%**<br><sub>[85.1%, 100%]</sub> |
+| The trigger — does the sentence need attribution? Constructed cases | 26 | **100%**<br><sub>[87.1%, 100%]</sub> | **100%**<br><sub>[83.9%, 100%]</sub> | **100%**<br><sub>[61.0%, 100%]</sub> |
+| The trigger — the same question on 40 unseen real sentences | 40 | **90.0%**<br><sub>[76.9%, 96.0%]</sub> | **86.7%**<br><sub>[70.3%, 94.7%]</sub> | **100%**<br><sub>[72.2%, 100%]</sub> |
+| The accusation path on those real sentences (all 40 are true negatives) | 40 | **100%**<br><sub>[91.2%, 100%]</sub> | n/a — that text holds no contradiction | **100%**<br><sub>[91.2%, 100%]</sub> |
+
+**Two safety properties are asserted, not just printed.** The benchmark *fails*
+if either breaks, so they cannot silently regress in CI:
+
+```
+SAFETY PROPERTIES HOLD:
+  conflict precision is 1.000 over 4 conflict case(s) -- no false accusation
+  trigger specificity is 1.000 over 40 unseen real sentences -- no sentence was
+    told it needs a citation when it did not
+```
+
+Calling a citation false is the one output that accuses someone, so precision
+leads and is *structurally* enforced: no contradiction may stand unless the link
+is exact **and** the evidence is primary or a recorded value. A number merely
+*absent* from extracted evidence is a warning, never a conflict, because PDF
+extraction routinely loses tables and figures. The price is reported rather than
+hidden — **conflict recall falls** by design, and the three cases that decide the
+bar (verbatim ledger value, the extractor's own prose, a title-only link) are each
+pinned in the benchmark.
+
+The metrics have already paid for themselves twice, by finding defects that
+inspection did not:
+
+- **A silent trigger gap.** The first measurement scored the trigger at accuracy
+  **0.475 / sensitivity 0.300** on real prose: it never accused wrongly but missed
+  70% of sentences that did need a citation, because the rules required exact
+  phrases. A named body of evidence plus a reporting verb, associational claims and
+  statistical nouns are now recognised. That moved the score to **0.900 / 0.867**
+  with specificity still 1.000 — and on the real 1,027-sentence document it
+  unmasked **132 attribution-requiring sentences** the old rules had been
+  ignoring (`no_citation_needed` fell 656 → 524).
+- **Twelve false greens**, the opposite and worse error. `attributed` means every
+  distinctive value in the sentence was confirmed in a cited source. On the real
+  document **11 of 12 `attributed` verdicts rested on the digits of `ICD-11` or
+  `DSM-5`**, and the twelfth on a protein name — sentences reported as supported on
+  the strength of a value never checked. Numbered labels and structural pointers
+  (`Figure 2`, `phase 2`, `metalloproteinase 9`) are no longer read as statistics.
+  That document's green count is now **zero**, which is the correct answer: with no
+  source texts held, no sentence's value could be confirmed.
+
+#### The honest limit of the citation gate — state this when you report it
+
+Both of the above matter, but the limit matters more. **What the gate can say is
+bounded by what it was given.** Grading a real 1,027-sentence clinical review
+against its own 62-source bibliography, with no source documents supplied and the
+network switched off, produces:
+
+| State | Sentences | Share |
+|---|---:|---:|
+| `no_citation_needed` | 524 | 51.0% |
+| `unattributed` | 306 | 29.8% |
+| `unverifiable` | 197 | 19.2% |
+| `synthesis` | **0** | 0% |
+| `attributed` | **0** | 0% |
+| `conflict` | 0 | 0% |
+
+Every cited sentence is `unverifiable`, because a citation that cannot be checked
+is not a citation that passed. The zeros are **not a clean bill of health and not a
+failure** — they are what "no evidence was supplied" looks like.
+
+Let the tool fetch open-access copies itself and the picture changes, without a
+single rule changing. Same document, same 62 sources, open-access acquisition on
+(the Europe PMC full-text tier is the one that yields):
+
+| State | No sources | Open access fetched |
+|---|---:|---:|
+| `synthesis` | 0 | **143** |
+| `unverifiable` | 197 | **54** |
+| **Using the sources:** (attributed + synthesis) / sentences carrying a claim | **0 / 503 = 0%** | **143 / 503 = 28.4%** |
+
+So the coverage figure is a statement about the source bundle, not about the
+manuscript — and it is printed with that reason beside it.
+
+**Both runs exit 3 (`insufficient_evidence`), not 0.** Even with acquisition on,
+12 of 48 citing sources could not be obtained, so the gate keeps blocking, writes a
+worklist naming each missing source, its DOI, why it failed and what to do next,
+and refuses to render a green deliverable until the gap is closed or explicitly
+waived. Supply the source PDFs and the `unverifiable` block converts into
+`attributed`, `synthesis`, or a genuine finding.
+
+This is the distinction the whole tool turns on: **a gap in the input is never
+reported as a finding about the text**, and never rendered as a metric a reader
+could mistake for a verdict. It is the same failure the false greens above came
+from, one level up.
+
 #### Known limitation — please repeat this when reporting results
 
 One class of plagiarism is **not** caught: a paraphrase that changes every word but
@@ -629,18 +748,34 @@ weigh but drives no verdict**.
 
 **A clean report does not cover frame-copying.** Say so when you pass results on.
 
+Three more, for the citation gate:
+
+- **A green sentence is bounded by the evidence supplied.** `attributed` means every
+  distinctive value in the sentence was found in the source text the tool was given.
+  It does **not** mean the claim is scientifically correct, that the citation is the
+  best available, or that the source's own reasoning is sound.
+- **"Nothing found" is not "nothing there."** With no sources supplied the run is
+  `insufficient_evidence` (exit 3), never a clean bill of health. Read the exit code
+  and the worklist, not the absence of red.
+- **English only.** The signals are English-language rules; in a document whose
+  prose matches no signal at all the run blocks as `insufficient_input` (exit 4)
+  instead of reporting a document with nothing to check.
+
 #### Reproduce any of it
 
 ```bash
 cd benchmarks
 python3 bench_numeric.py        # offline, instant  — arithmetic gate
 python3 bench_ori_guide.py      # offline, instant  — ORI expert labels
+python3 bench_verdicts.py       # offline, instant  — citation gate + safety properties
 python3 bench_originality_scaled.py   # offline after a one-time fetch
 python3 bench_accuracy.py fetch && SHARDS=6 python3 bench_accuracy.py score   # 920 citations
 ```
 
 Each script prints the full confusion matrix, sensitivity, specificity and the
 Wilson confidence intervals, so you can check the arithmetic rather than trust it.
+`bench_verdicts.py` prints every labelled case with its justification, so a
+disagreement can be read rather than merely counted.
 
 Method, caveats and per-record output: [`docs/BENCHMARK-RESULTS.md`](docs/BENCHMARK-RESULTS.md).
 The code and documentation audit — every defect found, fixed and re-verified — is in
