@@ -134,9 +134,20 @@ Styles: `apa` (default), `mla`, `chicago`, `vancouver`, `ieee`, `harvard`, `bibt
    ids, in document order, and de-duplicates them.
 2. It resolves each, merges duplicates of the same work, formats the list, and reports unresolved and
    retracted entries on stderr - never silently.
-3. For a long draft, prefer resolving the DOIs in one call with `paper-search__export_citations`, then
+3. **Every identifier that produced no entry still gets a line in the list**, so the artifact cannot
+   look complete when it is not: `[UNRESOLVED] <id>` for one that did not resolve, `[NOT CHECKED] <id>`
+   for one the registries could not be asked about. A list that merely omits the entry hides the
+   omission from whoever pastes it into a manuscript.
+4. **A wrong citation and an unreachable registry are different claims, and are reported differently.**
+   `bib-from-draft` exits `2` when an identifier did not resolve (a finding; `--allow-unresolved`
+   waives it) and `3` when the registries could not be reached (an input gap; only
+   `--allow-insufficient` waives it, and `--allow-unresolved` never does, because no check was made).
+   `verify` tags such entries `UNCHECKED` rather than `FAIL` and exits 3. `resolve` exits 3 with
+   `NOT CHECKED` instead of reporting "no record found". Waiving changes the exit code and never the
+   artifact: the placeholder is written either way.
+5. For a long draft, prefer resolving the DOIs in one call with `paper-search__export_citations`, then
    pipe its JSON through `format`.
-4. Still run the `audit` checks (A1, A2): a list built from a draft does not tell you which in-text
+6. Still run the `audit` checks (A1, A2): a list built from a draft does not tell you which in-text
    claims are uncited.
 
 ## Self-check

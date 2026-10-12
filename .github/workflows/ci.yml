@@ -49,6 +49,9 @@ jobs:
         run: |
           python3 skills/humanizerdrb/scripts/humanizer_check.py --self-test
           python3 skills/evidence-synthesis-forge/scripts/cross_verify_citations.py --self-test
+          # citecheck: pins the routing that keeps an unreachable registry out of the
+          # findings, and the [UNRESOLVED] placeholder in the emitted reference list.
+          python3 skills/citecheck/scripts/citecheck.py --self-test
       - name: medical-narrative-review selftest (19 checks)
         run: bash skills/medical-narrative-review/scripts/selftest.sh
       # citation-report writes its own PDF and DOCX, and verifies both by re-opening

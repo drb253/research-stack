@@ -220,48 +220,100 @@ def enrich_retraction(rec):
     return rec
 
 
-def resolve(ident):
-    kind = classify(ident)
+class Unreachable(RuntimeError):
+    """The registry could not be queried.
+
+    eval.md C3 already required this distinction -- "If the check could not run (offline,
+    or a source `unavailable`), say so - do not imply 'clean'" -- but `resolve()` caught
+    every exception into `None`, so an identifier nobody could ask about was indistinguishable
+    from one the registry answered 404 for, and both were dropped from the emitted list.
+    """
+
+
+_MISS = object()  # the registry answered, and does not hold this identifier
+
+
+def _attempt(fn, ident):
+    """One registry lookup.
+
+    Returns the record, `_MISS` when the registry answered and does not hold it, or raises
+    `Unreachable` when the registry could not answer. The three outcomes are kept apart so
+    no caller can collapse them.
+    """
     try:
-        if kind == "doi":
-            try:
-                rec = crossref_record(ident)
-            except Exception:
-                rec = openalex_by_doi(ident)
-        elif kind == "pmid":
-            rec = openalex_by_pmid(ident)
-        elif kind == "arxiv":
-            rec = arxiv_record(ident)
-        else:
-            rec = openalex_by_title(ident)
-    except Exception:
-        rec = None
-    if rec is None:
+        return fn(ident)
+    except urllib.error.HTTPError as exc:
+        if exc.code in (404, 410):
+            return _MISS          # a fact about the identifier
+        raise Unreachable("HTTP %s from the registry for %s" % (exc.code, ident))
+    except urllib.error.URLError as exc:
+        raise Unreachable("could not reach the registry for %s: %s" % (ident, exc.reason or exc))
+    except (TimeoutError, OSError) as exc:
+        raise Unreachable("could not reach the registry for %s: %s" % (ident, exc))
+    except json.JSONDecodeError as exc:
+        raise Unreachable("the registry returned a response that is not JSON: %s" % exc)
+    except Exception as exc:  # noqa: BLE001 - unknown failures mean "could not determine"
+        raise Unreachable("lookup failed for %s: %s: %s" % (ident, type(exc).__name__, exc))
+
+
+def resolve(ident):
+    """Resolve one identifier.
+
+    Returns the record, or `None` when every registry that could answer was reached and
+    none holds it. Raises `Unreachable` when a registry could not be queried, because then
+    we cannot say the identifier does not exist.
+    """
+    kind = classify(ident)
+    if kind == "doi":
+        try:
+            rec = _attempt(crossref_record, ident)
+        except Unreachable:
+            # The DOI may be registered outside Crossref; the alternative agency is the
+            # deciding lookup, so a Crossref outage alone must not become a verdict.
+            rec = _MISS
+        if rec is _MISS:
+            rec = _attempt(openalex_by_doi, ident)
+    elif kind == "pmid":
+        rec = _attempt(openalex_by_pmid, ident)
+    elif kind == "arxiv":
+        rec = _attempt(arxiv_record, ident)
+    else:
+        rec = _attempt(openalex_by_title, ident)
+    if rec is _MISS:
         return None
     return enrich_retraction(rec)
 
 
 def resolve_many(idents, workers=8):
-    """Resolve identifiers concurrently. Returns {identifier: record or None}."""
+    """Resolve identifiers concurrently.
+
+    Returns `(cache, unreachable)`. `cache[i]` is the record or `None` when the registries
+    were reached and none holds it; `unreachable[i]` holds the reason when the registries
+    could not be queried. Callers must not read the second as the first.
+    """
     uniq, seen = [], set()
     for i in idents:
         if i not in seen:
             seen.add(i)
             uniq.append(i)
-    cache = {}
+    cache, unreachable = {}, {}
 
     def one(i):
         try:
-            return i, resolve(i)
-        except Exception:
-            return i, None
+            return i, resolve(i), None
+        except Unreachable as exc:
+            return i, None, str(exc)
+        except Exception as exc:  # noqa: BLE001
+            return i, None, "%s: %s" % (type(exc).__name__, exc)
 
     if uniq:
         n = max(1, min(workers, len(uniq)))
         with ThreadPoolExecutor(max_workers=n) as ex:
-            for i, rec in ex.map(one, uniq):
+            for i, rec, err in ex.map(one, uniq):
                 cache[i] = rec
-    return cache
+                if rec is None and err is not None:
+                    unreachable[i] = err
+    return cache, unreachable
 
 
 def _authors_any(a):
@@ -689,16 +741,19 @@ def verify_file(path):
             line = line.strip().strip(",").strip()
             if line and not line.startswith("#"):
                 items.append((None, line, None))
-    cache = resolve_many([it[1] for it in items if it[1]])
+    cache, unreachable = resolve_many([it[1] for it in items if it[1]])
     results = []
     for key, ident, e in items:
         if not ident:
             results.append({"key": key, "ident": ident, "record": None,
-                            "error": "no DOI or title to check", "entry": e})
+                            "error": "no DOI or title to check", "entry": e,
+                            "unreachable": None})
             continue
         rec = cache.get(ident)
         results.append({"key": key, "ident": ident, "record": rec,
                         "error": None if rec is not None else "not resolved (Crossref/OpenAlex)",
+                        # Kept apart from `error`: this one is not a finding about the entry.
+                        "unreachable": unreachable.get(ident),
                         "entry": e})
     return results
 
@@ -710,10 +765,16 @@ def _norm(s):
 def report_verify(results, style="text"):
     lines = []
     problems = 0
+    unchecked = 0
     for idx, res in enumerate(results, 1):
         rec, e, notes = res["record"], res["entry"], []
         tag = "OK"
-        if res["error"]:
+        if res.get("unreachable"):
+            # The registry could not be asked. NOT a FAIL: a failure would assert the entry
+            # is bad, and nothing was checked. Counted separately and returned separately.
+            tag = "UNCHECKED"
+            notes.append("registry could not be queried: %s" % res["unreachable"])
+        elif res["error"]:
             tag, _ = "FAIL", notes.append(res["error"])
         elif rec is None:
             tag, _ = "FAIL", notes.append("not found in Crossref/OpenAlex")
@@ -734,7 +795,9 @@ def report_verify(results, style="text"):
                 if bt and rt and bt[:40] != rt[:40]:
                     notes.append("title differs from record")
                     tag = "WARN" if tag == "OK" else tag
-        if tag != "OK":
+        if tag == "UNCHECKED":
+            unchecked += 1
+        elif tag != "OK":
             problems += 1
         if style == "json":
             lines.append(json.dumps({"index": idx, "key": res["key"], "status": tag,
@@ -748,9 +811,13 @@ def report_verify(results, style="text"):
             lines.append(line)
     if style != "json":
         lines.append("")
-        lines.append("%d entr(ies) checked, %d need attention (FAIL/RETRACTED/WARN)."
-                     % (len(results), problems))
-    return "\n".join(lines), problems
+        lines.append("%d entr(ies) checked, %d need attention (FAIL/RETRACTED/WARN), "
+                     "%d could not be checked (the registry was unreachable)."
+                     % (len(results), problems, unchecked))
+        if unchecked:
+            lines.append("The %d uncheckable entr(ies) are an INPUT GAP, not a finding: "
+                         "nothing was verified about them either way." % unchecked)
+    return "\n".join(lines), problems, unchecked
 
 
 DOI_RE = re.compile(r"10\.\d{4,9}/[^\s\"'<>]+", re.I)
@@ -792,7 +859,47 @@ def find_identifiers(text, extra=True):
     return found
 
 
-def bib_from_draft(path, style="apa", out=None, as_json=False, extra=True, ids_only=False):
+def placeholder_entry(ident, style="apa", number=None, tag="UNRESOLVED", note=None):
+    """The line a reference list must carry for an identifier that produced no entry.
+
+    Dropping the entry makes the list look complete: the reader cannot see that a cited work
+    is missing from it, and eval.md C2 calls that a hard error. A placeholder exactly where
+    the entry would have been means the omission travels with the artifact -- including when
+    the reason for the omission is that the registry could not be reached, because an empty
+    list is the most misleading artifact of all.
+    """
+    if note is None:
+        note = ("not resolvable via Crossref/OpenAlex/arXiv - verify by hand or remove the "
+                "citation")
+    if style == "json":
+        return json.dumps({tag.lower().replace(" ", "_"): ident, "note": note},
+                          ensure_ascii=False)
+    if style == "bibtex":
+        return "%% [%s] %s - %s" % (tag, ident, note)
+    prefix = "[%d] " % number if number else ""
+    return "%s[%s] %s - %s" % (prefix, tag, ident, note)
+
+
+def unresolved_entry(ident, style="apa", number=None):
+    return placeholder_entry(ident, style, number)
+
+
+def not_checked_line(ident, reason, style="apa", number=None):
+    return placeholder_entry(
+        ident, style, number, tag="NOT CHECKED",
+        note=("the registry could not be reached (%s), so this citation was not checked "
+              "either way" % reason))
+
+
+def not_checked_entry(ident, reason):
+    """The worklist row for an identifier the registries could not be asked about."""
+    return {"identifier": ident, "reason": reason,
+            "action": "restore network access and re-run; a registry that could not be "
+                      "reached is not a citation that does not exist"}
+
+
+def bib_from_draft(path, style="apa", out=None, as_json=False, extra=True, ids_only=False,
+                   allow_unresolved=False, allow_insufficient=False):
     with open(path, encoding="utf-8", errors="replace") as fh:
         text = fh.read()
     found = find_identifiers(text, extra=extra)
@@ -801,13 +908,15 @@ def bib_from_draft(path, style="apa", out=None, as_json=False, extra=True, ids_o
             if kind == "doi":
                 print(ident)
         return 0
-    cache = resolve_many([ident for _, ident in found])
+    cache, unreachable = resolve_many([ident for _, ident in found])
     refs, unresolved, retracted, seen_works = [], [], [], set()
     dupes = 0
     for kind, ident in found:
         rec = cache.get(ident)
         if rec is None:
-            unresolved.append(ident)
+            # Only an identifier the registries answered about may be called unresolved.
+            if ident not in unreachable:
+                unresolved.append(ident)
             continue
         wkey = (rec.get("doi") or "").lower() or _norm(rec.get("title"))
         if wkey and wkey in seen_works:
@@ -820,13 +929,32 @@ def bib_from_draft(path, style="apa", out=None, as_json=False, extra=True, ids_o
         if rec.get("is_retracted"):
             retracted.append(rec.get("doi") or ident)
     numbered = style in ("vancouver", "ieee")
-    lines = [format_rec(r, style, i if numbered else None) for i, r in enumerate(refs, 1)]
+    # The list is built in citation order and the placeholders take their slot, so the
+    # numbering of the resolved entries does not silently renumber around the gap.
+    lines, n = [], 0
+    for rec in refs:
+        n += 1
+        lines.append(format_rec(rec, style, n if numbered else None))
+    for ident in unresolved:
+        n += 1
+        lines.append(unresolved_entry(ident, style, n if numbered else None))
+    not_checked = [not_checked_entry(ident, unreachable[ident])
+                   for _, ident in found if ident in unreachable]
+    for row in not_checked:
+        n += 1
+        lines.append(not_checked_line(row["identifier"], row["reason"], style,
+                                      n if numbered else None))
+    has_findings = bool(unresolved or retracted)
+    status = ("insufficient_evidence" if not_checked
+              else ("fail" if has_findings else "pass"))
     if as_json:
         print(json.dumps({"source": path, "found": len(found), "resolved": len(refs),
                           "duplicates_merged": dupes, "unresolved": unresolved,
-                          "retracted": retracted, "references": refs},
+                          "retracted": retracted, "not_checked": not_checked,
+                          "status": status,
+                          "references": refs, "entries": lines},
                          indent=2, ensure_ascii=False))
-        return 0
+        return _bib_exit(has_findings, bool(not_checked), allow_unresolved, allow_insufficient)
     print("\n".join(lines))
     if out:
         with open(out, "w", encoding="utf-8") as fh:
@@ -835,15 +963,50 @@ def bib_from_draft(path, style="apa", out=None, as_json=False, extra=True, ids_o
     for k, _ in found:
         kinds[k] = kinds.get(k, 0) + 1
     print("\n[i] Scanned %s: found %d unique identifier(s) [%s]; resolved %d, duplicates merged %d, "
-          "unresolved %d, retracted %d."
+          "unresolved %d, retracted %d, not checked %d."
           % (path, len(found), ", ".join("%d %s" % (v, k) for k, v in kinds.items()),
-             len(refs), dupes, len(unresolved), len(retracted)), file=sys.stderr)
+             len(refs), dupes, len(unresolved), len(retracted), len(not_checked)),
+          file=sys.stderr)
     if out:
-        print("[i] Reference list written to %s" % out, file=sys.stderr)
+        kept = []
+        if unresolved:
+            kept.append("%d [UNRESOLVED]" % len(unresolved))
+        if not_checked:
+            kept.append("%d [NOT CHECKED]" % len(not_checked))
+        print("[i] Reference list written to %s (%s)"
+              % (out, " and ".join(kept) if kept else "no placeholder entries"), file=sys.stderr)
     for u in unresolved:
         print("[!] UNRESOLVED: %s" % u, file=sys.stderr)
     for r in retracted:
         print("[!] RETRACTED: %s" % r, file=sys.stderr)
+    if not_checked:
+        print("[!] NOT CHECKED - %d identifier(s) the registries could not be asked about."
+              % len(not_checked), file=sys.stderr)
+        print("    These are absent from unresolved[] and are NOT evidence that the "
+              "citations are wrong:", file=sys.stderr)
+        for row in not_checked:
+            print("      %s  %s" % (row["identifier"], row["reason"][:100]), file=sys.stderr)
+        print("    status: insufficient_evidence (an input gap, not a finding about the "
+              "reference list)", file=sys.stderr)
+        if not allow_insufficient:
+            print("    the reference list above is complete for every identifier that could "
+                  "be checked; re-run when the registry is reachable", file=sys.stderr)
+    return _bib_exit(has_findings, bool(not_checked), allow_unresolved, allow_insufficient)
+
+
+def _bib_exit(has_findings, has_gaps, allow_unresolved, allow_insufficient):
+    """Exit code for the bibliography modes, keeping the two conditions apart.
+
+    An unresolved identifier is a finding and fails (2). A registry we could not reach is an
+    input gap and outranks it (3). Each has its own documented opt-out, and the input gap is
+    NOT waived by the finding's waiver: there is nothing to waive, because no check was made.
+    The finding in the artifact is what matters most -- the placeholder is written either
+    way, so waiving changes the exit code and never the list.
+    """
+    if has_gaps and not allow_insufficient:
+        return 3
+    if has_findings and not allow_unresolved:
+        return 2
     return 0
 
 
@@ -910,6 +1073,8 @@ def main(argv=None):
     p = argparse.ArgumentParser(
         description="Resolve, verify and format references via Crossref/OpenAlex (stdlib only).")
     p.add_argument("--version", action="version", version="citecheck 1.0")
+    p.add_argument("--self-test", action="store_true",
+                   help="offline check of the resolution/exit routing; no network")
     sub = p.add_subparsers(dest="cmd")
 
     pr = sub.add_parser("resolve", help="resolve one identifier to a formatted reference")
@@ -937,6 +1102,15 @@ def main(argv=None):
     pb.add_argument("--no-extra", action="store_true", help="only DOIs; skip arXiv/PMID detection")
     pb.add_argument("--ids-only", action="store_true",
                     help="print only the DOIs found (for batch resolve via paper-search__export_citations)")
+    pb.add_argument("--allow-unresolved", action="store_true",
+                    help="exit 0 although identifier(s) did not resolve. The [UNRESOLVED] "
+                         "placeholder is written into the list either way, so this changes "
+                         "the exit code and never the artifact.")
+    pb.add_argument("--allow-insufficient", action="store_true",
+                    help="exit 0 although the registries could not be reached. The status "
+                         "stays insufficient_evidence and not_checked[] stays populated, so "
+                         "the override is logged rather than silent. --allow-unresolved does "
+                         "NOT waive this.")
 
     pd = sub.add_parser("duplicates",
                         help="report in-text citations of the same work written differently")
@@ -944,8 +1118,18 @@ def main(argv=None):
     pd.add_argument("--json", action="store_true", help="machine-readable JSON output")
 
     args = p.parse_args(argv)
+    if getattr(args, "self_test", False):
+        return _self_test()
     if args.cmd == "resolve":
-        rec = resolve(args.identifier)
+        try:
+            rec = resolve(args.identifier)
+        except Unreachable as exc:
+            # An input gap, not a verdict on the identifier. Exit 3, in its own channel.
+            print("[!] NOT CHECKED: %s" % args.identifier, file=sys.stderr)
+            print("    %s" % exc, file=sys.stderr)
+            print("    status: insufficient_evidence -- the registry was not reached, so "
+                  "nothing is known either way about this identifier", file=sys.stderr)
+            return 3
         if rec is None:
             print("No record found for: %s" % args.identifier, file=sys.stderr)
             return 2
@@ -956,12 +1140,17 @@ def main(argv=None):
         if rec.get("is_retracted"):
             print("\n[!] RETRACTED source (per %s) - do not cite without the retraction notice."
                   % (rec.get("retraction_source") or "OpenAlex"), file=sys.stderr)
+        if rec.get("retraction_check_failed"):
+            print("\n[!] retraction status NOT verified (%s) - this is not a clean check."
+                  % rec["retraction_check_failed"], file=sys.stderr)
         return 0
     if args.cmd == "verify":
         results = verify_file(args.file)
-        text, problems = report_verify(results, args.style)
+        text, problems, unchecked = report_verify(results, args.style)
         print(text)
-        return 1 if problems else 0
+        # An input gap outranks a finding: 3, never 1, so a script cannot read an outage as
+        # a verdict on the reference list.
+        return 3 if unchecked else (1 if problems else 0)
     if args.cmd == "format":
         try:
             raw = open(args.file, encoding="utf-8").read() if args.file else sys.stdin.read()
@@ -986,11 +1175,79 @@ def main(argv=None):
         return 0
     if args.cmd in ("bib-from-draft", "scan"):
         return bib_from_draft(args.file, args.style, args.out, args.json,
-                              extra=not args.no_extra, ids_only=args.ids_only)
+                              extra=not args.no_extra, ids_only=args.ids_only,
+                              allow_unresolved=args.allow_unresolved,
+                              allow_insufficient=args.allow_insufficient)
     if args.cmd == "duplicates":
         return print_duplicates(args.file, args.json)
     p.print_help()
     return 1
+
+
+def _self_test():
+    """Offline assertions for the routing that keeps an input gap out of the findings.
+
+    No network: every registry call is replaced, so this pins the decision logic and the
+    emitted artifact, not the internet. eval.md C2 (an unresolved identifier must appear as
+    [UNRESOLVED], never as a normal reference) and C3 (a check that could not run must say
+    so) are both hard errors, so both paths are asserted here.
+    """
+    global crossref_record, openalex_by_doi, _open
+    real_cr, real_oa = crossref_record, openalex_by_doi
+    try:
+        # (a) the registry answers "not held" -> a FINDING
+        crossref_record = lambda d: (_ for _ in ()).throw(urllib.error.HTTPError(d, 404, "no", None, None))
+        openalex_by_doi = lambda d: (_ for _ in ()).throw(urllib.error.HTTPError(d, 404, "no", None, None))
+        assert resolve("10.9999/missing") is None
+        # (b) the registry cannot be reached -> NOT a finding
+        crossref_record = lambda d: (_ for _ in ()).throw(urllib.error.URLError("connection refused"))
+        openalex_by_doi = lambda d: (_ for _ in ()).throw(urllib.error.URLError("connection refused"))
+        try:
+            resolve("10.9999/unreachable")
+            raise AssertionError("an unreachable registry must not resolve to None")
+        except Unreachable:
+            pass
+        # (c) a 404 at Crossref but an outage at the deciding alternative agency is still
+        #     "could not ask", not "does not exist"
+        crossref_record = lambda d: (_ for _ in ()).throw(urllib.error.HTTPError(d, 404, "no", None, None))
+        openalex_by_doi = lambda d: (_ for _ in ()).throw(urllib.error.URLError("refused"))
+        try:
+            resolve("10.9999/alt-down")
+            raise AssertionError("a failed alternative-agency lookup must not mean not-found")
+        except Unreachable:
+            pass
+        # (d) resolve_many reports the two conditions in two containers
+        crossref_record = lambda d: (_ for _ in ()).throw(urllib.error.URLError("refused"))
+        openalex_by_doi = lambda d: (_ for _ in ()).throw(urllib.error.URLError("refused"))
+        cache, unreachable = resolve_many(["10.9999/a", "10.9999/b"])
+        assert set(unreachable) == {"10.9999/a", "10.9999/b"}, unreachable
+        assert all(v is None for v in cache.values())
+        # (e) the artifact carries the placeholder for every unresolved identifier
+        line = unresolved_entry("10.9999/missing", "apa")
+        assert "[UNRESOLVED]" in line and "10.9999/missing" in line, line
+        assert unresolved_entry("10.9999/m", "vancouver", 7).startswith("[7] [UNRESOLVED]")
+        assert json.loads(unresolved_entry("10.1/x", "json"))["unresolved"] == "10.1/x"
+        assert unresolved_entry("10.1/x", "bibtex").startswith("% [UNRESOLVED]")
+        # (f) the exit codes: findings fail, input gaps outrank them, each waiver is separate
+        assert _bib_exit(True, False, False, False) == 2      # unresolved -> fail
+        assert _bib_exit(False, True, False, False) == 3      # unreachable -> input gap
+        assert _bib_exit(True, True, False, False) == 3       # gap outranks the finding
+        assert _bib_exit(False, True, True, False) == 3       # --allow-unresolved waives nothing
+        assert _bib_exit(True, True, True, False) == 3
+        assert _bib_exit(True, True, False, True) == 2         # gap waived, finding still fails
+        assert _bib_exit(True, True, True, True) == 0          # both explicitly waived
+        assert _bib_exit(True, False, True, False) == 0
+        assert _bib_exit(False, False, False, False) == 0     # a clean list passes
+        # (g) a row the registry could not answer is UNCHECKED, never FAIL
+        rows = [{"key": None, "ident": "10.1/x", "record": None, "error": "not resolved",
+                 "unreachable": "could not reach the registry", "entry": None}]
+        _, problems, unchecked = report_verify(rows)
+        assert problems == 0 and unchecked == 1, (problems, unchecked)
+        assert "UNCHECKED" in report_verify(rows)[0]
+        print("self-test: OK")
+        return 0
+    finally:
+        crossref_record, openalex_by_doi = real_cr, real_oa
 
 
 if __name__ == "__main__":
