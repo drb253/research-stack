@@ -115,6 +115,81 @@ expect_exit 1 "draft citing unknown source FAILS" python3 "$HERE/audit_citations
 expect_exit 1 "claim referencing unknown source FAILS" python3 "$HERE/audit_citations.py" \
   "$WS/draft.md" "$WS/claims_bad.csv" "$WS/sources.csv" --strict
 
+echo "== 3b. the retrieval invariant: a source nobody read cannot support a claim =="
+# The exact bypass this guards: retrieval_status=empty (the text was never obtained) with
+# every extraction field written as the sanctioned `not_reported`, verification=verified and
+# inclusion=included. All three gates used to report pass, because `retrieval_status` was
+# enum-checked and then read by no decision path.
+python3 - "$WS/sources.csv" "$WS/sources_unread.csv" <<'PY'
+import csv, sys
+src, dst = sys.argv[1], sys.argv[2]
+rows = list(csv.DictReader(open(src, newline="", encoding="utf-8")))
+extraction = ["study_design", "population", "intervention", "comparator", "n_participants",
+              "follow_up", "key_outcomes", "main_finding", "effect_estimate", "theme"]
+with open(dst, "w", newline="", encoding="utf-8") as fh:
+    w = csv.DictWriter(fh, fieldnames=list(rows[0].keys()))
+    w.writeheader()
+    for row in rows:
+        row["retrieval_status"] = "empty"
+        for field in extraction:
+            row[field] = "not_reported"
+        w.writerow(row)
+PY
+# user_supplied is the other value under which a source may be cited
+sed 's/,returned,Treatment,/,user_supplied,Treatment,/' "$WS/sources.csv" > "$WS/sources_supplied.csv"
+
+expect_exit 0 "a retrieved source is citable" python3 "$HERE/validate_sources.py" \
+  "$WS/sources.csv" --strict --require-included
+expect_exit 0 "a user-supplied source is citable" python3 "$HERE/validate_sources.py" \
+  "$WS/sources_supplied.csv" --strict --require-included
+expect_exit 3 "an unread citable source is an INPUT GAP (exit 3), not a finding" \
+  python3 "$HERE/validate_sources.py" "$WS/sources_unread.csv" --strict --require-included
+expect_exit 3 "a claim citing an unread source is an INPUT GAP (exit 3)" \
+  python3 "$HERE/audit_citations.py" "$WS/draft.md" "$WS/claims.csv" \
+  "$WS/sources_unread.csv" --strict
+expect_exit 0 "--allow-insufficient is the logged opt-out (sources)" \
+  python3 "$HERE/validate_sources.py" "$WS/sources_unread.csv" --strict --require-included \
+  --allow-insufficient
+expect_exit 0 "--allow-insufficient is the logged opt-out (citations)" \
+  python3 "$HERE/audit_citations.py" "$WS/draft.md" "$WS/claims.csv" \
+  "$WS/sources_unread.csv" --strict --allow-insufficient
+cat > "$TMP/check_gap.py" <<'PY'
+import json, subprocess, sys, os
+here, ws = sys.argv[1], sys.argv[2]
+def run(args):
+    p = subprocess.run([sys.executable] + args, capture_output=True, text=True)
+    return p.returncode, json.loads(p.stdout)
+problems = []
+rc, red = run([os.path.join(here, "validate_sources.py"), os.path.join(ws, "sources_unread.csv"),
+               "--strict", "--require-included"])
+if rc != 3:
+    problems.append("validate rc=%d" % rc)
+if red["status"] != "insufficient_evidence":
+    problems.append("validate status=%s" % red["status"])
+if len(red.get("input_gaps", [])) != 1:
+    problems.append("validate input_gaps=%d" % len(red.get("input_gaps", [])))
+if not red["input_gaps"][0].get("action"):
+    problems.append("gap carries no action")
+# the gap must NOT also be reported as a finding about the ledger
+if any(i.get("code") == "SOURCE_NOT_RETRIEVED" for i in red["issues"]):
+    problems.append("the gap leaked into issues[] as a finding")
+rc, blue = run([os.path.join(here, "audit_citations.py"), os.path.join(ws, "draft.md"),
+                os.path.join(ws, "claims.csv"), os.path.join(ws, "sources_unread.csv"), "--strict"])
+if rc != 3 or blue["status"] != "insufficient_evidence":
+    problems.append("audit rc=%d status=%s" % (rc, blue["status"]))
+if len(blue.get("input_gaps", [])) != 1:
+    problems.append("audit input_gaps=%d" % len(blue.get("input_gaps", [])))
+if blue["issues"]:
+    problems.append("audit reported %d finding(s) about the artefact" % len(blue["issues"]))
+print("; ".join(problems))
+sys.exit(1 if problems else 0)
+PY
+if python3 "$TMP/check_gap.py" "$HERE" "$WS" >"$TMP/gapcheck.log" 2>&1; then
+  ok "the gap stays in its own channel: no issue, no finding, action present"
+else
+  no "the retrieval gap leaked ($(cat "$TMP/gapcheck.log"))"
+fi
+
 echo "== 4. check_numbers (arithmetic) =="
 expect_exit 0 "consistent fraction/CI passes" python3 "$HERE/check_numbers.py" "$WS/numbers_ok.md"
 expect_exit 1 "wrong percentage FAILS" python3 "$HERE/check_numbers.py" "$WS/numbers_bad.md"
@@ -182,6 +257,40 @@ expect_exit 0 "exports three formats" python3 "$HERE/export_document.py" \
 
 echo "== 10. gate PASSES a complete workspace =="
 expect_exit 0 "gate passes the complete review" python3 "$HERE/gate.py" --dir "$FULL" --require-exports
+
+echo "== 11. gate REFUSES to call a review submission-ready over an unread source =="
+# The end-to-end assertion for the retrieval invariant: same complete workspace, one
+# retrieval_status changed to `empty`. Before the fix this exited 0 with
+# submission_ready=true.
+UNREAD="$TMP/unread"; mkdir -p "$UNREAD"
+cp -R "$FULL/." "$UNREAD/"
+sed 's/,returned,Treatment,/,empty,Treatment,/' "$FULL/sources.csv" > "$UNREAD/sources.csv"
+python3 - "$UNREAD/GATE_REPORT.json" <<'PY'
+import os, sys
+p = sys.argv[1]
+if os.path.exists(p):
+    os.remove(p)
+PY
+expect_exit 3 "gate exits 3 on an unread citable source" python3 "$HERE/gate.py" --dir "$UNREAD"
+if python3 - "$UNREAD/GATE_REPORT.json" <<'PY'
+import json, sys
+d = json.load(open(sys.argv[1]))
+bad = []
+if d["status"] != "insufficient_evidence":
+    bad.append("status=%s" % d["status"])
+if d["summary"]["submission_ready"]:
+    bad.append("submission_ready=true")
+if not d.get("input_gaps"):
+    bad.append("no input_gaps recorded")
+if not any(c.get("status") == "insufficient_evidence" for c in d["checks"]):
+    bad.append("no sub-check reported the gap")
+print("; ".join(bad))
+sys.exit(1 if bad else 0)
+PY
+then ok "GATE_REPORT.json records the gap and refuses submission_ready"
+else no "the gate still called an unread source submission-ready"; fi
+expect_exit 0 "--allow-insufficient on the gate is the logged opt-out" \
+  python3 "$HERE/gate.py" --dir "$UNREAD" --allow-insufficient
 
 echo
 printf 'RESULT: %d passed, %d failed\n' "$pass" "$fail"

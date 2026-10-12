@@ -18,6 +18,15 @@ python3 scripts/validate_sources.py <workspace>/sources.csv --strict
 Exit code is `0` when no `error`-severity issue exists, `1` otherwise. Every command prints a JSON
 object with `tool`, `status`, `summary`, and `issues`.
 
+**A third exit code, `3`, means an input gap rather than a finding.** `validate_sources`,
+`audit_citations` and `gate` exit `3` with `status: insufficient_evidence` when a *citable*
+source's `retrieval_status` says its text was never obtained (`empty`, `unavailable`, `error`, or
+blank). Nothing is wrong with the ledger in that case — it is unanswerable, because an extractor
+cannot know what a paper reports without the paper. The condition is reported in `input_gaps[]`
+with the reason and the action, never in `issues[]`, and `gate` sets `submission_ready: false`.
+`--allow-insufficient` exits `0` while still recording the status, so the override is logged
+rather than silent.
+
 ## `init_review.py` — scaffold a workspace
 
 ```bash

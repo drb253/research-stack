@@ -127,6 +127,13 @@ def cli() -> int:
         action="store_true",
         help="fail when no DOCX, PDF, or HTML export is present in final/",
     )
+    parser.add_argument(
+        "--allow-insufficient",
+        action="store_true",
+        help="exit 0 although a check reported an input gap (for example a citable source "
+             "that was never retrieved). The status stays insufficient_evidence and "
+             "submission_ready stays false in the report, so the override is recorded.",
+    )
     args = parser.parse_args()
 
     base = Path(args.dir)
@@ -136,6 +143,7 @@ def cli() -> int:
     checks = collect_checks(base, args.style)
     issues: list = []
     results: list = []
+    input_gaps: list = []
     for name, script, script_args in checks:
         report, failure = run_script(script, script_args)
         if report is None:
@@ -152,6 +160,14 @@ def cli() -> int:
             if item.get("severity") == "info"
             and str(item.get("code", "")).startswith("ADVISORY_")
         ]
+        # A sub-check that could not read its inputs says so in `input_gaps`, and that has to
+        # travel: a gate that reports `submission_ready: true` over a check that never ran is
+        # the failure mode this repository exists to prevent.
+        check_gaps = list(report.get("input_gaps") or [])
+        for gap in check_gaps:
+            gap = dict(gap)
+            gap["check"] = name
+            input_gaps.append(gap)
         results.append(
             {
                 "check": name,
@@ -159,6 +175,7 @@ def cli() -> int:
                 "errors": len(errors),
                 "warnings": len(warnings),
                 "advisories": len(advisories),
+                "input_gaps": len(check_gaps),
             }
         )
         for item in errors:
@@ -230,7 +247,10 @@ def cli() -> int:
     payload_summary = {
         "checks_run": len(results),
         "citation_style": args.style,
-        "submission_ready": error_count == 0,
+        # A run that could not read its inputs is not submission-ready, whatever the findings
+        # count says. Reporting `true` here over an unread source is the whole defect.
+        "submission_ready": error_count == 0 and not input_gaps,
+        "input_gaps": len(input_gaps),
         "exports": exports,
     }
     report_path = base / "GATE_REPORT.json"
@@ -239,9 +259,11 @@ def cli() -> int:
         json.dumps(
             {
                 "tool": TOOL,
-                "status": "fail" if error_count else "pass",
+                "status": ("insufficient_evidence" if input_gaps
+                           else ("fail" if error_count else "pass")),
                 "summary": payload_summary,
                 "checks": results,
+                "input_gaps": input_gaps,
                 "issues": [item.to_dict() for item in issues],
             },
             indent=2,
@@ -249,7 +271,14 @@ def cli() -> int:
         )
         + "\n",
     )
-    return emit_report(TOOL, issues, summary=payload_summary, extra={"checks": results})
+    return emit_report(
+        TOOL,
+        issues,
+        summary=payload_summary,
+        extra={"checks": results},
+        input_gaps=input_gaps,
+        allow_insufficient=args.allow_insufficient,
+    )
 
 
 if __name__ == "__main__":

@@ -19,6 +19,7 @@ import re
 
 from _common import (
     CLAIM_ID_RE,
+    READ_RETRIEVAL_STATUSES,
     SOURCE_ID_RE,
     Issue,
     emit_report,
@@ -92,6 +93,9 @@ def load_sources(path: str) -> dict:
             "retraction": row.get("retraction_status", "").strip().lower(),
             "publication_type": row.get("publication_type", "").strip().lower(),
             "peer_reviewed": row.get("peer_reviewed", "").strip().lower(),
+            # Loaded because the join below needs it: a source whose text was never obtained
+            # cannot support a claim, whatever its verification and inclusion columns say.
+            "retrieval": row.get("retrieval_status", "").strip().lower(),
         }
     return sources
 
@@ -198,6 +202,53 @@ def load_claims(path: str, sources: dict) -> tuple:
 
 def certainty_value(row: dict) -> str:
     return row.get("certainty", "").strip().lower()
+
+
+def claim_retrieval_gaps(claims: dict, sources: dict) -> list:
+    """Verified claims joined to a source whose text was never obtained.
+
+    This is the join this script exists to make, and it is the one it could not make: the
+    source record carried `verification`/`inclusion`/`retraction` but not `retrieval_status`,
+    so a claim could be supported by a `verified`, `included` source that was marked
+    `retrieval_status=empty` -- a paper nobody obtained -- and the audit reported pass.
+
+    Reported as an input condition, not a finding. Calling it an error would say the claim
+    is unsupported, which we do not know; what we know is that it was never checked.
+    """
+    gaps, seen = [], set()
+    for claim_id in sorted(claims):
+        row = claims[claim_id]
+        if row.get("verification_status", "").strip().lower() != "verified":
+            continue
+        for source_id in split_ids(row.get("source_ids", "")):
+            record = sources.get(source_id)
+            if record is None:
+                continue                      # unknown source: already a finding
+            if record.get("retrieval") in READ_RETRIEVAL_STATUSES:
+                continue
+            key = (claim_id, source_id)
+            if key in seen:
+                continue
+            seen.add(key)
+            gaps.append(
+                {
+                    "claim_id": claim_id,
+                    "source_id": source_id,
+                    "retrieval_status": record.get("retrieval") or "blank",
+                    "reason": (
+                        "claim %s is marked verified and cites %s, but that source's "
+                        "retrieval_status=%s: the text was never obtained, so nothing about "
+                        "this claim could be checked against it"
+                        % (claim_id, source_id, record.get("retrieval") or "blank")
+                    ),
+                    "action": (
+                        "supply the source text (or record retrieval_status=user_supplied "
+                        "with a locator) and re-run; until then the claim is unverified in "
+                        "fact, whatever the ledger's verification column says"
+                    ),
+                }
+            )
+    return gaps
 
 
 
@@ -431,6 +482,13 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="do not warn about registered claims that never appear in the manuscript",
     )
+    parser.add_argument(
+        "--allow-insufficient",
+        action="store_true",
+        help="exit 0 although a verified claim cites a source that was never retrieved. The "
+             "status stays insufficient_evidence and input_gaps[] stays populated, so the "
+             "override is recorded rather than silent.",
+    )
     return parser
 
 
@@ -456,6 +514,8 @@ def cli() -> int:
                 "claims_registered": len(claims),
                 "sources_registered": len(sources),
             },
+            input_gaps=claim_retrieval_gaps(claims, sources),
+            allow_insufficient=args.allow_insufficient,
         )
 
     draft_issues, used_claims, used_sources = audit_draft(text, claims, sources, args.strict)
@@ -481,6 +541,8 @@ def cli() -> int:
             "sources_registered": len(sources),
             "sources_cited": len(used_sources),
         },
+        input_gaps=claim_retrieval_gaps(claims, sources),
+        allow_insufficient=args.allow_insufficient,
     )
 
 

@@ -13,6 +13,7 @@ from typing import Any
 
 from _common import (
     DATE_RE,
+    READ_RETRIEVAL_STATUSES,
     SOURCE_ID_RE,
     InputError,
     Issue,
@@ -63,6 +64,9 @@ RETRACTION = {"not_checked", "clear", "retracted", "expression_of_concern", "cor
 INCLUSION = {"included", "excluded", "pending", "cited_for_context"}
 CITABLE = {"included", "cited_for_context"}
 RETRIEVAL = {"returned", "empty", "unavailable", "error", "user_supplied"}
+#: READ_RETRIEVAL_STATUSES is the shared definition in _common.py; this alias keeps the
+#: call sites in this script readable.
+READ_RETRIEVAL = READ_RETRIEVAL_STATUSES
 EXTRACTION_FIELDS = [
     "study_design",
     "population",
@@ -374,6 +378,53 @@ def build_summary(rows: list) -> dict:
     }
 
 
+def retrieval_gaps(rows: list) -> list:
+    """Citable sources whose text was never obtained.
+
+    `retrieval_status` used to be enum-checked and tallied and then ignored by every
+    decision path, so a source marked `empty`/`unavailable` could carry a `verified`
+    verification and an `included` inclusion, its ten extraction fields written as the
+    sanctioned `not_reported`, and support a claim while `validate_sources --strict`,
+    `audit_citations --strict` and the gate all reported pass.
+
+    The reason this is an input condition and not a finding: an extractor cannot know what a
+    paper does or does not report if nobody obtained the paper. `not_reported` is a claim
+    about the source, and it cannot be made truthfully without the source. So the ledger is
+    not "wrong" here -- it is unanswerable, and the honest answer is to say which texts are
+    missing rather than to grade the claim.
+    """
+    gaps = []
+    for row in rows:
+        inclusion = row.get("inclusion_status", "").strip().lower()
+        if inclusion not in CITABLE:
+            continue
+        retrieval = row.get("retrieval_status", "").strip().lower()
+        if retrieval in READ_RETRIEVAL:
+            continue
+        source_id = row.get("source_id", "").strip()
+        detail = retrieval or "blank"
+        if detail not in RETRIEVAL:
+            detail = "%s (not a recognised retrieval status)" % detail
+        gaps.append(
+            {
+                "source_id": source_id,
+                "inclusion_status": inclusion,
+                "retrieval_status": retrieval or "blank",
+                "reason": (
+                    "marked %s but retrieval_status=%s: the text was never obtained, so "
+                    "nothing in this row can be checked and any extraction value in it is "
+                    "unverifiable" % (inclusion, detail)
+                ),
+                "action": (
+                    "supply the source text (or record retrieval_status=user_supplied with a "
+                    "locator), or drop the row from the citable set; a source nobody read "
+                    "cannot support a claim"
+                ),
+            }
+        )
+    return gaps
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description=(
@@ -403,6 +454,13 @@ def build_parser() -> argparse.ArgumentParser:
         "--require-clear-retraction",
         action="store_true",
         help="fail when an included source has a retraction status other than clear",
+    )
+    parser.add_argument(
+        "--allow-insufficient",
+        action="store_true",
+        help="exit 0 although citable sources were never retrieved. The status stays "
+             "insufficient_evidence and input_gaps[] stays populated, so the override is "
+             "recorded rather than silent.",
     )
     return parser
 
@@ -440,7 +498,13 @@ def cli() -> int:
                 )
     if not rows:
         issues.append(issue("warning", "EMPTY_LEDGER"))
-    return emit_report(TOOL, issues, summary=summary)
+    return emit_report(
+        TOOL,
+        issues,
+        summary=summary,
+        input_gaps=retrieval_gaps(rows),
+        allow_insufficient=args.allow_insufficient,
+    )
 
 
 if __name__ == "__main__":

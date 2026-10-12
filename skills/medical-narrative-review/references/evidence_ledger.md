@@ -27,6 +27,15 @@ inclusion_status,exclusion_reason,retrieval_status,theme,notes
 | `inclusion_status` | `included`, `cited_for_context`, `excluded`, `pending` |
 | `retrieval_status` | `returned`, `empty`, `unavailable`, `error`, `user_supplied` |
 
+**`retrieval_status` decides whether the row may be cited at all.** Only `returned` and
+`user_supplied` mean the text exists and was read; every other value means it was not obtained, so
+nothing in that row can be checked and any extraction value in it — including `not_reported` — is
+unverifiable. A citable row (`included` or `cited_for_context`) with any other retrieval status
+makes `validate_sources`, `audit_citations` and `gate` exit `3` with `status: insufficient_evidence`
+and a worklist in `input_gaps[]`, rather than passing. Writing `not_reported` into the extraction
+columns does not make an unread source usable: `not_reported` is itself a claim about a paper
+nobody obtained.
+
 ### The four inclusion states
 
 - `included` — part of the evidence base. Counted in the flow diagram, listed in the evidence table,

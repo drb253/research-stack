@@ -152,12 +152,28 @@ def issue(
     )
 
 
+#: Top-line run status. `pass` and `fail` are findings about the artefact; an input gap is
+#: `insufficient_evidence` and must never be presented in the same shape, or carry the same
+#: exit code, as a finding. See docs/EVIDENCE-INVARIANT.md.
+RUN_STATUSES = ("pass", "fail", "insufficient_evidence")
+STATUS_EXIT_CODE = {"pass": 0, "fail": 1, "insufficient_evidence": 3}
+
+#: The only `retrieval_status` values under which a source may be cited. `user_supplied`
+#: counts because the ledger names a locator for text the author handed over; every other
+#: value means the text was never obtained, so nothing in that row can be checked and any
+#: extraction value in it is unverifiable. Defined once here so validate_sources and
+#: audit_citations cannot drift apart on the question of what "we have the paper" means.
+READ_RETRIEVAL_STATUSES = {"returned", "user_supplied"}
+
+
 def emit_report(
     tool: str,
     issues: Iterable[Issue],
     *,
     summary: dict | None = None,
     extra: dict | None = None,
+    input_gaps: Iterable[dict] | None = None,
+    allow_insufficient: bool = False,
 ) -> int:
     ordered = sorted(
         issues,
@@ -170,19 +186,27 @@ def emit_report(
     )
     error_count = sum(item.severity == "error" for item in ordered)
     warning_count = sum(item.severity == "warning" for item in ordered)
+    gaps = list(input_gaps or [])
     payload = {
         "tool": tool,
-        "status": "fail" if error_count else "pass",
+        # An input gap outranks a finding: a run that could not read its inputs is not a
+        # verdict on the artefact, however many findings it also happens to carry.
+        "status": "insufficient_evidence" if gaps else ("fail" if error_count else "pass"),
         "summary": {
             "errors": error_count,
             "warnings": warning_count,
+            "input_gaps": len(gaps),
             **(summary or {}),
         },
         "issues": [item.to_dict() for item in ordered],
     }
+    if gaps:
+        payload["input_gaps"] = gaps
     if extra is not None:
         payload.update(extra)
     print(json.dumps(payload, indent=2, sort_keys=True))
+    if gaps and not allow_insufficient:
+        return STATUS_EXIT_CODE["insufficient_evidence"]
     return 1 if error_count else 0
 
 
