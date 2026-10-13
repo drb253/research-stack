@@ -44,7 +44,15 @@ if (!file.exists(input_path)) {
 
 dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
 
-dat <- read.csv(input_path, stringsAsFactors = FALSE, na.strings = c("", "NA", "N/A"))
+dat <- tryCatch(
+  read.csv(input_path, stringsAsFactors = FALSE, na.strings = c("", "NA", "N/A")),
+  error = function(e) {
+    ## Unparseable content is an input condition, not a finding about the analysis.
+    cat(paste0("Error: could not parse ", input_path, ": ", conditionMessage(e), "\n"),
+        file = stderr())
+    quit(save = "no", status = 4)
+  }
+)
 required <- c("study_id", "effect_id", "effect_metric", "estimate", "se")
 missing <- setdiff(required, names(dat))
 
@@ -154,6 +162,13 @@ cat("EvidenceForge minimal meta-analysis run\n")
 cat("=======================================\n\n")
 cat("Input:", normalizePath(input_path, winslash = "/", mustWork = FALSE), "\n")
 cat("Effects included:", nrow(dat), "\n")
+not_estimable <- isTRUE(model$QE <= model$k - 1)
+if (not_estimable) {
+  cat("Heterogeneity: not estimable (QE <= df)\n")
+  cat("NOTE: QE <= df, so the I^2 / H^2 / Q values in the model summary below are not",
+      "estimable; they are printed for completeness only and must not be read as",
+      "'no heterogeneity'.\n")
+}
 cat("Studies represented:", length(unique(dat$study_id)), "\n")
 cat("Effect metric:", metric_values[[1]], "\n\n")
 print(summary(model))
@@ -171,8 +186,10 @@ results <- data.frame(
   ci_low = model$ci.lb,
   ci_high = model$ci.ub,
   tau2 = model$tau2,
-  I2 = model$I2,
-  H2 = model$H2,
+  ## NA when QE <= df: the quantity is undefined, and 0 reads as "no heterogeneity".
+  I2 = if (not_estimable) NA_real_ else model$I2,
+  H2 = if (not_estimable) NA_real_ else model$H2,
+  heterogeneity = if (not_estimable) "not estimable (QE <= df)" else "estimated",
   p_value = model$pval,
   stringsAsFactors = FALSE
 )

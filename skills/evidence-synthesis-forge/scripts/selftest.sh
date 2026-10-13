@@ -158,6 +158,27 @@ expect_exit 3 "se <= 0 is an INPUT CONDITION (exit 3)" python3 "$MAF/validate_co
 expect_exit 4 "an unreadable coding sheet is insufficient_input (exit 4)" python3 "$MAF/validate_coding_sheet.py" --input "$TMP/no-such-sheet.csv"
 # ...and the same condition in the engine: a pooled estimate must not be written over a subset.
 expect_exit 3 "the engine refuses a partly unusable sheet (exit 3)" Rscript "$MAF/cochrane_meta.R" --input "$TMP/cs_blank_engine.csv" --outdir "$TMP/ma_blank"
+# run_meta_analysis.R prints summary(model), which carries I^2/H^2/Q; with QE <= df those are
+# undefined, and printing 0.0% reads as "no heterogeneity" -- a claim about the literature
+# rather than a statement that the quantity could not be estimated.
+printf 'study_id,effect_id,effect_metric,estimate,se\nS1,E1,MD,0.50,0.10\nS2,E2,MD,0.50,0.10\n' > "$TMP/rma_k2.csv"
+printf 'study_id,effect_id,effect_metric,estimate,se\nS1,E1,MD,0.10,0.05\nS2,E2,MD,0.90,0.05\nS3,E3,MD,0.30,0.05\nS4,E4,MD,0.70,0.05\nS5,E5,MD,0.50,0.05\n' > "$TMP/rma_spread.csv"
+expect_exit 0 "run_meta_analysis on a k=2 sheet" Rscript "$MAF/run_meta_analysis.R" --input "$TMP/rma_k2.csv" --outdir "$TMP/rma_k2_out"
+if grep -q "not estimable (QE <= df)" "$TMP/rma_k2_out/meta-summary.txt" \
+   && grep -q "not estimable" "$TMP/rma_k2_out/model-results.csv"; then
+  ok "heterogeneity is reported as not estimable when QE <= df (not as 0%)"
+else
+  no "heterogeneity was printed as a number when it is not estimable"
+fi
+expect_exit 0 "run_meta_analysis on a spread sheet" Rscript "$MAF/run_meta_analysis.R" --input "$TMP/rma_spread.csv" --outdir "$TMP/rma_spread_out"
+if ! grep -q "not estimable" "$TMP/rma_spread_out/meta-summary.txt" \
+   && grep -q '"97.5"\|97.5' "$TMP/rma_spread_out/model-results.csv"; then
+  ok "heterogeneity is still reported normally when QE > df"
+else
+  no "an estimable heterogeneity was suppressed"
+fi
+printf '\x00\x01\x02 binary junk \x00' > "$TMP/rma_junk.csv"
+expect_exit 4 "an unparseable sheet is insufficient_input (exit 4)" Rscript "$MAF/run_meta_analysis.R" --input "$TMP/rma_junk.csv" --outdir "$TMP/rma_junk_out"
 if [ ! -f "$TMP/ma_blank/results.json" ]; then
   ok "no pooled estimate is written when rows were dropped"
 else
