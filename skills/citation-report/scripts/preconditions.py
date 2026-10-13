@@ -21,6 +21,9 @@ no finding is presented as a finding.
 
 from __future__ import annotations
 
+import re
+import unicodedata
+
 import _common
 import _signals
 
@@ -31,6 +34,37 @@ REFERENCE_ENTRIES_FOR_STYLE_CHECK = 10
 #: probably the wrong language rather than the document being devoid of claims.
 MIN_TRIGGER_YIELD = 0.02
 SENTENCES_FOR_LANGUAGE_CHECK = 50
+#: The trigger rules are English-specific, so "did anything match?" cannot be a language
+#: test: a bare digit fires STATISTIC, and digits read the same in every language. A
+#: document full of numbers therefore cleared the share test above and was reported as a
+#: document with nothing to check. Language is read from the words instead -- the share
+#: of tokens that are common English function words.
+ENGLISH_FUNCTION_WORDS = frozenset(
+    """
+    the of and to in is are was were that this with for on by as be or from at an it
+    its we our their has have had not but which these those can may also between more
+    than when where while such other into over after before within
+    """.split()
+)
+#: On a document long enough to judge (SENTENCES_FOR_LANGUAGE_CHECK), this share of its
+#: tokens being English function words is the floor for "this is English". Measured:
+#: English controls 0.22-0.43, a mostly-Spanish document 0.03, Spanish prose 0.00.
+MIN_ENGLISH_FUNCTION_SHARE = 0.08
+#: A short document has too few tokens for the bar above to be sharp, but it still has to
+#: clear something before it is called another language -- a three-sentence English method
+#: paragraph must not be blocked. Deliberately lower than the long-document bar.
+SHORT_ENGLISH_FUNCTION_SHARE = 0.04
+#: Below this many tokens there is not enough text to call a short document another
+#: language at all: "too short to tell" is not "wrong language", and stays not_applicable.
+#: The floor is deliberately not small: two technical English sentences can be twenty
+#: tokens with no function word in them ("Statin therapy reduced events [src:S001]."),
+#: and that repetition is not evidence of another language.
+SHORT_LANGUAGE_CHECK_MIN_TOKENS = 40
+#: The words above cannot see a document written in another script, so the script is
+#: measured too: this share of the graded text's letters must be Latin script.
+MIN_LATIN_LETTER_SHARE = 0.5
+#: A handful of letters proves nothing about the script the document is written in.
+SHORT_SCRIPT_CHECK_MIN_LETTERS = 30
 #: A sentence this long is not a sentence; it is a failed split.
 SUSPECT_MEDIAN_SENTENCE_CHARS = 400
 #: One sentence swallowing this share of the document is a failed split -- but only in a
@@ -107,14 +141,109 @@ def _citation_style(document, bundle) -> dict:
     )
 
 
-def _trigger_language(document, verdicts) -> dict:
-    """Share of narrative sentences that any trigger fired on.
+_LANGUAGE_TOKEN_RE = re.compile(r"[^\W\d_]+", re.UNICODE)
 
-    Read the result carefully: this catches the extreme case, where nothing matched at
-    all. A non-English document that is full of numbers still clears it, because digits
-    are language-independent -- so the record also reports whether any
-    *language-dependent* signal fired, which is the part that tells a reader whether
-    non-numeric claims are being found at all.
+
+def _graded_text(document) -> str:
+    """The narrative prose the language test reads.
+
+    Bibliography apparatus is excluded for the same reason the style and source-list
+    checks exclude it: a reference list is not the document's prose.
+    """
+    narrative = getattr(document, "narrative_sentences", None)
+    if callable(narrative):
+        sentences = narrative()
+    else:
+        sentences = list(getattr(document, "sentences", []) or [])
+    texts = [getattr(sentence, "text", "") for sentence in sentences]
+    if any(text.strip() for text in texts):
+        return " ".join(texts)
+    return getattr(document, "text", "") or ""
+
+
+def _letter_is_latin(character: str) -> bool:
+    """Whether a letter belongs to the Latin script, accents included."""
+    return "LATIN" in unicodedata.name(character, "")
+
+
+def _language_evidence(document) -> dict:
+    """Read the document's language without using the English trigger rules.
+
+    Two independent reads, because each has a blind spot: the function-word share
+    cannot see a document written in a non-Latin script, and the script share cannot
+    see a Latin-script language that is not English.
+    """
+    text = _graded_text(document)
+    tokens = _LANGUAGE_TOKEN_RE.findall(text)
+    function_hits = sum(1 for token in tokens if token.lower() in ENGLISH_FUNCTION_WORDS)
+    letters = [character for character in text if character.isalpha()]
+    latin_letters = sum(1 for character in letters if _letter_is_latin(character))
+    return {
+        "tokens": len(tokens),
+        "function_hits": function_hits,
+        "function_share": (function_hits / len(tokens)) if tokens else 0.0,
+        "letters": len(letters),
+        "latin_share": (latin_letters / len(letters)) if letters else 1.0,
+    }
+
+
+def _language_observed(evidence: dict) -> str:
+    return "English function words %d of %d token(s) = %.1f%%; Latin letters %.1f%%" % (
+        evidence["function_hits"],
+        evidence["tokens"],
+        evidence["function_share"] * 100,
+        evidence["latin_share"] * 100,
+    )
+
+
+def _looks_english(evidence: dict) -> bool:
+    """The long-document language test: English words in a Latin script."""
+    if evidence["function_share"] < MIN_ENGLISH_FUNCTION_SHARE:
+        return False
+    if evidence["letters"] and evidence["latin_share"] < MIN_LATIN_LETTER_SHARE:
+        return False
+    return True
+
+
+def _clearly_another_language(evidence: dict) -> bool:
+    """Whether a document too short for the share test is decided anyway.
+
+    Conservative on purpose: a non-Latin script is decided as soon as there are enough
+    letters to see it, but the function-word bar is lower for a short document and is
+    applied only when there are enough tokens to mean anything. A short English
+    paragraph must not be blocked merely for being short.
+    """
+    if (
+        evidence["letters"] >= SHORT_SCRIPT_CHECK_MIN_LETTERS
+        and evidence["latin_share"] < MIN_LATIN_LETTER_SHARE
+    ):
+        return True
+    return (
+        evidence["tokens"] >= SHORT_LANGUAGE_CHECK_MIN_TOKENS
+        and evidence["function_share"] < SHORT_ENGLISH_FUNCTION_SHARE
+    )
+
+
+def _trigger_language(document, verdicts) -> dict:
+    """Whether the document is in a language these English signals can read.
+
+    Read the result carefully. Two reads are combined, and neither is a finding about
+    the document:
+
+    * The share of narrative sentences a trigger fired on. This catches the extreme case,
+      where nothing matched at all. A non-English document that is full of numbers still
+      clears it, because digits are language-independent -- so the record also reports
+      whether any *language-dependent* signal fired, which is the part that tells a
+      reader whether non-numeric claims are being found at all.
+    * A language read that does not use the trigger rules at all: the share of tokens
+      that are common English function words, and the share of the document's letters
+      that are Latin script. The second catches a document in another script that
+      happens to contain an English word or two.
+
+    Below SENTENCES_FOR_LANGUAGE_CHECK sentences a trigger share proves nothing, so the
+    language read decides between two outcomes the single exemption used to conflate:
+    "clearly another language", which fails, and "too short to tell", which stays
+    not_applicable.
     """
     total = len(verdicts)
     language_dependent = {
@@ -137,30 +266,57 @@ def _trigger_language(document, verdicts) -> dict:
             "normal in a results-heavy section, and it is also what a non-English "
             "document looks like."
         )
+    evidence = _language_evidence(document)
+    language_observed = _language_observed(evidence)
     if total < SENTENCES_FOR_LANGUAGE_CHECK:
+        if _clearly_another_language(evidence):
+            return _record(
+                "TRIGGER_LANGUAGE_UNSUPPORTED",
+                "failed",
+                "%d narrative sentence(s); %s" % (total, language_observed),
+                "the document is in another language rather than too short to judge: "
+                "%s. The signals are English-specific, so it would be reported as a "
+                "document with nothing to check." % language_observed,
+                "grade an English version, or treat the report's coverage figures as not "
+                "applicable to this document",
+            )
         return _record(
             "TRIGGER_LANGUAGE_UNSUPPORTED",
             "not_applicable",
-            "%d narrative sentence(s)" % total,
+            "%d narrative sentence(s); %s" % (total, language_observed),
             "too short to distinguish a wrong-language document from a document with "
             "few claims",
         )
     triggered = sum(1 for verdict in verdicts if verdict.requires_citation)
     share = triggered / total
-    observed = "%d of %d sentence(s) = %.1f%%; language-dependent signals: %s" % (
+    observed = "%d of %d sentence(s) = %.1f%%; language-dependent signals: %s; %s" % (
         triggered,
         total,
         share * 100,
         ", ".join(style_fired) if style_fired else "none",
+        language_observed,
     )
-    if share < MIN_TRIGGER_YIELD:
+    english = _looks_english(evidence)
+    if share < MIN_TRIGGER_YIELD or not english:
+        if not english:
+            detail = (
+                "the document does not read as English: %s. A bare digit fires "
+                "STATISTIC in any language, so the trigger share alone does not prove "
+                "the document was read. The signals are English-specific, so this is "
+                "what a non-English document looks like -- and it would be reported as "
+                "a document with nothing to check." % language_observed
+            )
+        else:
+            detail = (
+                "almost no sentence matched any attribution signal. The signals are "
+                "English-specific, so this is what a non-English document looks like -- "
+                "and it would be reported as a document with nothing to check."
+            )
         return _record(
             "TRIGGER_LANGUAGE_UNSUPPORTED",
             "failed",
             observed,
-            "almost no sentence matched any attribution signal. The signals are "
-            "English-specific, so this is what a non-English document looks like -- and "
-            "it would be reported as a document with nothing to check." + extra,
+            detail + extra,
             "grade an English version, or treat the report's coverage figures as not "
             "applicable to this document",
         )

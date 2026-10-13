@@ -554,6 +554,135 @@ expect_json "a short document is not accused of a failed split" "$TMP/tiny.json"
   "[r['code'] for r in d['preconditions'] if r['status'] == 'failed']" "[]"
 
 echo
+echo "== 16d. a document in another language is never reported as read and clean =="
+# The trigger share is language-independent: a bare digit fires STATISTIC, so a Spanish
+# document full of percentages cleared it and was reported as a document with nothing to
+# check. Language has to be judged by the words, not by whether the rules happened to
+# match. The fixtures are built here, in the temp workspace, and never committed.
+python3 - "$WS" <<'PY'
+import os, sys
+ws = sys.argv[1]
+ES = [
+    "El tratamiento con estatinas redujo los eventos cardiovasculares mayores en adultos con hiperlipidemia.",
+    "Los autores informaron que la terapia fue bien tolerada en la mayoria de los participantes del ensayo.",
+    "La revision resume la evidencia disponible sobre el manejo de la enfermedad coronaria estable.",
+    "Este analisis exploratorio sugirio una reduccion del riesgo de accidente cerebrovascular isquemico.",
+    "La mortalidad por todas las causas no mostro diferencias entre los grupos estudiados en el ensayo.",
+    "Los participantes fueron asignados de forma aleatoria a recibir el tratamiento o el placebo correspondiente.",
+    "El desenlace principal se evaluo durante el seguimiento promedio de los pacientes incluidos.",
+    "Las conclusiones deben interpretarse con cautela debido al tamano limitado de la muestra analizada.",
+    "La terapia combinada produjo una mejora modesta en los niveles de colesterol de baja densidad.",
+    "Los investigadores describieron un perfil de seguridad aceptable durante el periodo de observacion.",
+    "La calidad metodologica de los estudios incluidos fue evaluada por dos revisores independientes.",
+    "El riesgo de sesgo se considero bajo en la mayoria de los dominios evaluados por los autores.",
+    "La heterogeneidad entre los ensayos fue sustancial segun el analisis estadistico realizado.",
+    "Los resultados son consistentes con los hallazgos descritos en revisiones sistematicas previas.",
+    "La intervencion no modifico de manera significativa la incidencia de eventos adversos graves.",
+    "El efecto observado podria explicarse por diferencias en las caracteristicas basales de los grupos.",
+    "La evidencia disponible es insuficiente para recomendar el uso generalizado de esta estrategia.",
+    "Se requieren ensayos aleatorizados mas amplios antes de adoptar la intervencion en la practica clinica.",
+    "Los autores declaran no tener conflictos de interes relacionados con el presente trabajo.",
+    "La busqueda bibliografica se realizo en las principales bases de datos biomedicas disponibles.",
+]
+ES_NUM = [
+    "La reduccion relativa del riesgo fue del 45% en el grupo tratado.",
+    "El hazard ratio observado fue de 0.80 en el analisis principal.",
+    "La incidencia acumulada fue del 12.4% durante el seguimiento.",
+    "El numero de participantes incluidos fue de 616 en total.",
+    "El intervalo de confianza del 95% fue de 0.60 a 0.94.",
+    "La presion arterial sistolica disminuyo 4.5 mmHg en promedio.",
+    "El valor de p fue de 0.03 en la comparacion entre los grupos.",
+    "La mortalidad global fue del 7.2% en el grupo de intervencion.",
+]
+EN_NUM = [
+    "The primary outcome occurred in 12 of 340 participants in the treatment group.",
+    "The secondary outcome occurred in 27 of 338 participants in the control group.",
+    "The mean change in systolic blood pressure was 4.5 mmHg.",
+    "The hazard ratio was 0.80.",
+    "The confidence interval ranged from 0.60 to 0.94.",
+    "The absolute risk reduction was 3.2 percent.",
+]
+EN_RICH = [
+    "Statin therapy significantly reduced major adverse cardiovascular events (HR 0.80) in adults with hyperlipidaemia.",
+    "The authors reported that the intervention was well tolerated in most of the participants.",
+    "This review summarises the available evidence for the management of stable coronary artery disease.",
+    "An exploratory analysis suggested that statins reduce the risk of ischaemic stroke.",
+    "The most important finding was a substantial reduction in all-cause mortality.",
+    "We defined the primary outcome as a composite of death and myocardial infarction.",
+    "The analysis showed that the treatment was associated with better outcomes.",
+    "These results are consistent with findings from previous systematic reviews.",
+    "The intervention did not significantly change the incidence of serious adverse events.",
+    "The observed effect may be explained by differences in the baseline characteristics.",
+]
+def repeat(pool, count):
+    return [pool[index % len(pool)] for index in range(count)]
+def write(name, body):
+    open(os.path.join(ws, name), "w").write("\n\n".join(body) + "\n")
+write("es_nodigits.md", repeat(ES, 60))
+write("es_digits.md", repeat(ES + ES_NUM, 60))
+write("es_boundary.md", repeat(ES, 49) + [ES_NUM[0]])
+write("es_short.md", repeat(ES, 3))
+write("en_numeric_only.md", repeat(EN_NUM, 60))
+write("en_control.md", repeat(EN_RICH, 60))
+PY
+
+# 1. A non-English document containing percentages. A bare digit fires STATISTIC, so it
+# cleared the old share test; this is the slip-through the language read closes.
+"${RUN[@]}" audit --document "$WS/es_digits.md" --offline >"$TMP/es_digits.json" 2>&1
+es_digits_exit=$?
+expect_json "percentages do not make a Spanish document readable" "$TMP/es_digits.json" \
+  "d['status']" "insufficient_input"
+expect_json "named as TRIGGER_LANGUAGE_UNSUPPORTED" "$TMP/es_digits.json" \
+  "[r['code'] for r in d['preconditions'] if r['status'] == 'failed']" "['TRIGGER_LANGUAGE_UNSUPPORTED']"
+expect_json_in "with the language read, not the trigger share, as the evidence" "$TMP/es_digits.json" \
+  "[r['observed'] for r in d['preconditions'] if r['code'] == 'TRIGGER_LANGUAGE_UNSUPPORTED'][0]" \
+  "English function words"
+if [ "$es_digits_exit" -eq 4 ]; then ok "and it blocks instead of reporting a clean read (exit 4)"; else no "and it blocks (want 4, got $es_digits_exit)"; fi
+
+# 2. Regression guard: the same document with no digits still fails.
+"${RUN[@]}" audit --document "$WS/es_nodigits.md" --offline >"$TMP/es_nodigits.json" 2>&1
+es_nodigits_exit=$?
+expect_json "a Spanish document with no digits still fails" "$TMP/es_nodigits.json" \
+  "d['status']" "insufficient_input"
+if [ "$es_nodigits_exit" -eq 4 ]; then ok "and it blocks (exit 4)"; else no "and it blocks (want 4, got $es_nodigits_exit)"; fi
+
+# The audit boundary: 50 sentences with one trigger is exactly 2.0%, which the old share
+# test passed. The language read decides it instead.
+"${RUN[@]}" audit --document "$WS/es_boundary.md" --offline >"$TMP/es_boundary.json" 2>&1
+es_boundary_exit=$?
+expect_json "the 2.0%-share boundary no longer passes a Spanish document" "$TMP/es_boundary.json" \
+  "d['status']" "insufficient_input"
+if [ "$es_boundary_exit" -eq 4 ]; then ok "and it blocks (exit 4)"; else no "and it blocks (want 4, got $es_boundary_exit)"; fi
+
+# 3. A short document that is clearly another language fails, rather than being exempted
+# as "too short to tell" -- the two cases the old single exemption conflated.
+"${RUN[@]}" audit --document "$WS/es_short.md" --offline >"$TMP/es_short.json" 2>&1
+es_short_exit=$?
+expect_json "a three-sentence Spanish document is not exempted as too short" "$TMP/es_short.json" \
+  "d['status']" "insufficient_input"
+expect_json "and names the language precondition" "$TMP/es_short.json" \
+  "[r['code'] for r in d['preconditions'] if r['status'] == 'failed']" "['TRIGGER_LANGUAGE_UNSUPPORTED']"
+if [ "$es_short_exit" -eq 4 ]; then ok "and it blocks (exit 4)"; else no "and it blocks (want 4, got $es_short_exit)"; fi
+
+# 4. The false-positive guard: an English document whose results section is numeric only,
+# with no citation markers and no language-dependent signal. The old check could only see
+# "no signal fired"; the new one keys on the language, so this must NOT be blocked.
+"${RUN[@]}" audit --document "$WS/en_numeric_only.md" --offline >"$TMP/en_numeric.json" 2>&1
+en_numeric_exit=$?
+expect_json "an English numeric-only results section passes the language check" "$TMP/en_numeric.json" \
+  "[r['status'] for r in d['preconditions'] if r['code'] == 'TRIGGER_LANGUAGE_UNSUPPORTED'][0]" "passed"
+expect_json "and no precondition fails" "$TMP/en_numeric.json" \
+  "[r['code'] for r in d['preconditions'] if r['status'] == 'failed']" "[]"
+if [ "$en_numeric_exit" -eq 0 ]; then ok "so it is not blocked (exit 0)"; else no "so it is not blocked (want 0, got $en_numeric_exit)"; fi
+
+# 5. The English control is unchanged.
+"${RUN[@]}" audit --document "$WS/en_control.md" --offline >"$TMP/en_control.json" 2>&1
+en_control_exit=$?
+expect_json "the English control still passes the language check" "$TMP/en_control.json" \
+  "[r['status'] for r in d['preconditions'] if r['code'] == 'TRIGGER_LANGUAGE_UNSUPPORTED'][0]" "passed"
+if [ "$en_control_exit" -eq 0 ]; then ok "and still exits 0"; else no "and still exits 0 (want 0, got $en_control_exit)"; fi
+
+echo
 echo "== 17. the report never modifies the document it grades =="
 cp "$ASSETS/sample-manuscript.md" "$WS/untouched.md"
 before="$(shasum -a 256 <"$WS/untouched.md" | awk '{print $1}')"
