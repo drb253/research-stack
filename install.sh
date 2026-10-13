@@ -54,18 +54,32 @@ have() { command -v "$1" >/dev/null 2>&1; }
 
 # Install one skill into a target directory without ever destroying something a
 # user put there. The target is only rewritten when it is a symlink (ours, or a
-# leftover): a real file or directory is moved aside to <name>.bak-<timestamp>
-# first, the same way the MCP config writers back up a config they rewrite. A
-# link that already points at this source is left alone, so re-running install.sh
-# neither churns the tree nor accumulates backups.
+# leftover) or an out-of-date copy: a real file or directory that differs is
+# moved aside to <name>.bak-<timestamp> first, the same way the MCP config
+# writers back up a config they rewrite. A target that already matches the
+# requested mode is left alone, so re-running install.sh neither churns the tree
+# nor accumulates backups. Switching modes (symlink <-> --copy-skills) does
+# convert an existing target rather than silently keeping the old mode.
 install_skill() {
   src="$1"; sdir="$2"; name="$3"; dest="$sdir/$name"
   if [ -L "$dest" ]; then
-    if [ "$(readlink "$dest")" = "$src" ]; then return 0; fi
+    # A correct symlink satisfies symlink mode; copy mode must replace it.
+    # Compare with trailing slashes stripped: install-dsh.sh writes the same
+    # link without one, and alternating the two installers must not churn.
+    cur="$(readlink "$dest")"; cur="${cur%/}"; want="${src%/}"
+    if [ "$COPY_SKILLS" != 1 ] && [ "$cur" = "$want" ]; then return 0; fi
     run "rm -f '$dest'"
   elif [ -e "$dest" ]; then
-    bak="$dest.bak-$(date +%Y%m%d%H%M%S)"
-    warn "  $dest is not a symlink -> kept as $(basename "$bak")"
+    # An identical copy satisfies copy mode. Compare the trees rather than a
+    # timestamp: cp -R does not preserve mtimes, so a time test would churn.
+    if [ "$COPY_SKILLS" = 1 ] && [ -d "$dest" ] && diff -rq "$src" "$dest" >/dev/null 2>&1; then
+      return 0
+    fi
+    # Unique backup name: a second-resolution timestamp can collide, and
+    # `mv dir existing-dir` would then nest the tree instead of backing it up.
+    bak="$dest.bak-$(date +%Y%m%d%H%M%S)"; n=1
+    while [ -e "$bak" ]; do bak="$dest.bak-$(date +%Y%m%d%H%M%S)-$n"; n=$((n+1)); done
+    warn "  $dest does not match the requested install -> kept as $(basename "$bak")"
     run "mv '$dest' '$bak'"
   fi
   if [ "$COPY_SKILLS" = 1 ]; then
@@ -324,7 +338,10 @@ if [ "$DO_SKILLS" = 1 ]; then
         # be a no-op, not a symlink named "*".
         [ -d "$d" ] || continue
         name="$(basename "$d")"
-        [ -e "$sdir/$name" ] && continue
+        # -L matters as much as -e: a broken symlink is not "-e", so the guard
+        # would fall through to `ln -s` and abort the whole install under
+        # `set -e` with "File exists" until someone removes the link by hand.
+        if [ -e "$sdir/$name" ] || [ -L "$sdir/$name" ]; then continue; fi
         run "ln -s '$d' '$sdir/$name'"
       done
     fi
@@ -336,7 +353,8 @@ if [ "$DO_SKILLS" = 1 ]; then
         n=0
         while IFS= read -r skill_md; do
           d="$(dirname "$skill_md")"; name="$(basename "$d")"
-          [ -e "$sdir/$name" ] && continue
+          # -L as well as -e, for the same broken-symlink reason as the upstream loop.
+          if [ -e "$sdir/$name" ] || [ -L "$sdir/$name" ]; then continue; fi
           ln -s "$d" "$sdir/$name" 2>/dev/null && n=$((n+1))
         done < <(find "$AIPOCH" -name SKILL.md -type f -not -path '*/.git/*' 2>/dev/null)
         info "  $t: +$n AIPOCH skills (third-party, NOT gated by research-stack)"
