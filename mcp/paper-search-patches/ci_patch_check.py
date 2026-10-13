@@ -209,24 +209,33 @@ def main(argv=None) -> int:
         return gap
 
     failures: list = []
-    pairs = registry_pairs(REPLACEMENTS, VENDORED_TREE)
-
     print("== 1. every applied file mirrors its vendored counterpart ==")
-    problems = replacement_problems(pairs, REPO) + mirror_problems(MIRRORS, REPLACEMENTS, VENDORED_TREE)
     try:
-        check("every replacement the registry writes matches its vendored file", not problems)
-    except Finding as exc:
-        failures.append(str(exc))
-        for problem in problems:
-            print(f"    {problem}")
+        pairs = registry_pairs(REPLACEMENTS, VENDORED_TREE)
+    except Exception as exc:  # noqa: BLE001 - the registry is itself under test here
+        # Same class as the missing-mutation-target case: a checker that dies with a
+        # traceback tells the reader nothing about what to fix. The registry is what step 1
+        # checks, so failing to read it is a finding about the patch system, not a crash.
+        print(f"  FAIL  the patch registry could not be read: {type(exc).__name__}: {exc}")
+        failures.append("the patch registry could not be read")
+        pairs = None
 
-    unconsumed = unconsumed_replacements(pairs, REPLACEMENTS, MIRRORS)
-    try:
-        check("no file in replacements/ is read by nothing", not unconsumed)
-    except Finding as exc:
-        failures.append(str(exc))
-        for name in unconsumed:
-            print(f"    {name}: applied by no registry entry and not a declared mirror")
+    if pairs is not None:
+        problems = replacement_problems(pairs, REPO) + mirror_problems(MIRRORS, REPLACEMENTS, VENDORED_TREE)
+        try:
+            check("every replacement the registry writes matches its vendored file", not problems)
+        except Finding as exc:
+            failures.append(str(exc))
+            for problem in problems:
+                print(f"    {problem}")
+
+        unconsumed = unconsumed_replacements(pairs, REPLACEMENTS, MIRRORS)
+        try:
+            check("no file in replacements/ is read by nothing", not unconsumed)
+        except Finding as exc:
+            failures.append(str(exc))
+            for name in unconsumed:
+                print(f"    {name}: applied by no registry entry and not a declared mirror")
 
     root = Path(tempfile.mkdtemp(prefix="ps-patch-"))
     try:
