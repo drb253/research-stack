@@ -111,6 +111,63 @@ cat("\n== Golden test 3: tau^2 estimators differ as expected (DL vs REML) ==\n")
 r_dl <- rma(yi, vi, data = es1, method = "DL")
 check("DL tau^2 != REML tau^2", abs(r_dl$tau2 - ref1$tau2) > 1e-4, TRUE)
 
+cat("\n== Golden test 4: refusals (an unusable input must be refused, not silently pooled) ==\n")
+## Every other check compares a number produced from a valid sheet. These assert the
+## opposite path: an input gap must exit non-zero and must NOT leave a pooled estimate
+## behind (docs/EVIDENCE-INVARIANT.md; docs/AUDIT-FINDINGS.md section 8).
+mk_sheet <- function(path, est, se, ids = paste0("S", seq_along(est))) {
+  write.csv(data.frame(study_id = ids, effect_id = seq_along(est),
+                       effect_metric = "SMD", estimate = est, se = se),
+            path, row.names = FALSE, na = "")
+}
+sheet_clean <- file.path(tmp, "refuse_clean5.csv")
+mk_sheet(sheet_clean, c(0.10, 0.35, 0.55, 0.72, 0.95), c(0.18, 0.20, 0.22, 0.19, 0.24))
+sheet_blank <- file.path(tmp, "refuse_blank.csv")
+mk_sheet(sheet_blank, c(0.10, 0.35, NA, 0.72, 0.95), c(0.18, 0.20, 0.22, 0.19, 0.24))
+sheet_se0 <- file.path(tmp, "refuse_se0.csv")
+mk_sheet(sheet_se0, c(0.10, 0.35, 0.55, 0.72, 0.95), c(0.18, 0.20, 0, 0.19, 0.24))
+sheet_few <- file.path(tmp, "refuse_few.csv")
+mk_sheet(sheet_few, c(NA, NA), c(0.18, 0.20))
+
+## Runs the engine on a fixture and requires the expected exit status, that a pooled
+## estimate was (or was not) written, and -- when asked -- that the worklist exists.
+## A results.json without a finite "pooled" value counts as "no pooled estimate".
+check_refusal <- function(name, sheet, expect_status, extra = character(),
+                          expect_pooled = FALSE, expect_worklist = FALSE) {
+  outdir <- file.path(tmp, paste0("refusal_", gsub("[^A-Za-z0-9_]", "_", name)))
+  dir.create(outdir, recursive = TRUE, showWarnings = FALSE)
+  status <- system2("Rscript", c(ENGINE, "--input", sheet, "--outdir", outdir, extra),
+                    stdout = FALSE, stderr = FALSE)
+  ok_status <- length(status) == 1L && !is.na(status) &&
+               as.integer(status) == as.integer(expect_status)
+  rj <- file.path(outdir, "results.json")
+  pooled <- if (file.exists(rj)) jnum(rj, "pooled") else NA_real_
+  ok_pool <- if (expect_pooled) is.finite(pooled) else !is.finite(pooled)
+  wl_exists <- file.exists(file.path(outdir, "worklist.json"))
+  ok_wl <- !expect_worklist || wl_exists
+  if (ok_status && ok_pool && ok_wl) {
+    pass <<- pass + 1; cat(sprintf("  PASS  %s\n", name))
+  } else {
+    fail <<- fail + 1
+    cat(sprintf(paste0("  FAIL  %s\n        exit=%s (want %s); pooled=%s (want %s); ",
+                       "worklist=%s (want %s)\n"),
+                name, paste(status, collapse = ","), expect_status,
+                if (is.finite(pooled)) format(pooled) else "none",
+                if (expect_pooled) "a number" else "none",
+                wl_exists, expect_worklist))
+  }
+}
+
+check_refusal("clean 5-study control -> exit 0 with pooled estimate", sheet_clean, 0,
+              expect_pooled = TRUE)
+check_refusal("blank effect size -> exit 3, worklist, no pooled estimate", sheet_blank, 3,
+              expect_worklist = TRUE)
+check_refusal("se <= 0 -> exit 3, worklist, no pooled estimate", sheet_se0, 3,
+              expect_worklist = TRUE)
+check_refusal("fewer than 2 usable effects -> exit 1, no pooled estimate", sheet_few, 1)
+check_refusal("--allow-incomplete -> exit 0, worklist kept, pooled written", sheet_blank, 0,
+              extra = "--allow-incomplete", expect_pooled = TRUE, expect_worklist = TRUE)
+
 cat(sprintf("\nRESULT: %d passed, %d failed\n", pass, fail))
 quit(status = if (fail == 0) 0 else 1)
 

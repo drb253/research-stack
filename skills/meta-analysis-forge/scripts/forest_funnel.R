@@ -18,15 +18,96 @@ g <- function(f, d = NULL) { i <- match(f, args); if (is.na(i) || i == length(ar
 input  <- g("--input"); outdir <- g("--outdir", "figs")
 metric <- g("--metric"); tau2 <- g("--tau2", "REML")
 width  <- as.numeric(g("--width", "9")); height <- as.numeric(g("--height", "0"))
-if (is.null(input) || !file.exists(input)) stop("Provide --input <coding-sheet.csv>")
+if (is.null(input)) stop("Provide --input <coding-sheet.csv>")
+if (!file.exists(input)) {
+  ## A file that could not be read is an input condition, not a finding about the
+  ## analysis: exit 4 (insufficient_input).
+  cat("Error: Provide --input <coding-sheet.csv>\n", file = stderr())
+  quit(save = "no", status = 4)
+}
 dir.create(outdir, recursive = TRUE, showWarnings = FALSE)
 
 d <- read.csv(input, stringsAsFactors = FALSE, na.strings = c("", "NA", "N/A"))
 if (!all(c("study_id","estimate","se","effect_metric") %in% names(d)))
   stop("Sheet needs study_id, effect_metric, estimate, se")
 if (!is.null(metric)) d <- d[toupper(d$effect_metric) == toupper(metric), , drop = FALSE]
-d <- d[is.finite(d$estimate) & is.finite(d$se) & d$se > 0, , drop = FALSE]
+
+## ---- input condition: rows supplied vs rows usable -----------------------
+## The invariant (docs/EVIDENCE-INVARIANT.md): the analysis of the rows that
+## happened to be usable must never be presented as the analysis of the rows
+## supplied. Count them, name every row we cannot use and why, and refuse by
+## default. --allow-incomplete is the documented opt-out; it still writes the
+## worklist and still prints the condition, so the override is logged, not silent.
+allow_incomplete <- "--allow-incomplete" %in% args
+rows_in <- nrow(d)
+est_raw <- d$estimate
+se_raw  <- d$se
+est_num <- suppressWarnings(as.numeric(est_raw))
+se_num  <- suppressWarnings(as.numeric(se_raw))
+usable  <- is.finite(est_num) & is.finite(se_num) & se_num > 0
+effect_ids <- if ("effect_id" %in% names(d)) as.character(d$effect_id) else as.character(seq_len(nrow(d)))
+
+drop_reason <- function(est_raw, se_raw, est_n, se_n) {
+  is_blank <- function(x) is.na(x) || (is.character(x) && !nzchar(trimws(as.character(x))))
+  if (is_blank(est_raw)) return("blank effect size")
+  if (is.na(est_n))      return("non-numeric effect size")
+  if (!is.finite(est_n)) return("non-finite effect size")
+  if (is_blank(se_raw))  return("blank standard error")
+  if (is.na(se_n))       return("non-numeric standard error")
+  if (!is.finite(se_n))  return("non-finite standard error")
+  if (se_n <= 0)         return("se <= 0")
+  "unusable effect"
+}
+
+dropped <- data.frame(row = integer(0), study_id = character(0),
+                      effect_id = character(0), reason = character(0),
+                      stringsAsFactors = FALSE)
+for (i in which(!usable)) {
+  dropped <- rbind(dropped, data.frame(
+    row = i, study_id = as.character(d$study_id[i]), effect_id = effect_ids[i],
+    reason = drop_reason(est_raw[i], se_raw[i], est_num[i], se_num[i]),
+    stringsAsFactors = FALSE))
+}
+d <- d[usable, , drop = FALSE]
+d$estimate <- est_num[usable]
+d$se <- se_num[usable]
+rows_out <- nrow(d)
+
+jstr <- function(x) paste0('"', gsub('"', '\\\\"', as.character(x)), '"')
+if (nrow(dropped) > 0) {
+  items <- vapply(seq_len(nrow(dropped)), function(i) {
+    paste0("{", paste(c(sprintf('"row": %s', jstr(dropped$row[i])),
+                        sprintf('"study_id": %s', jstr(dropped$study_id[i])),
+                        sprintf('"effect_id": %s', jstr(dropped$effect_id[i])),
+                        sprintf('"reason": %s', jstr(dropped$reason[i]))),
+                  collapse = ", "), "}")
+  }, character(1))
+  worklist_path <- file.path(outdir, "worklist.json")
+  writeLines(paste0("{\n",
+    '  "status": "insufficient_evidence",\n',
+    sprintf('  "rows_in": %s,\n', jstr(rows_in)),
+    sprintf('  "rows_out": %s,\n', jstr(rows_out)),
+    sprintf('  "dropped_count": %s,\n', jstr(nrow(dropped))),
+    '  "dropped": [', paste(items, collapse = ", "), "]\n}\n"), worklist_path)
+  cat(sprintf(paste0("INPUT CONDITION: insufficient_evidence -- %d of %d supplied row(s) ",
+                     "could not be used; any estimate below covers only the %d usable row(s).\n"),
+              nrow(dropped), rows_in, rows_out))
+  cat(sprintf("  dropped: %s\n",
+              paste(sprintf("%s (%s)", dropped$study_id, dropped$reason), collapse = "; ")))
+  cat(sprintf("  worklist: %s\n", normalizePath(worklist_path, winslash = "/", mustWork = FALSE)))
+}
+
 if (nrow(d) < 2) stop("Fewer than 2 usable effects.")
+
+if (nrow(dropped) > 0) {
+  if (!allow_incomplete) {
+    cat("  Refusing to present a pooled estimate over a subset of the supplied rows.\n")
+    cat(paste0("  Pass --allow-incomplete to pool the usable rows anyway (the worklist is ",
+               "still written and this condition still reported).\n"))
+    quit(save = "no", status = 3)
+  }
+  cat("  --allow-incomplete: pooling the usable rows; the input condition stands.\n")
+}
 metric <- toupper(d$effect_metric[1])
 is_ratio <- metric %in% c("OR","RR","HR","IRR")
 
@@ -79,8 +160,11 @@ cap <- c(
           if (is_ratio) sprintf("%.2f to %.2f", exp(res$ci.lb), exp(res$ci.ub))
             else sprintf("%.3f to %.3f", res$ci.lb, res$ci.ub),
           res$pval),
-  sprintf("Heterogeneity: tau^2 = %.4f; I^2 = %.1f%%; Q = %.2f (df = %d, p = %.4g).",
-          res$tau2, res$I2, res$QE, res$k - 1, res$QEp),
+  if (res$QE > res$k - 1)
+    sprintf("Heterogeneity: tau^2 = %.4f; I^2 = %.1f%%; Q = %.2f (df = %d, p = %.4g).",
+            res$tau2, res$I2, res$QE, res$k - 1, res$QEp)
+  else
+    "Heterogeneity: not estimable (QE <= df).",
   if (!is.null(pi)) sprintf("Prediction interval: %s.",
           if (is_ratio) sprintf("%.2f to %.2f", exp(pi$pi.lb), exp(pi$pi.ub))
             else sprintf("%.3f to %.3f", pi$pi.lb, pi$pi.ub)) else NULL,

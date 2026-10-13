@@ -51,7 +51,12 @@ moderator <- get_arg("--moderator")
 do_plots  <- has_flag("--plots")
 
 if (is.null(input)) stop("Missing --input (coding sheet CSV).", call. = FALSE)
-if (!file.exists(input)) stop(paste("Input not found:", input), call. = FALSE)
+if (!file.exists(input)) {
+  ## A file that could not be read is an input condition, not a finding about the
+  ## analysis: exit 4 (insufficient_input), the vocabulary used by numbers_provenance.py.
+  cat(paste0("Error: Input not found: ", input, "\n"), file = stderr())
+  quit(save = "no", status = 4)
+}
 dir.create(outdir, recursive = TRUE, showWarnings = FALSE)
 
 ## ---- tiny JSON writer (no non-base dependency) ---------------------------
@@ -96,8 +101,91 @@ if (!all(c("estimate","se") %in% names(dat))) {
 }
 if (!("effect_id" %in% names(dat))) dat$effect_id <- seq_len(nrow(dat))
 
-dat <- dat[is.finite(dat$estimate) & is.finite(dat$se) & dat$se > 0, , drop = FALSE]
+## ---- input condition: rows supplied vs rows usable -----------------------
+## The invariant (docs/EVIDENCE-INVARIANT.md): the analysis of the rows that
+## happened to be usable must never be presented as the analysis of the rows
+## supplied. Count them, name every row we cannot use and why, and refuse by
+## default. --allow-incomplete is the documented opt-out; it still writes the
+## worklist and still prints the condition, so the override is logged, not silent.
+allow_incomplete <- has_flag("--allow-incomplete")
+rows_in <- nrow(dat)
+est_raw <- dat$estimate
+se_raw  <- dat$se
+est_num <- suppressWarnings(as.numeric(est_raw))
+se_num  <- suppressWarnings(as.numeric(se_raw))
+usable  <- is.finite(est_num) & is.finite(se_num) & se_num > 0
+
+drop_reason <- function(est_raw, se_raw, est_n, se_n) {
+  is_blank <- function(x) is.na(x) || (is.character(x) && !nzchar(trimws(as.character(x))))
+  if (is_blank(est_raw)) return("blank effect size")
+  if (is.na(est_n))      return("non-numeric effect size")
+  if (!is.finite(est_n)) return("non-finite effect size")
+  if (is_blank(se_raw))  return("blank standard error")
+  if (is.na(se_n))       return("non-numeric standard error")
+  if (!is.finite(se_n))  return("non-finite standard error")
+  if (se_n <= 0)         return("se <= 0")
+  "unusable effect"
+}
+
+dropped <- data.frame(row = integer(0), study_id = character(0),
+                      effect_id = character(0), reason = character(0),
+                      stringsAsFactors = FALSE)
+for (i in which(!usable)) {
+  dropped <- rbind(dropped, data.frame(
+    row = i, study_id = as.character(dat$study_id[i]),
+    effect_id = as.character(dat$effect_id[i]),
+    reason = drop_reason(est_raw[i], se_raw[i], est_num[i], se_num[i]),
+    stringsAsFactors = FALSE))
+}
+dat <- dat[usable, , drop = FALSE]
+dat$estimate <- est_num[usable]
+dat$se <- se_num[usable]
+rows_out <- nrow(dat)
+
+write_worklist <- function(rows, n_in, n_out, status) {
+  items <- vapply(seq_len(nrow(rows)), function(i) {
+    paste0("{",
+           paste(c(sprintf('"row": %s', jstr(rows$row[i])),
+                   sprintf('"study_id": %s', jstr(rows$study_id[i])),
+                   sprintf('"effect_id": %s', jstr(rows$effect_id[i])),
+                   sprintf('"reason": %s', jstr(rows$reason[i]))),
+                 collapse = ", "),
+           "}")
+  }, character(1))
+  payload <- paste0("{\n",
+    '  "status": ', jstr(status), ",\n",
+    '  "rows_in": ', jstr(n_in), ",\n",
+    '  "rows_out": ', jstr(n_out), ",\n",
+    '  "dropped_count": ', jstr(nrow(rows)), ",\n",
+    '  "dropped": [', paste(items, collapse = ", "), "]\n}\n")
+  path <- file.path(outdir, "worklist.json")
+  writeLines(payload, path)
+  path
+}
+
+worklist_path <- NULL
+if (nrow(dropped) > 0) {
+  worklist_path <- write_worklist(dropped, rows_in, rows_out, "insufficient_evidence")
+  cat(sprintf(paste0("INPUT CONDITION: insufficient_evidence -- %d of %d supplied row(s) ",
+                     "could not be used; any estimate below covers only the %d usable row(s).\n"),
+              nrow(dropped), rows_in, rows_out))
+  cat(sprintf("  dropped: %s\n",
+              paste(sprintf("%s (%s)", dropped$study_id, dropped$reason), collapse = "; ")))
+  cat(sprintf("  worklist: %s\n", normalizePath(worklist_path, winslash = "/", mustWork = FALSE)))
+}
+
 if (nrow(dat) < 2) stop("Fewer than 2 usable effects after cleaning.", call. = FALSE)
+
+if (nrow(dropped) > 0) {
+  if (!allow_incomplete) {
+    cat("  Refusing to present a pooled estimate over a subset of the supplied rows.\n")
+    cat(paste0("  Pass --allow-incomplete to pool the usable rows anyway (the worklist is ",
+               "still written and this condition still reported).\n"))
+    quit(save = "no", status = 3)
+  }
+  cat("  --allow-incomplete: pooling the usable rows; the input condition stands.\n")
+}
+
 if (!is.null(metric)) dat <- dat[toupper(dat$effect_metric) == toupper(metric), , drop = FALSE]
 if (nrow(dat) < 2) stop("Fewer than 2 effects after metric filter.", call. = FALSE)
 
@@ -142,6 +230,10 @@ if (use_rve && "cluster" %in% names(es)) {
 ## ---- heterogeneity (Handbook ch.10: never I^2 alone) ---------------------
 het <- list(Q = re_fit$QE, Q_df = re_fit$k - 1, Q_p = re_fit$QEp,
             tau2 = re_fit$tau2, I2 = re_fit$I2, H2 = re_fit$H2)
+## With QE <= df, I^2 = 0% and H^2 = 1 are what the estimator returns when there is
+## no signal to estimate, not a measurement of "no heterogeneity" in the literature.
+## Report them as not estimable rather than as numbers a reader could read as a finding.
+het_estimable <- isTRUE(het$Q > het$Q_df)
 pi <- tryCatch(predict(re_fit), error = function(e) NULL)
 
 ## ---- subgroup analysis ---------------------------------------------------
@@ -178,11 +270,17 @@ bt <- function(x) if (isTRUE(has_flag("--log-scale"))) exp(x) else x
 ## ---- outputs -------------------------------------------------------------
 out <- list(
   input = normalizePath(input), metric = metric, k = k,
+  status = if (nrow(dropped) > 0) "insufficient_evidence" else "pass",
+  rows_in = rows_in, rows_out = rows_out, dropped_count = nrow(dropped),
   model = tau2, hksj = use_hksj, rve = !is.null(rve_fit),
   pooled = as.numeric(bt(re_fit$b)), ci_lb = as.numeric(bt(re_fit$ci.lb)),
   ci_ub = as.numeric(bt(re_fit$ci.ub)), p = as.numeric(re_fit$pval),
   fe_pooled = if (!is.null(fe_fit)) as.numeric(bt(fe_fit$b)) else NA_real_,
-  tau2 = het$tau2, I2 = het$I2, H2 = het$H2, Q = het$Q, Q_p = het$Q_p,
+  tau2 = het$tau2,
+  I2 = if (het_estimable) het$I2 else NA_real_,
+  H2 = if (het_estimable) het$H2 else NA_real_,
+  Q = if (het_estimable) het$Q else NA_real_,
+  Q_p = if (het_estimable) het$Q_p else NA_real_,
   pi_lb = if (!is.null(pi)) as.numeric(bt(pi$pi.lb)) else NA_real_,
   pi_ub = if (!is.null(pi)) as.numeric(bt(pi$pi.ub)) else NA_real_
 )
@@ -286,8 +384,11 @@ lines <- c(
   sprintf("Cochrane-grade meta-analysis -- metric=%s, k=%d, model=%s%s%s",
           metric, k, tau2, if (use_hksj) " + HKSJ" else "", if (!is.null(rve_fit)) " + RVE(CR2)" else ""),
   sprintf("Pooled effect: %.4f (95%% CI %.4f to %.4f), p = %.4g", out$pooled, out$ci_lb, out$ci_ub, out$p),
-  sprintf("Heterogeneity: tau^2 = %.4f | I^2 = %.1f%% | H^2 = %.2f | Q = %.2f (df = %d, p = %.4g)",
-          het$tau2, het$I2, het$H2, het$Q, het$Q_df, het$Q_p),
+  if (het_estimable)
+    sprintf("Heterogeneity: tau^2 = %.4f | I^2 = %.1f%% | H^2 = %.2f | Q = %.2f (df = %d, p = %.4g)",
+            het$tau2, het$I2, het$H2, het$Q, het$Q_df, het$Q_p)
+  else
+    "Heterogeneity: not estimable (QE <= df)",
   if (!is.null(pi)) sprintf("Prediction interval: %.4f to %.4f", out$pi_lb, out$pi_ub) else "Prediction interval: n/a",
   if (!is.null(fe_fit)) sprintf("Fixed-effect pooled (for comparison): %.4f", out$fe_pooled) else "",
   if (!is.null(hksj_fit)) sprintf("HKSJ-adjusted CI: %.4f to %.4f (p = %.4g)", out$hksj_ci_lb, out$hksj_ci_ub, out$hksj_p) else "",
@@ -313,6 +414,10 @@ writeLines(lines, file.path(outdir, "summary.txt"))
 json_fields <- c(
   sprintf('  "metric": %s', jstr(metric)),
   sprintf('  "k": %s', jstr(k)),
+  sprintf('  "status": %s', jstr(out$status)),
+  sprintf('  "rows_in": %s', jstr(out$rows_in)),
+  sprintf('  "rows_out": %s', jstr(out$rows_out)),
+  sprintf('  "dropped_count": %s', jstr(out$dropped_count)),
   sprintf('  "model": %s', jstr(tau2)),
   sprintf('  "pooled": %s', jstr(out$pooled)),
   sprintf('  "ci_lb": %s', jstr(out$ci_lb)),
@@ -324,6 +429,8 @@ json_fields <- c(
   sprintf('  "H2": %s', jstr(out$H2)),
   sprintf('  "Q": %s', jstr(out$Q)),
   sprintf('  "Q_p": %s', jstr(out$Q_p)),
+  sprintf('  "heterogeneity": %s',
+          jstr(if (het_estimable) "estimable" else "not estimable (QE <= df)")),
   sprintf('  "pi_lb": %s', jstr(out$pi_lb)),
   sprintf('  "pi_ub": %s', jstr(out$pi_ub)),
   sprintf('  "hksj": %s', jstr(use_hksj)),
@@ -342,6 +449,8 @@ for (nm in c("hksj_ci_lb", "hksj_ci_ub", "hksj_p",
   if (!is.null(out[[nm]]))
     json_fields <- c(json_fields, sprintf('  "%s": %s', nm, jstr(out[[nm]])))
 }
+if (!is.null(worklist_path))
+  json_fields <- c(json_fields, sprintf('  "worklist": %s', jstr(worklist_path)))
 json_fields <- c(json_fields,
   sprintf('  "metafor_version": %s', jstr(as.character(packageVersion("metafor")))))
 writeLines(paste0("{\n", paste(json_fields, collapse = ",\n"), "\n}"),
@@ -360,6 +469,7 @@ if (do_plots) {
 }
 
 cat(paste(lines, collapse = "\n"), "\n")
-cat("\nWrote:", paste(file.path(outdir,
-    c("summary.txt","results.json","sessionInfo.txt")), collapse = ", "), "\n")
+written <- file.path(outdir, c("summary.txt", "results.json", "sessionInfo.txt"))
+if (!is.null(worklist_path)) written <- c(written, worklist_path)
+cat("\nWrote:", paste(written, collapse = ", "), "\n")
 
