@@ -444,7 +444,7 @@ that cannot fail is not a gate), then exercises the whole chain
 (`build_reference_list` → `export_document` → `gate` PASS). Run it after any change:
 
 ```bash
-bash scripts/selftest.sh     # RESULT: 19 passed, 0 failed
+bash scripts/selftest.sh     # RESULT: 29 passed, 0 failed
 ```
 
 It needs only `python3` and `bash` — no network, no third-party packages — and is

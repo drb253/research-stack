@@ -58,12 +58,12 @@ matched the preposition in "thinking about how ... might have produced".
 
 ### Measured behaviour of the trigger
 
-`benchmarks/bench_verdicts.py` scores the trigger on 26 constructed cases and on **40 unseen sentences
+`benchmarks/bench_verdicts.py` scores the trigger on 48 constructed cases and on **40 unseen sentences
 from a real review**, with confusion matrices and Wilson intervals. The last measurement:
 
 | Trigger | Accuracy | Sensitivity | Specificity |
 |---|---|---|---|
-| 26 constructed cases | 1.000 | 1.000 | 1.000 |
+| 48 constructed cases | 1.000 | 1.000 | 1.000 |
 | 40 unseen real sentences | **0.900** | **0.867** | **1.000** |
 
 Specificity is asserted, not just printed: a false orange accuses an author of failing to cite something

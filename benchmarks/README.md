@@ -14,7 +14,7 @@ intervals**, so the honest range is visible rather than a bare point estimate.
 | `bench_originality_scaled.py` | Overlap detector on 186 labelled cases (verbatim, light edit, rewrite, unrelated) | no |
 | `bench_originality_real.py` | Overlap detector on **real** bioRxiv/medRxiv preprint → published pairs | yes |
 | `bench_originality.py` | The original 24-case hand-built overlap set (kept for continuity) | no |
-| `bench_verdicts.py` | `citation-report` deterministic channel vs 23 hand-labelled sentences; asserts **conflict precision = 1.000** | no |
+| `bench_verdicts.py` | `citation-report` deterministic channel vs 48 hand-labelled sentences (26 of them conflict positives); asserts **conflict precision = 1.000** | no |
 
 ## Running
 

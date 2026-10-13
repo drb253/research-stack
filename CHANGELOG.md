@@ -31,7 +31,7 @@ versioning follows [Semantic Versioning](https://semver.org/).
   decision (a false positive tells an author they failed to cite). It also carries a second labelled
   set: **40 sentences drawn at a fixed interval from a real 34-page review**, hand-labelled by reading
   them, so the measurement is not taken only on cases written to fit the rules. Measured: accusation
-  accuracy/sensitivity/specificity **1.000/1.000/1.000** on 26 constructed cases and accusation
+  accuracy/sensitivity/specificity **1.000/1.000/1.000** on 48 constructed cases and accusation
   specificity **1.000** on 40 unseen real sentences; trigger accuracy **0.900**, sensitivity **0.867**,
   specificity **1.000**. Specificity is now an asserted safety property.
 - **The metrics found two real defects, in opposite directions.**
@@ -102,8 +102,9 @@ versioning follows [Semantic Versioning](https://semver.org/).
   - `report_gate.py` recomputes the coverage arithmetic from the verdict list, re-locates every span
     in the document, and **re-opens each artifact** to count what is actually in it — including
     requiring the PDF's notes to be findable in its text layer, so a regression to annotations fails.
-  - Measured: **23/23 hand-labelled sentences** correct at rule and state level, trigger precision and
-    recall **1.000**, and **conflict precision 1.000** (the safety property). Caveats, including why
+  - Measured: **48/48 hand-labelled sentences** correct at rule and state level, trigger precision and
+    recall **1.000**, and **conflict precision 1.000 over 26 conflict cases** (the safety property),
+    with a Wilson lower bound of 0.871. Caveats, including why
     a hand-labelled set written by the author of the rules cannot show generalisation, are in
     `docs/BENCHMARK-RESULTS.md` §5.
   - Wired into `verify.sh` (harness runs with the other gates) and CI (`lint` job), and picked up
