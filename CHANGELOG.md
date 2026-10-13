@@ -78,6 +78,14 @@ versioning follows [Semantic Versioning](https://semver.org/).
   writing `~/.dsh/cordis.patch.yml`, so the target ended up not wired at all. It now warns and skips the
   optional pack — and keeps, rather than deletes, a directory left behind by an interrupted clone — so
   the install completes. Found by the verification pass, once the AIPOCH fix made the asymmetry visible.
+- **Springer Nature search returned nothing for ordinary queries.** The connector used `max_results`
+  as the Meta API page size and applied its "every query term must appear in the record" filter
+  *afterwards*, so a default call fetched only 10 loose matches and then discarded them all. Measured
+  with a live free key: "systematic review" returned 0 hits at `p=2` and 0 at `p=10`, but 4 at `p=25`;
+  "CRISPR base editing" returned 0 at `p=2` and 10 at `p=25`. It now always takes one full free-tier
+  page (`p=25`; larger pages answer HTTP 403 "premium feature") and trims after filtering — the same
+  single request, but the filter finally has candidates. Found while configuring a real Springer key,
+  and the `ci_patch_check.py` gate caught the first attempt because the vendored copy was not synced.
 - **`verify.sh` had no `dsh` coverage.** `--targets dsh` silently checked nothing new. The dsh skills
   root is now mapped, and a dedicated section asserts the two failure modes that cost the tools without
   an obvious error: the patch file must contain real rows (an empty or comments-only patch fails DSH

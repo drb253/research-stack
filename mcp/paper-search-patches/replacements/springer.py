@@ -220,11 +220,21 @@ class SpringerNatureSearcher(PaperSource):
 
         Args:
             query: Keyword query (e.g. 'CRISPR base editing').
-            max_results: Maximum records to return (capped at 100 per request).
+            max_results: How many records to return. One Meta API page holds at
+                most 25 records on the free plan (``p`` > 25 answers HTTP 403
+                "premium feature"), so a larger value is trimmed to one page.
         """
         wanted = min(max(int(max_results or 10), 1), 100)
+        # The term filter below runs AFTER the fetch, so requesting only
+        # `wanted` records starved it and made ordinary queries look empty:
+        # measured 2026-10-14, "systematic review" returned 0 hits at p=2 but 4
+        # at p=25, and "CRISPR base editing" returned 0 at p=2 but 10 at p=25.
+        # Always take one full free-tier page and trim after filtering, which
+        # costs the same single request. Asking for p>25 is a premium feature
+        # (HTTP 403), so the page never exceeds 25.
+        page = 25
         try:
-            payload = self._get(META_URL, {"q": query, "p": wanted})
+            payload = self._get(META_URL, {"q": query, "p": page})
         except SourceUnavailable as exc:
             # Springer answers a query with no matches with HTTP 404 plus
             # {"apiMessage": "No data was found for the given query."}.  That is
