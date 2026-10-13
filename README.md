@@ -241,7 +241,7 @@ RESEARCH-STACK VERIFIED
 ## Install options
 
 ```text
---targets LIST   cline,claude,opencode,gemini,lmstudio,trae,cursor,windsurf   (default: cline)
+--targets LIST   cline,claude,opencode,gemini,lmstudio,dsh,trae,cursor,windsurf   (default: cline)
 --minimal        skills + paper-search only (skip ncbi, academic-search, render, R)
 --no-ncbi / --no-academic-search / --no-render / --no-r   skip one default step
 --no-upstream-skills     skip the 160+ K-Dense scientific skills
@@ -790,7 +790,7 @@ passes, and the gate is a set of scripts that can each fail.
 
 | Flag | Effect |
 |---|---|
-| `--targets LIST` | `cline,claude,opencode,gemini,lmstudio,trae,cursor,windsurf` (default `cline`) |
+| `--targets LIST` | `cline,claude,opencode,gemini,lmstudio,dsh,trae,cursor,windsurf` (default `cline`) |
 | `--minimal` | skills + paper-search only |
 | `--no-ncbi` · `--no-academic-search` · `--no-render` · `--no-r` | skip one default step |
 | `--no-upstream-skills` | skip the 160+ K-Dense scientific skills |
@@ -1285,12 +1285,13 @@ Self-plagiarism, and Other Questionable Writing Practices"* (Roig, 3rd rev. 2015
 | **OpenCode** | `~/.config/opencode/skills` | `~/.config/opencode/opencode.json` (`mcp` · `type: local`) |
 | **Gemini CLI** | `~/.gemini/skills` | `~/.gemini/settings.json` |
 | **LM Studio** | `~/.lmstudio/skills` | `~/.lmstudio/mcp.json` |
+| **DeepSeek Harness** | `~/.dsh/skills` | `~/.dsh/cordis.patch.yml` (YAML `insert:` patch layer) |
 | **Trae** | — | `…/Trae/User/mcp.json` |
 | **Cursor** | — | `~/.cursor/mcp.json` |
 | **Windsurf** | — | `~/.codeium/windsurf/mcp_config.json` |
 | **Codex** | `~/.codex/skills` | *(TOML — configure manually)* |
 
-Two shapes are emitted:
+Three shapes are emitted:
 
 ```mermaid
 flowchart LR
@@ -1300,10 +1301,21 @@ flowchart LR
     subgraph B["OpenCode"]
         O["mcp : { name : { type: local, command: [...], environment } }"]
     end
+    subgraph C["DeepSeek Harness"]
+        D["insert: rows of { id, name: @deepseek-ai/dsh-mcp-client, config: { serverName, transport: stdio, command, args, env, toolCallTimeoutMs, failOnStartupError } }"]
+    end
 ```
 
 Generated configs carry the real `autoApprove` tool lists and `timeout` values
 from the working setup, so the search tools do not need per-call approval.
+
+DeepSeek Harness is the one non-JSON target: its rows are inserted through a
+`~/.dsh/cordis.patch.yml` patch layer that is composed **after** the profile's
+own patch file, so it applies to every profile including the desktop app. Tools
+surface as `mcp__<server>__<tool>`. DSH also picks the change up live — its HMR
+watches both user patch files, so no restart is normally required. See
+[docs/dsh-integration.md](docs/dsh-integration.md) for layer precedence, the
+skill roots DSH scans, and rollback.
 
 ---
 
@@ -1433,7 +1445,7 @@ research-stack/
 
 | Symptom | Fix |
 |---|---|
-| A server does not appear after install | Clients spawn MCP servers **only at startup** — fully quit and reopen. |
+| A server does not appear after install | Clients spawn MCP servers **only at startup** — fully quit and reopen. DeepSeek Harness is the exception: its HMR composes `~/.dsh/cordis.patch.yml` live (~2 s), so restart is only the fallback. |
 | `consensus` / `google-scholar` fail | Install Node.js 18+ (`npx` is required). |
 | paper-search returns nothing / arXiv empty | Rebuild the vendored tool: `~/.research-stack-src/install.sh --reinstall`. |
 | A config was clobbered | Restore the `.bak.<timestamp>` written next to it. |

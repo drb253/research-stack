@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # research-stack installer
 #   Installs the review/synthesis MCP servers + skills and wires them into
-#   Cline, Claude, OpenCode (and optionally Gemini / LM Studio).
+#   Cline, Claude, OpenCode, DeepSeek Harness (and optionally Gemini / LM Studio).
 #
 # Usage:
 #   ./install.sh [options]
 # Options:
-#   --targets LIST     comma list: cline,claude,opencode,gemini,lmstudio  (default: cline)
+#   --targets LIST     comma list: cline,claude,opencode,gemini,lmstudio,dsh  (default: cline)
 #   --no-mcp           install skills only
 #   --no-skills        configure MCP only
 #   --with-upstream-skills  clone the K-Dense scientific skills (default)
@@ -54,11 +54,11 @@ have() { command -v "$1" >/dev/null 2>&1; }
 
 usage() {
   cat <<'EOF'
-research-stack installer -- review MCPs + skills for Cline / Claude / OpenCode.
+research-stack installer -- review MCPs + skills for Cline / Claude / OpenCode / DeepSeek Harness.
 
 Usage: ./install.sh [options]
 Options:
-  --targets LIST     cline,claude,opencode,gemini,lmstudio  (default: cline)
+  --targets LIST     cline,claude,opencode,gemini,lmstudio,dsh  (default: cline)
   --no-mcp           install skills only
   --no-skills        configure MCP only
   --with-upstream-skills   (default) also clone the 160+ K-Dense scientific skills
@@ -117,6 +117,7 @@ skills_dir_for() {
     opencode)  echo "$HOME/.config/opencode/skills";;
     gemini)    echo "$HOME/.gemini/skills";;
     lmstudio)  echo "$HOME/.lmstudio/skills";;
+    dsh)       echo "$HOME/.dsh/skills";;
     codex)     echo "$HOME/.codex/skills";;
     *)         echo "";;
   esac
@@ -354,7 +355,7 @@ if [ "$DO_MCP" = 1 ]; then
   for t in "${TLIST[@]}"; do
     t="$(echo "$t" | tr -d '[:space:]')"
     case "$t" in
-      cline|claude|opencode|gemini|lmstudio|trae|cursor|windsurf) ;;
+      cline|claude|opencode|gemini|lmstudio|dsh|trae|cursor|windsurf) ;;
       *) warn "no MCP schema for target '$t' (skills only)"; continue;;
     esac
     info "configuring $t ..."

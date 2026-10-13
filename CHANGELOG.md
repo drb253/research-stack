@@ -6,6 +6,23 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- **DeepSeek Harness is a first-class install target: `./install.sh --targets dsh`.** It writes the
+  13 review skills into `~/.dsh/skills` (`bin/mcp_config.py` gained the matching skills-dir mapping)
+  and the MCP servers into `~/.dsh/cordis.patch.yml` through a new `dsh` platform in
+  `bin/mcp_config.py`. DSH's config is not JSON, so the writer emits and reads the YAML by hand — the
+  repo stays stdlib-only, no PyYAML — and the merge is non-destructive: an existing file is backed up,
+  every other patch entry, inserted row and comment survives byte-for-byte, only the rows whose id is
+  `mcp-<server>` are replaced, and a file that is not a top-level array of loader patch entries is
+  refused rather than risked. A second run is byte-identical. **The rows are wrapped in an `insert:`
+  entry**, which is the shape the shipped MCP template and every bundle patch use: a flat
+  `- id: <new-server>` row is a non-insert patch, and DSH drops it with
+  `patch: entry "<id>" not found` because the row does not exist yet. The home layer is composed after
+  the profile's own patch file, so it outranks it and reaches every profile including the desktop app;
+  an empty or comments-only patch file fails DSH boot, so real rows are always emitted. Tools surface
+  as `mcp__<server>__<tool>`. Documented in `docs/dsh-integration.md`; the shape, layer order and skill
+  roots are also in `docs/PLATFORMS.md`.
+
 ### Changed
 - **A transcribed run is input-bound by default.** A transcription is a machine's reading, so a run
   whose evidence rests on one is `insufficient_evidence` (exit 3) with an
