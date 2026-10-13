@@ -19,14 +19,19 @@ Usage:
   python3 humanizer_check.py --before draft_v1.md --after draft_v2.md
   python3 humanizer_check.py --before a.md --after b.md --json
 
-Exit codes: 0 no hard error; 2 hard error (H1/H2/H4); 1 usage error.
+Exit codes (docs/EVIDENCE-INVARIANT.md): 0 no hard error; 2 hard error (H1/H2/H4);
+3 insufficient_input -- the draft has no prose this tool can assess (blank after markup
+stripping, or not English), so it is refused instead of reported clean; 1 usage error.
 """
 from __future__ import annotations
 
 import argparse
+import contextlib
+import io
 import json
 import re
 import sys
+import tempfile
 from pathlib import Path
 
 # ---------------------------------------------------------------- H1 / H2 ---
@@ -66,6 +71,62 @@ MID_BOLD = re.compile(r"\S\s\*\*[^*\n]+\*\*\s\S")
 
 def hits(text: str, pattern: str) -> int:
     return len(re.findall(pattern, text, re.IGNORECASE))
+
+
+# --------------------------------------------------------- input condition ---
+# Structural markup carries no prose to assess, so it is stripped before the "is there
+# anything here to read?" test: a file of headings, tags, rules or links must not be
+# mistaken for a draft. This stripping feeds the refusal test only -- check() always sees
+# the raw text, so no number or pattern is ever lost from the diff.
+MARKUP = re.compile(
+    r"```[\s\S]*?```"                        # fenced code blocks
+    r"|<!--[\s\S]*?-->"                      # HTML comments
+    r"|<[^>]+>"                              # HTML tags
+    r"|!\[[^\]]*\]\([^)]*\)"                 # images
+    r"|\[[^\]]*\]\([^)]*\)"                  # links
+    r"|`[^`]*`"                              # inline code
+    r"|\*\*[^*\n]*\*\*"                      # bold span (a container, not prose)
+    r"|__[^_\n]*__"                          # bold span
+    r"|~~[^~\n]*~~"                          # struck-through span
+    r"|^\s{0,3}#{1,6}\s.*$"                  # heading lines (structural, not prose)
+    r"|^\s{0,3}(?:-{3,}|\*{3,}|_{3,})\s*$"   # horizontal rules
+    r"|^\s{0,3}\|?[\s:|-]+\|[\s:|-]*$"       # table delimiter rows
+    r"|^\s*>\s?"                             # blockquote markers
+    r"|^\s*[-*+]\s+"                         # bullet markers
+    r"|^\s*\d+[.)]\s+"                       # ordered-list markers
+    r"|[*_~`#]",                             # leftover emphasis / code punctuation
+    re.MULTILINE)
+ASCII_LETTER = re.compile(r"[A-Za-z]")
+
+
+def prose_gap(text: str) -> str | None:
+    """Why this draft has no prose the checker can assess, or None if it does.
+
+    A document the tool cannot read must not be handed the clean verdict: every pattern
+    below is English and the numeric diff says nothing about a text that never reached it.
+    Two documented input conditions are refused instead (docs/EVIDENCE-INVARIANT.md):
+
+      * nothing but whitespace survives markup stripping (empty, or markup-only);
+      * the draft is not English -- it has no ASCII letters at all, or non-ASCII letters
+        outnumber ASCII ones, which catches a CJK draft carrying a stray "AI".
+    """
+    stripped = MARKUP.sub(" ", text)
+    if not stripped.strip():
+        return "blank after markup stripping (there is no prose to check)"
+    ascii_letters = len(ASCII_LETTER.findall(stripped))
+    non_ascii_letters = sum(1 for ch in stripped if not ch.isascii() and ch.isalpha())
+    if not ascii_letters:
+        if non_ascii_letters:
+            return "no ASCII letters: the draft is not English prose this tool can read"
+        return "no letters at all: there is no prose to check"
+    if non_ascii_letters > ascii_letters:
+        return "mostly non-ASCII letters: the draft is not English prose this tool can read"
+    return None
+
+
+def gap_worklist(gaps: list) -> dict:
+    """The machine-readable input worklist: what is missing, why, and what to do."""
+    return {"status": "insufficient_input", "input_gaps": gaps}
 
 
 def check(before: str, after: str) -> dict:
@@ -159,6 +220,54 @@ def _self_test():
             print("   ", f)
     assert not misses, "%d pattern(s) failed to fire on a known tell" % len(misses)
     assert not false_pos, "%d false positive(s) on clean prose" % len(false_pos)
+
+    # --- CLI routing: a document the tool cannot read must never read as clean. ---
+    # These call main(), not the helper, because the defect they guard was in main()'s
+    # reporting: an empty or non-English draft printed "No mechanical problems found." and
+    # exited 0. A main() that always returns 0 passes every assertion above; it fails these,
+    # which is why they exist. Fixtures live in a temporary directory and are removed.
+    def run_cli(argv):
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = main(argv)
+        return code, out.getvalue(), err.getvalue()
+
+    with tempfile.TemporaryDirectory() as tmp:
+        root = Path(tmp)
+        original = root / "original.md"
+        original.write_text("Readmissions fell by 32%.\n", encoding="utf-8")
+        empty = root / "empty.md"
+        empty.write_text("", encoding="utf-8")
+        markup = root / "markup.md"
+        markup.write_text("# Heading only\n\n**stub**\n\n---\n\n<!-- note -->\n",
+                          encoding="utf-8")
+        chinese = root / "chinese.md"
+        chinese.write_text("\u8fd9\u662f\u4e00\u4e2a\u4e2d\u6587\u8349\u7a3f\u3002\n",
+                           encoding="utf-8")
+        chinese_tell = root / "chinese_tell.md"
+        chinese_tell.write_text(
+            "\u8fd9\u662f\u4e00\u4e2a\u4e2d\u6587\u8349\u7a3f\u3002\u4f5c\u4e3a\u4e00"
+            "\u4e2aAI\uff0c\u5e0c\u671b\u8fd9\u6709\u5e2e\u52a9\u3002\n", encoding="utf-8")
+        changed = root / "changed.md"
+        changed.write_text("Readmissions fell by 45%.\n", encoding="utf-8")
+
+        # an empty draft is an INPUT GAP: exit 3, named, with no clean-sounding wording
+        code, out, err = run_cli(["--before", str(original), "--after", str(empty)])
+        assert code == 3, (code, out, err)
+        assert "insufficient_input" in out + err, (out, err)
+        assert "No mechanical problems found." not in out + err, (out, err)
+        assert "numbers:" not in out + err, (out, err)
+        # markup-only and non-English drafts are the same condition, not a pass
+        for fixture in (markup, chinese, chinese_tell):
+            code, out, err = run_cli(["--before", str(original), "--after", str(fixture)])
+            assert code == 3, (fixture.name, code, out, err)
+            assert "insufficient_input" in out + err, (fixture.name, out, err)
+            assert "No mechanical problems found." not in out + err, (fixture.name, out, err)
+        # a changed number is still a FINDING: exit 2
+        code, out, err = run_cli(["--before", str(original), "--after", str(changed)])
+        assert code == 2, (code, out, err)
+
+    print("cli fixtures: 5 input-gap cases, 1 finding case")
     print("self-test: OK (all pattern fixtures behave as documented)")
 
 
@@ -183,6 +292,31 @@ def main(argv=None) -> int:
     except OSError as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 1
+
+    gaps = []
+    for argument, path, text in (("--before", args.before, before), ("--after", args.after, after)):
+        reason = prose_gap(text)
+        if reason:
+            gaps.append({
+                "input": str(path),
+                "argument": argument,
+                "reason": reason,
+                "action": ("supply an English draft with readable prose, then re-run "
+                           "humanizer_check.py --before <original> --after <rewrite>"),
+            })
+    if gaps:
+        # An input gap, not a finding: no `numbers:` line and no "No mechanical problems
+        # found.", so a draft the tool could not read is never reported as clean.
+        for gap in gaps:
+            print(f"INSUFFICIENT INPUT ({gap['argument']}): {gap['reason']}", file=sys.stderr)
+        print("status: insufficient_input -- the draft was not assessed, so this is a gap "
+              "in the input and not a finding about the writing", file=sys.stderr)
+        payload = gap_worklist(gaps)
+        if args.json:
+            print(json.dumps(payload, indent=2))
+        else:
+            print(json.dumps(payload), file=sys.stderr)
+        return 3
 
     res = check(before, after)
     if args.json:
