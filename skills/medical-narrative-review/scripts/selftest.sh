@@ -96,7 +96,10 @@ sed 's/"studies_included": 10/"studies_included": 11/' "$WS/prisma_ok.json" > "$
 echo "== 1. init_review (scaffold) =="
 expect_exit 0 "scaffolds a workspace" python3 "$HERE/init_review.py" \
   --out-dir "$TMP/init" --document-id demo --title "Demo review"
-expect_exit 1 "refuses to overwrite an existing dir" python3 "$HERE/init_review.py" \
+# 4, not 1: refusing to touch an existing directory is a precondition on the inputs, not a
+# finding about a review, so it must not share the finding's exit code. This fixture asserted
+# 1 while every refusal shared one code.
+expect_exit 4 "refuses to overwrite an existing dir" python3 "$HERE/init_review.py" \
   --out-dir "$TMP/init" --document-id demo --title "Demo review"
 
 echo "== 2. validate_sources (verification gate) =="
@@ -106,6 +109,42 @@ expect_exit 1 "retracted-but-included FAILS" python3 "$HERE/validate_sources.py"
   "$WS/sources_retracted.csv" --strict --require-included
 expect_exit 1 "empty ledger FAILS --require-included" python3 "$HERE/validate_sources.py" \
   "$TMP/init/sources.csv" --strict --require-included
+# A ledger that cannot be parsed is not a finding about the review: it means nothing could be
+# checked. It carries its own status (insufficient_input) and its own exit code (4), and it
+# lands in input_gaps[] rather than issues[]. Before this it was an INVALID_INPUT error at
+# exit 1 -- the same channel, shape and code as a finding.
+printf 'not,a,ledger\n1,2,3\n' > "$WS/sources_malformed.csv"
+cat > "$TMP/check_input.py" <<'PY'
+import json, os, subprocess, sys
+here, bad = sys.argv[1], sys.argv[2]
+p = subprocess.run([sys.executable, os.path.join(here, "validate_sources.py"), bad],
+                   capture_output=True, text=True)
+problems = []
+try:
+    d = json.loads(p.stdout)
+except Exception as exc:
+    problems.append("no JSON report: %s" % exc)
+    d = {}
+if p.returncode != 4:
+    problems.append("exit=%d, want 4" % p.returncode)
+if d.get("status") != "insufficient_input":
+    problems.append("status=%r" % d.get("status"))
+if d.get("issues"):
+    problems.append("the input condition leaked into issues[]: %s"
+                    % [i.get("code") for i in d["issues"]])
+gaps = d.get("input_gaps") or []
+if len(gaps) != 1:
+    problems.append("input_gaps=%d" % len(gaps))
+elif not gaps[0].get("action"):
+    problems.append("the worklist row carries no action")
+print("; ".join(problems))
+sys.exit(1 if problems else 0)
+PY
+if python3 "$TMP/check_input.py" "$HERE" "$WS/sources_malformed.csv" >"$TMP/inputcheck.log" 2>&1; then
+  ok "an unreadable ledger is insufficient_input (exit 4), never an issue[] finding"
+else
+  no "the unreadable-ledger path is wrong ($(cat "$TMP/inputcheck.log"))"
+fi
 
 echo "== 3. audit_citations (claim/source join) =="
 expect_exit 0 "draft markers join cleanly" python3 "$HERE/audit_citations.py" \

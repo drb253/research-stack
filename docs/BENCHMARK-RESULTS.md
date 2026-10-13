@@ -306,6 +306,43 @@ than an oversight. The other three are the price of the four-word cap: widening 
 experiment, and it has to be measured, because the cap is what keeps a subject from drifting into a
 neighbouring clause and triggering falsely.
 
+### That experiment was run, and every variant was rejected
+
+The four misses do not have one cause, and the obvious hypothesis — the cap is too small — turned out
+to be wrong. Three candidate fixes were each measured against both labelled sets; none is kept. The
+numbers below are the real-prose trigger (`tp fp fn tn` on the 40 unseen sentences, 30 of them
+needing attribution) and the constructed set (48 cases, 6 of them true negatives):
+
+| Variant | Real prose | Real sens | Real spec | Constructed spec | Whole-set agreement | Kept |
+|---|---|---|---|---|---|---|
+| **Committed** (cap 4) | 26 0 4 10 | 0.867 | 1.000 | 1.000 | 48/48 | — |
+| Cap widened to 6, 8, 10, 12, 16, 24 | 26 0 4 10 | 0.867 | 1.000 | 1.000 | 48/48 | **No** |
+| Parenthetical token allowed inside the window (`(CM)` no longer breaks the run) | 26 0 4 10 | 0.867 | 1.000 | 1.000 | 48/48 | **No** |
+| Reporting verbs extended (`address`, `examine`, `explore`, `investigate`, `assess`, `compare`) | **27 0 3 10** | **0.900** | 1.000 | **0.833** | **47/48** | **No** |
+| Cap widened **and** verbs extended | 27 0 3 10 | 0.900 | 1.000 | 0.833 | 47/48 | **No** |
+
+What this establishes:
+
+1. **The cap was never the problem.** Every value from 6 to 24 produced *byte-identical* results. The
+   misses are not caused by the window, and the rule that matters here is the requirement of a
+   contiguous lowercase run followed immediately by the verb — a parenthetical or an unrecognised
+   verb stops it regardless of how large the cap is.
+2. **Allowing a parenthetical inside the window changed nothing either**, so the first miss is not
+   blocked by `(CM)` in the way it appears to be.
+3. **The one change that did raise sensitivity cost a true negative, and that is disqualifying.** The
+   extra verbs fixed exactly one real miss and broke exactly one protected case:
+   `"At least one study examined this."` became a false orange. That sentence is a statement about the
+   review's own scope, not another author's finding — the author is not failing to cite anything, and
+   an orange finding would accuse them of it. The trade is one caught gap for one false accusation, and
+   a false accusation is the more expensive error.
+
+So the four misses stand, each with its own identified cause rather than as a tuning knob: one is
+blocked by an unrecognised reporting verb, one has no evidence noun at all before its verb, one is
+excluded deliberately, and the first is still unexplained — the parenthetical that seemed to explain
+it does not. That last one is recorded as unresolved rather than papered over: it is the one case
+where a plausible mechanism was tested and rejected, so the honest statement is that the cause is not
+yet known.
+
 ### The metrics also found false *greens* — 12 of them
 
 Chasing the trigger exposed the opposite error, which matters more. `attributed` requires every

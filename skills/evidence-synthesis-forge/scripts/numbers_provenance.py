@@ -49,20 +49,39 @@ def main(argv=None):
     ap.add_argument("--artifacts", nargs="+", required=True, help="computed outputs to check against")
     ap.add_argument("--include-integers", action="store_true")
     ap.add_argument("--allow", default=None, help="regex; matching tokens are ignored")
+    ap.add_argument("--allow-incomplete", action="store_true",
+                    help="proceed when a supplied artifact could not be read. The input gap is "
+                         "still reported, so the override is logged rather than silent.")
     args = ap.parse_args(argv)
 
+    # An unreadable input is not a finding about the draft. This used to be ap.error() -> exit 2,
+    # the same code a genuine untraceable number gets.
     if not os.path.exists(args.draft):
-        ap.error("draft not found: %s" % args.draft)
+        print("insufficient_input: the draft could not be read: %s" % args.draft)
+        print("  nothing was checked, so this is not a finding about the draft")
+        return 4
+
     allowed = []
+    missing = []
     for a in args.artifacts:
         if not os.path.exists(a):
-            print("WARNING: artifact not found (skipped): %s" % a)
+            # Skipping it with a warning and then printing "every checked number is traceable"
+            # is the failure this repository exists to prevent: the artifact set was incomplete,
+            # so the check covered less than it says it did.
+            missing.append(a)
             continue
         with open(a, encoding="utf-8", errors="ignore") as fh:
             allowed += to_floats(fh.read())
+
     if not allowed:
-        print("No numbers found in the supplied artifacts -- nothing to check against.")
-        return 2
+        print("insufficient_evidence: no numbers could be read from the supplied artifacts")
+        print("  nothing was checked against, so no statement about the draft's numbers is possible")
+        if missing:
+            print("  not read (%d):" % len(missing))
+            for a in missing:
+                print("    - %s" % a)
+        print("  action: supply the computed artifacts, then re-run")
+        return 3
 
     allow_re = re.compile(args.allow) if args.allow else None
     with open(args.draft, encoding="utf-8", errors="ignore") as fh:
@@ -83,12 +102,25 @@ def main(argv=None):
 
     print("numeric provenance: %d number(s) checked against %d artifact value(s)."
           % (checked, len(allowed)))
+    if missing:
+        print("insufficient_evidence: %d supplied artifact(s) could not be read, so this check "
+              "does NOT cover them:" % len(missing))
+        for a in missing:
+            print("  - %s" % a)
+        print("  action: supply these artifacts and re-run; the numbers they contain were never "
+              "compared against the draft")
     if unaudited:
         print("UNAUDITED NUMBERS (not traceable to any artifact):")
         for u in dict.fromkeys(unaudited):
             print("  -", u)
         print("Every such number must be computed or removed before this draft is reported.")
-        return 2
+        return 2 if not missing else 3
+    if missing and not args.allow_incomplete:
+        # The findings are clean for what was read; the run is still not a pass, because part of
+        # the comparison never happened.
+        return 3
+    if missing:
+        print("  --allow-incomplete given: the unread artifact(s) stay reported above")
     print("OK: every checked number is traceable to a computed artifact.")
     return 0
 

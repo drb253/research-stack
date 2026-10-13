@@ -146,6 +146,26 @@ printf 'The pooled RR was 0.49 (0.34 to 0.70).\n' > "$TMP/d_ok.md"
 expect_exit 0 "traceable numbers pass" python3 "$ESF/numbers_provenance.py" --draft "$TMP/d_ok.md" --artifacts "$TMP/art.json"
 printf 'The pooled RR was 0.49 but also 0.77.\n' > "$TMP/d_bad.md"
 expect_exit 2 "untraceable number FAILS" python3 "$ESF/numbers_provenance.py" --draft "$TMP/d_bad.md" --artifacts "$TMP/art.json"
+# A supplied artifact that could not be read is an input gap, not a clean check. This used to
+# print "WARNING: artifact not found (skipped)" and then "OK: every checked number is
+# traceable" with exit 0 -- a partial comparison presented as a complete one.
+expect_exit 3 "a missing artifact is an INPUT GAP, not an OK (exit 3)" \
+  python3 "$ESF/numbers_provenance.py" --draft "$TMP/d_ok.md" \
+  --artifacts "$TMP/art.json" "$TMP/does-not-exist.json"
+expect_exit 0 "--allow-incomplete is the logged opt-out" \
+  python3 "$ESF/numbers_provenance.py" --draft "$TMP/d_ok.md" \
+  --artifacts "$TMP/art.json" "$TMP/does-not-exist.json" --allow-incomplete
+expect_exit 3 "no readable artifact at all is an input gap (exit 3)" \
+  python3 "$ESF/numbers_provenance.py" --draft "$TMP/d_ok.md" \
+  --artifacts "$TMP/nope1.json" "$TMP/nope2.json"
+expect_exit 4 "an unreadable draft is insufficient_input (exit 4)" \
+  python3 "$ESF/numbers_provenance.py" --draft "$TMP/no-such-draft.md" --artifacts "$TMP/art.json"
+if python3 "$ESF/numbers_provenance.py" --draft "$TMP/d_ok.md" \
+     --artifacts "$TMP/art.json" "$TMP/does-not-exist.json" 2>&1 | grep -q "OK: every checked"; then
+  no "the partial-artifact run still claims every number is traceable"
+else
+  ok "a partial-artifact run never claims every number is traceable"
+fi
 
 echo "== 7. Cross-artifact integrity (R/C/C2/D/M/E/X/T/W/P) =="
 expect_exit 0 "integrity selftest (18 assertions)" python3 "$ESF/check_review_integrity.py" --selftest

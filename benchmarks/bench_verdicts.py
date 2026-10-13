@@ -127,7 +127,10 @@ CASES = [
     ("We searched three databases.",
      "D01", "spelled-out number, no signal"),
     ("At least one study examined this.",
-     "D01", "'at least one' must not read as a superlative claim"),
+     "D01", "'at least one' must not read as a superlative claim, and 'study examined' must not fire "
+            "as an attribution: this is the review's own scope, not another author's finding. This is "
+            "the case that rejected extending the reporting verbs to address/examine -- see the "
+            "trigger-miss experiment in docs/BENCHMARK-RESULTS.md"),
     ("At most three studies were included.",
      "D01", "'at most' must not read as a superlative claim"),
     ("Most participants were female.",

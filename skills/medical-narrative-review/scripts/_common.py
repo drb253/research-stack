@@ -153,10 +153,12 @@ def issue(
 
 
 #: Top-line run status. `pass` and `fail` are findings about the artefact; an input gap is
-#: `insufficient_evidence` and must never be presented in the same shape, or carry the same
-#: exit code, as a finding. See docs/EVIDENCE-INVARIANT.md.
-RUN_STATUSES = ("pass", "fail", "insufficient_evidence")
-STATUS_EXIT_CODE = {"pass": 0, "fail": 1, "insufficient_evidence": 3}
+#: `insufficient_evidence` (the input was read but something needed is missing) or
+#: `insufficient_input` (the input could not be read), and neither may be presented in the
+#: same shape, or carry the same exit code, as a finding. See docs/EVIDENCE-INVARIANT.md.
+RUN_STATUSES = ("pass", "fail", "insufficient_evidence", "insufficient_input")
+STATUS_EXIT_CODE = {"pass": 0, "fail": 1, "insufficient_evidence": 3,
+                    "insufficient_input": 4}
 
 #: The only `retrieval_status` values under which a source may be cited. `user_supplied`
 #: counts because the ledger names a locator for text the author handed over; every other
@@ -174,6 +176,7 @@ def emit_report(
     extra: dict | None = None,
     input_gaps: Iterable[dict] | None = None,
     allow_insufficient: bool = False,
+    input_status: str = "insufficient_evidence",
 ) -> int:
     ordered = sorted(
         issues,
@@ -187,11 +190,15 @@ def emit_report(
     error_count = sum(item.severity == "error" for item in ordered)
     warning_count = sum(item.severity == "warning" for item in ordered)
     gaps = list(input_gaps or [])
+    if input_status not in ("insufficient_evidence", "insufficient_input"):
+        raise ValueError("input_status must be an input condition, not %r" % (input_status,))
     payload = {
         "tool": tool,
         # An input gap outranks a finding: a run that could not read its inputs is not a
-        # verdict on the artefact, however many findings it also happens to carry.
-        "status": "insufficient_evidence" if gaps else ("fail" if error_count else "pass"),
+        # verdict on the artefact, however many findings it also happens to carry. And
+        # "could not read the input at all" outranks "read it but something is missing",
+        # because in the first case there is nothing to weigh the findings against.
+        "status": (input_status if gaps else ("fail" if error_count else "pass")),
         "summary": {
             "errors": error_count,
             "warnings": warning_count,
@@ -206,21 +213,31 @@ def emit_report(
         payload.update(extra)
     print(json.dumps(payload, indent=2, sort_keys=True))
     if gaps and not allow_insufficient:
-        return STATUS_EXIT_CODE["insufficient_evidence"]
+        return STATUS_EXIT_CODE[input_status]
     return 1 if error_count else 0
 
 
 def emit_input_error(tool: str, exc: Exception) -> int:
+    """Report an input that could not be read at all.
+
+    This used to be emitted as a normal `error` issue, which put it in the same channel, the
+    same `status` and the same exit code as a finding about the review. A malformed CSV is not
+    a defect in the manuscript: it is a statement that nothing could be checked. It now carries
+    its own status (`insufficient_input`) and its own exit code (4), outranking both `fail` and
+    `insufficient_evidence`, and lands in `input_gaps[]` rather than `issues[]`.
+    """
+    detail = "%s: %s" % (type(exc).__name__, str(exc)[:200])
     return emit_report(
         tool,
-        [
-            issue(
-                "error",
-                "INVALID_INPUT",
-                location=type(exc).__name__,
-                detail=str(exc)[:200],
-            )
+        [],
+        input_gaps=[
+            {
+                "reason": "the input could not be read: %s" % detail,
+                "action": "fix the file (or point at the right one) and re-run; nothing was "
+                          "checked, so this is not a finding about the review",
+            }
         ],
+        input_status="insufficient_input",
     )
 
 
