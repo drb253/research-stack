@@ -114,7 +114,11 @@ unavailable enabled disabled supported unsupported affected selected
 """.split())
 
 ABBREVIATION = re.compile(r"\b([A-Z][A-Z0-9]{1,5})\b")
+# Two accepted ways to define an abbreviation, both used in this repository:
+#   "... (PRISMA)"                            -- the acronym in parentheses
+#   "PRISMA (Preferred Reporting Items ...)"  -- the acronym, then its expansion
 DEFINITION = re.compile(r"\(([A-Z][A-Z0-9]{1,5})\)")
+DEFINITION_EXPANDED = re.compile(r"\b([A-Z][A-Z0-9]{1,5})\s+\(([A-Za-z][^)]{5,90})\)")
 
 # All-caps words that are ordinary English here, not abbreviations.
 COMMON_CAPS = frozenset("""
@@ -227,23 +231,39 @@ def _strip_code(text):
         if in_fence:
             out.append("")
             continue
+        # A markdown table row is structured data, not a sentence. Linting it
+        # forced 42 exemptions in one skill for a rule that does not apply.
+        if re.match(r"^\s*\|.*\|\s*$", line) or re.match(r"^\s*\|[\s:|-]+\|\s*$", line):
+            out.append("")
+            continue
         # A lowercase placeholder: an uppercase one would look like an abbreviation.
-        out.append(re.sub(r"`[^`]*`", "code", line))
+        line = re.sub(r"`[^`]*`", "code", line)
+        # An HTML comment is markup, not prose. A marker line was being linted as
+        # a 36-word sentence before this.
+        if re.match(r"^\s*<!--.*-->\s*$", line):
+            out.append("")
+            continue
+        out.append(re.sub(r"<!--.*?-->", "", line))
     return "\n".join(out)
 
 
 def _inline_allows(lines):
-    """Map line number -> set of rule ids allowed by the nearest marker above."""
+    """Map line number -> set of rule ids allowed by the marker directly above it.
+
+    The marker applies to the NEXT line only, whatever that line is. It must not
+    skip over a blanked line (a table row, a code fence, the frontmatter) and
+    land on later prose: that would suppress a real violation somewhere else.
+    """
     allows, pending = {}, set()
     for i, line in enumerate(lines, start=1):
-        m = re.findall(r"<!--\s*ste-allow\s+([A-Z0-9, ]+):", line)
-        if m:
+        if line.strip().startswith("<!--"):
+            m = re.findall(r"ste-allow\s+([A-Z0-9, ]+):", line)
             for chunk in m:
                 pending |= {r.strip() for r in chunk.split(",") if r.strip()}
-        if line.strip() and not line.strip().startswith("<!--"):
-            if pending:
-                allows[i] = set(pending)
-                pending = set()
+            continue
+        if pending:
+            allows[i] = set(pending)
+            pending = set()
     return allows
 
 
@@ -304,9 +324,12 @@ def _noun_cluster(sentence):
 def check_file(path, glossary=None, allowlist=None):
     """Return (violations, stats) for one markdown file."""
     text = Path(path).read_text(encoding="utf-8", errors="replace")
+    raw_lines = text.splitlines()
     body = _strip_code(text)
     lines = body.splitlines()
-    inline_allows = _inline_allows(lines)
+    # Markers are read from the original lines, because the stripped body has
+    # them blanked out as markup.
+    inline_allows = _inline_allows(raw_lines)
     avoid, _prefer = glossary if glossary else _load_glossary()
     file_allows = {}
     for key, rules in (allowlist or {}).items():
@@ -317,10 +340,15 @@ def check_file(path, glossary=None, allowlist=None):
     violations = []
     sentences = 0
     words_total = 0
-    defined = set(DEFINITION.findall(body))
+    def _definitions(text_block):
+        found = list(DEFINITION.findall(text_block))
+        found += [m.group(1) for m in DEFINITION_EXPANDED.finditer(text_block)]
+        return found
+
+    defined = set(_definitions(body))
     defined_line = {}
     for i, raw in enumerate(body.splitlines(), start=1):
-        for abbr in DEFINITION.findall(raw):
+        for abbr in _definitions(raw):
             defined_line.setdefault(abbr, i)
     caps_count = {}
     for abbr in ABBREVIATION.findall(body):
@@ -350,11 +378,34 @@ def check_file(path, glossary=None, allowlist=None):
         blocks.append((para_start, paragraph))
 
     for start, block in blocks:
-        joined = " ".join(re.sub(r"^\s*(?:[-*+]|\d+[.)])\s+", "", l) for _n, l in block)
+        parts, offsets, pos = [], [], 0
+        for n, l in block:
+            stripped = re.sub(r"^\s*(?:[-*+]|\d+[.)])\s+", "", l)
+            offsets.append((pos, n))
+            parts.append(stripped)
+            pos += len(stripped) + 1
+        joined = " ".join(parts)
         if joined.strip().startswith("#"):
             continue
         sents = _sentences(joined)
-        line_of = {s: block[0][0] for s in sents}
+
+        def line_for(offset):
+            """The line a character offset falls on, not the block's first line."""
+            best = block[0][0]
+            for off, n in offsets:
+                if off <= offset:
+                    best = n
+                else:
+                    break
+            return best
+
+        line_of, search_from = {}, 0
+        for s in sents:
+            idx = joined.find(s, search_from)
+            if idx < 0:
+                idx = search_from
+            search_from = idx + len(s)
+            line_of[s] = line_for(idx)
         if len(sents) > 6 and not allowed("R3", start):
             violations.append(
                 Violation("R3", start, "paragraph has %d sentences (limit 6)" % len(sents))
