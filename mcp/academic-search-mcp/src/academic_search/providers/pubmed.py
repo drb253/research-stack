@@ -63,6 +63,10 @@ class PubMedProvider(BaseProvider):
             effective_max = min(max_retrieval, max(limit, 100))
         papers = self._fetch_all(query, effective_max, progress_callback=progress_callback)
         meta = {"total_from_api": len(papers), "total_after_regex": len(papers)}
+        if not papers:
+            unavailable = self._unavailable_meta()
+            if unavailable:
+                meta["unavailable"] = unavailable
 
         if filters and filters.is_active():
             papers = apply_filters(papers, filters)
@@ -86,6 +90,10 @@ class PubMedProvider(BaseProvider):
         pubmed_query = f"{author_name}[au]"
         papers = self._fetch_all(pubmed_query, max_retrieval, progress_callback=progress_callback)
         meta = {"total_from_api": len(papers)}
+        if not papers:
+            unavailable = self._unavailable_meta()
+            if unavailable:
+                meta["unavailable"] = unavailable
 
         # Post-filter on authors list for accuracy
         target = author_name.lower()
@@ -236,38 +244,47 @@ class PubMedProvider(BaseProvider):
 
         return papers
 
-    @staticmethod
     def _request_with_retry(
+        self,
         url: str,
         params: dict[str, Any],
         max_retries: int = MAX_RETRIES,
     ) -> Optional[dict]:
-        """Make a GET request expecting JSON, with retry logic."""
+        """Make a GET request expecting JSON, with retry logic.
+
+        The final failed attempt is recorded in ``self._last_request_error`` so
+        an outage is not reported as an empty result set.
+        """
+        self._last_request_error: Optional[dict[str, Any]] = None
         for attempt in range(1, max_retries + 1):
             try:
                 r = requests.get(url, params=params, timeout=30)
                 r.raise_for_status()
                 return r.json()
             except requests.exceptions.Timeout:
+                self._record_request_error("timeout", attempt=attempt)
                 logger.warning("PubMed timeout (attempt %d/%d).", attempt, max_retries)
             except requests.exceptions.HTTPError as e:
                 status = e.response.status_code if e.response is not None else "unknown"
+                self._record_request_error("http_error", status=status, attempt=attempt)
                 logger.warning("PubMed HTTP %s (attempt %d/%d).", status, attempt, max_retries)
                 if status == 429:
                     time.sleep(5 * attempt)
                 elif status in (400, 404):
                     return None
             except requests.exceptions.ConnectionError:
+                self._record_request_error("connection_error", attempt=attempt)
                 logger.warning("PubMed connection error (attempt %d/%d).", attempt, max_retries)
             except Exception:
+                self._record_request_error("unexpected_error", attempt=attempt)
                 logger.exception("Unexpected PubMed error (attempt %d/%d).", attempt, max_retries)
 
             if attempt < max_retries:
                 time.sleep(2 ** attempt)
         return None
 
-    @staticmethod
     def _request_with_retry_text(
+        self,
         url: str,
         params: dict[str, Any],
         max_retries: int = MAX_RETRIES,
@@ -279,15 +296,19 @@ class PubMedProvider(BaseProvider):
                 r.raise_for_status()
                 return r.text
             except requests.exceptions.Timeout:
+                self._record_request_error("timeout", attempt=attempt)
                 logger.warning("PubMed timeout (attempt %d/%d).", attempt, max_retries)
             except requests.exceptions.HTTPError as e:
                 status = e.response.status_code if e.response is not None else "unknown"
+                self._record_request_error("http_error", status=status, attempt=attempt)
                 logger.warning("PubMed HTTP %s (attempt %d/%d).", status, attempt, max_retries)
                 if status in (400, 404):
                     return None
             except requests.exceptions.ConnectionError:
+                self._record_request_error("connection_error", attempt=attempt)
                 logger.warning("PubMed connection error (attempt %d/%d).", attempt, max_retries)
             except Exception:
+                self._record_request_error("unexpected_error", attempt=attempt)
                 logger.exception("Unexpected PubMed error (attempt %d/%d).", attempt, max_retries)
 
             if attempt < max_retries:

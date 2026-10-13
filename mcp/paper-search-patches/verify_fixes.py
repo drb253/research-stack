@@ -211,6 +211,24 @@ def doi_routing_check():
     )
 
 
+def availability_invariant_check():
+    """Offline: a stubbed outage must not read as an empty success.
+
+    Runs the HTTP-stub suite next to this file.  Deterministic and network-free,
+    so it can gate even when every real provider is down.
+    """
+    import sys as _sys
+    from pathlib import Path as _Path
+
+    here = str(_Path(__file__).resolve().parent)
+    if here not in _sys.path:
+        _sys.path.insert(0, here)
+    import test_availability_invariant as offline
+
+    rc = offline.main([])
+    return rc == 0, "offline HTTP-stub suite rc=%s" % rc
+
+
 def main(argv=None):
     """Run every check, or only the ids given, so a slow host can be time-boxed.
 
@@ -222,6 +240,7 @@ def main(argv=None):
         ("7", "keyed publisher sources", keyed_sources_check),
         ("8", "citation export (retraction-aware)", citation_check),
         ("9", "DOI query routing", doi_routing_check),
+        ("10", "availability invariant (offline stub)", availability_invariant_check),
     ]
     wanted = {str(arg).strip() for arg in (argv or [])}
     known = [check_id for check_id, _, _ in checks]

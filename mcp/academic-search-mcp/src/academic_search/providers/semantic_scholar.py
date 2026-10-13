@@ -115,6 +115,10 @@ class SemanticScholarProvider(BaseProvider):
                 "total_after_regex": len(papers),
                 "total_after_filters": len(papers),
             }
+            if not papers:
+                unavailable = self._unavailable_meta()
+                if unavailable:
+                    meta["unavailable"] = unavailable
             return papers[:limit], meta
 
         extended_query = self._build_extended_query(query, search_type)
@@ -127,6 +131,10 @@ class SemanticScholarProvider(BaseProvider):
 
         papers = self._fetch_all(extended_query, fields, effective_max, progress_callback=progress_callback)
         meta = {"total_from_api": len(papers), "total_after_regex": len(papers)}
+        if not papers:
+            unavailable = self._unavailable_meta()
+            if unavailable:
+                meta["unavailable"] = unavailable
 
         if filters and filters.is_active():
             papers = apply_filters(papers, filters)
@@ -151,6 +159,10 @@ class SemanticScholarProvider(BaseProvider):
 
         papers = self._fetch_all(extended_query, fields, max_retrieval, progress_callback=progress_callback)
         meta = {"total_from_api": len(papers)}
+        if not papers:
+            unavailable = self._unavailable_meta()
+            if unavailable:
+                meta["unavailable"] = unavailable
 
         # Post-filter by author name using part-aware matching, so that
         # "Jennifer Doudna" also matches "Jennifer A. Doudna" and "J. Doudna".

@@ -278,6 +278,7 @@ def author_match_diagnostic(
     papers: Iterable[dict[str, Any]],
     total_from_api: int,
     candidate_names: Optional[Iterable[str]] = None,
+    unavailable: Optional[dict[str, Any]] = None,
 ) -> Optional[dict[str, Any]]:
     """Explain a zero-result author search instead of returning a silent 0.
 
@@ -285,8 +286,24 @@ def author_match_diagnostic(
     success, which reads as "this author has no papers".  When the API did
     return candidates but none matched, this builds a diagnostic that says so
     and suggests the surname-only retry.
+
+    *unavailable* is the provider's availability record when the request
+    itself failed: an outage is then reported as an outage, never as
+    "the provider returned no candidates".
     """
     if total_from_api <= 0:
+        if unavailable:
+            return {
+                "reason": "provider_unavailable",
+                "query": query,
+                "total_from_api": 0,
+                "unavailable": unavailable,
+                "hint": (
+                    "The provider could not be queried, so this empty result is "
+                    "an outage, not evidence that the author has no papers. "
+                    "Retry when the service is reachable."
+                ),
+            }
         return {
             "reason": "provider_returned_no_candidates",
             "query": query,

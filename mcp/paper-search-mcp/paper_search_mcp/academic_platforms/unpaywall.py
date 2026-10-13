@@ -5,6 +5,7 @@ import requests
 from ..paper import Paper
 from ..utils import extract_doi
 from ..config import get_env
+from ..source_status import SourceUnavailable  # paper-search-mcp-patches: Tier 1
 from .base import PaperSource
 
 logger = logging.getLogger(__name__)
@@ -171,11 +172,16 @@ class UnpaywallResolver:
             response.raise_for_status()
             return response.json()
         except requests.RequestException as exc:
+            # A 404 above is a real "no record"; a transport/HTTP failure here
+            # is an outage and must not be reported as "the DOI has no record".
             logger.warning("Unpaywall request failed for DOI %s: %s", doi, exc)
-            return None
+            status_code = getattr(getattr(exc, "response", None), "status_code", None)
+            raise SourceUnavailable("unpaywall", str(exc)[:200], status_code)
         except Exception as exc:
             logger.warning("Unexpected Unpaywall record fetch error for DOI %s: %s", doi, exc)
-            return None
+            raise SourceUnavailable(
+                "unpaywall", f"{type(exc).__name__}: {exc}"[:200]
+            )
 
     def has_api_access(self) -> bool:
         """Quick capability check based on required configuration."""

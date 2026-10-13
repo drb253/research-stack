@@ -12,6 +12,7 @@ from requests.exceptions import SSLError
 from ..paper import Paper
 from ..utils import extract_doi
 from ..config import get_env
+from ..source_status import SourceUnavailable  # paper-search-mcp-patches: Tier 1
 from .base import PaperSource
 
 logger = logging.getLogger(__name__)
@@ -97,6 +98,13 @@ class OpenAiresearcher(PaperSource):
                         )
 
                     if response.status_code in self.RETRYABLE_STATUS_CODES:
+                        # Record the refusal: returning [] after exhausting the
+                        # retries would report a 429/5xx as "no matching papers".
+                        last_error = SourceUnavailable(
+                            "openaire",
+                            f"HTTP {response.status_code} after retries",
+                            response.status_code,
+                        )
                         wait_seconds = min(8, 2 ** attempt)
                         logger.warning(
                             "OpenAIRE request returned %s (attempt %s/3). Retrying in %ss",
@@ -290,24 +298,33 @@ class OpenAiresearcher(PaperSource):
             List of Paper objects
         """
         papers: List[Paper] = []
+        failures: List[str] = []
+        # True once any request path gets an HTTP answer: an empty result from a
+        # path that *did* answer is a real "no such record"; an empty result
+        # because every path raised is an outage and must be reported as one.
+        answered = False
 
         # Graph API v1 first: the legacy /search/researchProducts endpoint hangs.
         try:
             papers = self._search_graph_api(query, max_results, **kwargs)
+            answered = True
             logger.info(
                 f"Found {len(papers)} papers from OpenAIRE Graph API for query: {query}"
             )
             if papers:
                 return papers
         except Exception as exc:
+            failures.append(f"graph: {type(exc).__name__}: {exc}")
             logger.warning("OpenAIRE Graph API search failed, trying v2 XML: %s", exc)
 
         try:
             papers = self._search_with_retry(query, max_results, **kwargs)
+            answered = True
             logger.info(f"Found {len(papers)} papers from OpenAIRE for query: {query}")
             if papers:
                 return papers
         except Exception as exc:
+            failures.append(f"v2: {type(exc).__name__}: {exc}")
             logger.warning("OpenAIRE v2 XML search failed, attempting legacy parser fallback: %s", exc)
 
         # Legacy fallback path (may not be available in some environments)
@@ -320,6 +337,7 @@ class OpenAiresearcher(PaperSource):
             response = self._get(f"{self.BASE_URL}/search/publications", params=params)
             response.raise_for_status()
             data = response.json()
+            answered = True
             results = data.get('response', {}).get('results', {}).get('result', [])
             if isinstance(results, dict):
                 results = [results]
@@ -330,7 +348,16 @@ class OpenAiresearcher(PaperSource):
                 if len(papers) >= max_results:
                     break
         except Exception as exc:
+            failures.append(f"legacy: {type(exc).__name__}: {exc}")
             logger.error("OpenAIRE API request error: %s", exc)
+
+        if not answered:
+            # Every path failed: surface the outage instead of an empty list,
+            # which the caller cannot tell apart from "no matching literature".
+            raise SourceUnavailable(
+                "openaire",
+                ("; ".join(failures) or "every request path failed")[:300],
+            )
 
         return papers
 

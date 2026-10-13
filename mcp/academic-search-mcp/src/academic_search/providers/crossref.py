@@ -74,6 +74,10 @@ class CrossrefProvider(BaseProvider):
             "total_from_api": len(papers),
             "total_after_regex": len(papers),
         }
+        if not papers:
+            unavailable = self._unavailable_meta()
+            if unavailable:
+                meta["unavailable"] = unavailable
 
         # Crossref matches terms loosely across the whole record, so a gate on
         # the query's own terms is what makes the membership usable.
@@ -109,6 +113,10 @@ class CrossrefProvider(BaseProvider):
         """Search Crossref for papers by a specific author."""
         papers = self._fetch_all(author_name, max_retrieval, progress_callback=progress_callback)
         meta: dict[str, Any] = {"total_from_api": len(papers)}
+        if not papers:
+            unavailable = self._unavailable_meta()
+            if unavailable:
+                meta["unavailable"] = unavailable
 
         # Part-aware matching: Crossref renders names as "Family, Given",
         # which a literal "given family" substring test never matched.
@@ -267,7 +275,13 @@ class CrossrefProvider(BaseProvider):
         params: dict[str, Any],
         max_retries: int = MAX_RETRIES,
     ) -> Optional[dict]:
-        """Make a GET request with retry logic."""
+        """Make a GET request with retry logic.
+
+        The outcome of the final attempt is recorded in
+        ``self._last_request_error`` so an exhausted retry loop can be reported
+        as an outage instead of an empty result set.
+        """
+        self._last_request_error: Optional[dict[str, Any]] = None
         for attempt in range(1, max_retries + 1):
             try:
                 r = requests.get(
@@ -279,17 +293,21 @@ class CrossrefProvider(BaseProvider):
                 r.raise_for_status()
                 return r.json()
             except requests.exceptions.Timeout:
+                self._record_request_error("timeout", attempt=attempt)
                 logger.warning("Crossref timeout (attempt %d/%d).", attempt, max_retries)
             except requests.exceptions.HTTPError as e:
                 status = e.response.status_code if e.response is not None else "unknown"
+                self._record_request_error("http_error", status=status, attempt=attempt)
                 logger.warning("Crossref HTTP %s (attempt %d/%d).", status, attempt, max_retries)
                 if status == 429:
                     time.sleep(5 * attempt)
                 elif status in (400, 404):
                     return None
             except requests.exceptions.ConnectionError:
+                self._record_request_error("connection_error", attempt=attempt)
                 logger.warning("Crossref connection error (attempt %d/%d).", attempt, max_retries)
             except Exception:
+                self._record_request_error("unexpected_error", attempt=attempt)
                 logger.exception("Unexpected Crossref error (attempt %d/%d).", attempt, max_retries)
 
             if attempt < max_retries:

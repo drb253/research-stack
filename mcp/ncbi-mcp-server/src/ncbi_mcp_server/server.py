@@ -211,7 +211,11 @@ class NCBIClient:
             payload = response.json()
         except Exception as e:
             logger.error(f"MeSH descriptor fetch failed: {e}")
-            return []
+            # Re-raise instead of returning []: an empty list here is turned into
+            # "the term may not exist in the MeSH controlled vocabulary", which
+            # presents a descriptor-fetch FAILURE as evidence of non-existence.
+            # The tool wrapper below turns this into an explicit {"error": ...}.
+            raise
         
         return self._parse_mesh_summary(payload, uids, term)
     

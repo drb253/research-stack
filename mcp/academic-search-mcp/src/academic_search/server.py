@@ -367,7 +367,7 @@ def search_papers(
                 "ranking puts weak term-overlap matches near the top."
             )
 
-    return {
+    result = {
         "original_query": query,
         "extended_query": extended_query,
         "provider": provider,
@@ -398,6 +398,14 @@ def search_papers(
         ),
         "papers": papers,
     }
+    # A provider failure that returned zero records must be an explicit error:
+    # the same empty payload for an outage and a genuine zero-result search is
+    # what let "the search did not run" be read as "no such papers exist".
+    unavailable = meta.get("unavailable")
+    if unavailable and not papers:
+        result["error"] = "unavailable"
+        result["unavailable"] = unavailable
+    return result
 
 
 
@@ -533,9 +541,10 @@ def search_by_author(
             papers,
             total_from_api,
             candidate_names=meta.get("candidate_name_sample"),
+            unavailable=meta.get("unavailable"),
         )
 
-    return {
+    result = {
         "author_name": author_name,
         "provider": provider,
         "extended_query": extended_query,
@@ -563,6 +572,12 @@ def search_by_author(
         ),
         "papers": papers,
     }
+    # An outage and a genuine "no such author" must not share one payload.
+    unavailable = meta.get("unavailable")
+    if unavailable and not papers:
+        result["error"] = "unavailable"
+        result["unavailable"] = unavailable
+    return result
 
 
 

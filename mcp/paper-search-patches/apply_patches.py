@@ -153,6 +153,19 @@ COPIES = [
         "marker": "paper-search-mcp-patches: Tier 1/2 helpers",
         "why": "pmc: [Title/Abstract] + relevance ladder + availability",
     },
+    # --- Tier 1: connectors that swallowed a transport failure as "no results" ---
+    {
+        "copy": "replacements/openaire.py",
+        "target": "academic_platforms/openaire.py",
+        "marker": "paper-search-mcp-patches: Tier 1",
+        "why": "openaire: Graph API + raise SourceUnavailable when every path failed",
+    },
+    {
+        "copy": "replacements/unpaywall.py",
+        "target": "academic_platforms/unpaywall.py",
+        "marker": "paper-search-mcp-patches: Tier 1",
+        "why": "unpaywall: keep 404 as no-record, raise SourceUnavailable on outage",
+    },
     # --- Tiers 1/3/4/5/6: server (fan-out, status, ranking, routing, new tools) ---
     {
         "copy": "replacements/server.py",
@@ -280,15 +293,9 @@ NEWFILES = [
 ]
 
 # Snippets injected verbatim before an anchor line (avoids escaping large code blocks).
-INJECTS = [
-    {
-        "source": "replacements/openaire_graph.py",
-        "target": "academic_platforms/openaire.py",
-        "anchor": "    def _parse_openaire_xml_result(self, node: ET.Element) -> Optional[Paper]:",
-        "marker": "'type': 'publication',",
-        "why": "openaire: inject Graph API v1 search + parser",
-    },
-]
+# (The OpenAIRE Graph API snippet that used to live here is now the whole-file copy
+#  replacements/openaire.py, which can also carry the availability fix.)
+INJECTS = []
 
 PATCHES = [
     # --- date serialization safety (fixes Zenodo + HAL) ---

@@ -33,6 +33,59 @@ class BaseProvider:
 
     provider_name: str = "base"
 
+    #: HTTP statuses where the API answered decisively ("no such record" or a
+    #: rejected request).  These stay a genuine empty result; every other
+    #: recorded failure means the provider was not reached.
+    DECISIVE_HTTP_STATUSES: frozenset[int] = frozenset({400, 404})
+
+    def _record_request_error(
+        self,
+        kind: str,
+        status: Optional[int] = None,
+        attempt: Optional[int] = None,
+    ) -> None:
+        """Record the outcome of a failed request attempt.
+
+        ``_last_request_error`` is the pattern :class:`SemanticScholarProvider`
+        already used to tell "this identifier does not exist" (HTTP 404) apart
+        from "we were rate limited" (HTTP 429).  A request that succeeds clears
+        it, so ``None`` means any empty result is a real zero.
+        """
+        error: dict[str, Any] = {"kind": kind, "attempt": attempt}
+        if status is not None:
+            error["status"] = status
+        self._last_request_error = error
+
+    def _unavailable_meta(self) -> Optional[dict[str, Any]]:
+        """Availability record for the last failed request, or ``None``.
+
+        Callers add it to their metadata (and the tool layer turns it into an
+        explicit error) when zero records came back: an outage must not be
+        indistinguishable from "no matching papers".
+        """
+        error = getattr(self, "_last_request_error", None)
+        if not error:
+            return None
+        kind = error.get("kind")
+        status = error.get("status")
+        if kind == "http_error" and status in self.DECISIVE_HTTP_STATUSES:
+            # The API answered: 404 is "no such record", 400 is a bad query.
+            return None
+        if kind == "timeout":
+            message = f"{self.provider_name} timed out after retries"
+        elif kind == "connection_error":
+            message = (
+                f"{self.provider_name} could not be reached (network/DNS failure)"
+            )
+        elif kind == "http_error":
+            message = f"{self.provider_name} answered HTTP {status} after retries"
+        else:
+            message = f"{self.provider_name} request failed ({kind})"
+        record = dict(error)
+        record["source"] = self.provider_name
+        record["message"] = message
+        return record
+
     def search(
         self,
         query: str,
