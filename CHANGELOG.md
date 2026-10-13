@@ -169,6 +169,22 @@ _Nothing yet._
   not a failure. Retraction remains a hard failure.
 
 ### Fixed
+- **citation-report never read DOCX footnotes or endnotes, read text boxes twice, and refused a scan
+  with the wrong reason and the wrong exit code.** A DOCX whose only graded sentence sat in a footnote
+  reported zero sentences, `status: pass`, exit 0 — a document the tool could not read presented as a
+  document with nothing to check; footnotes and endnotes are now parsed and graded, separators skipped.
+  Text boxes were not skipped but duplicated (the paragraph walk descended into `w:txbxContent` while
+  the holding run's own iterator reached the inner run), so a box sentence was graded twice; it is now
+  read once, and the documents that claimed boxes were unread are corrected. A PDF with no text layer
+  was refused with "no PDF text extractor is available" — blaming a missing tool for a document that
+  has no text — and exited 1, the finding code, where the skill promises `insufficient_input`; it now
+  names the missing text layer, says it is a scan, and exits 4. An **optional OCR tier was deliberately
+  not shipped**: tesseract is absent here, so a transcription path would ship unexercised into the
+  graded-sentence channel, and an OCR misread becomes an accusation about the author. The refusal half
+  is implemented and names the install route; no hard dependency was added. Harness 111 → 125 checks,
+  with its scan assertion changed from exit 1 to exit 4, and mutation-probed three ways. The documents
+  also said tracked changes are "not read" when insertions (`w:ins`) *are* read and only deletions are
+  not.
 - **The patch system cried wolf on a good install.** `apply_patches.py` verified the patched files
   by shelling out to `py_compile`, which writes a `.pyc` into the interpreter's cache directory; when
   that directory is not writable — a sandboxed run, a read-only home, a container — a perfectly good

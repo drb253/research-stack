@@ -63,7 +63,7 @@ jobs:
       # citation-report writes its own PDF and DOCX, and verifies both by re-opening
       # them, so this passes with no poppler and no pypdf: the PDF text-layer check
       # degrades to a reported skip rather than a failure.
-      - name: citation-report selftest (111 checks)
+      - name: citation-report selftest (125 checks)
         run: bash skills/citation-report/scripts/selftest.sh
       # The offline benchmarks measure the claims in the README (arithmetic gate,
       # overlap detector vs the ORI guide's expert labels). They need no network,
@@ -90,7 +90,7 @@ jobs:
           Rscript -e 'install.packages(c("metafor","robvis","ggplot2","clubSandwich"), repos="https://packagemanager.posit.co/cran/__linux__/jammy/latest")'
       - name: Golden tests — engine vs metafor (22 checks)
         run: Rscript skills/meta-analysis-forge/scripts/golden_tests.R
-      - name: evidence-synthesis-forge selftest (73 checks)
+      - name: evidence-synthesis-forge selftest (78 checks)
         run: bash skills/evidence-synthesis-forge/scripts/selftest.sh
 
   mcp-tests:

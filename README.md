@@ -12,7 +12,7 @@ Built for one promise: **no false citations, no hallucinated numbers, no silent 
 [![platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-lightgrey.svg)](#requirements)
 [![MCP servers](https://img.shields.io/badge/MCP%20servers-5-2f6feb.svg)](#the-mcp-layer)
 [![skills](https://img.shields.io/badge/skills-13-8957e5.svg)](#the-skills-layer)
-[![tests](https://img.shields.io/badge/checks-253%20passing-2ea043.svg)](#verification--testing)
+[![tests](https://img.shields.io/badge/checks-272%20passing-2ea043.svg)](#verification--testing)
 [![ci](https://github.com/drb253/research-stack/actions/workflows/ci.yml/badge.svg)](https://github.com/drb253/research-stack/actions/workflows/ci.yml)
 [![install](https://img.shields.io/badge/install-one--command-brightgreen.svg)](#install)
 
@@ -507,15 +507,15 @@ flowchart LR
 
 <div align="center"><img src="assets/coverage.svg" width="620" alt="automated checks by suite"></div>
 
-**253 automated checks, all passing.** Run them after any change:
+**272 automated checks, all passing.** Run them after any change:
 
 ```bash
 S=~/.research-stack/skills
 bash  $S/evidence-synthesis-forge/scripts/doctor.sh              # toolchain report
-bash  $S/evidence-synthesis-forge/scripts/selftest.sh            # 73 — every gate, pass+fail
+bash  $S/evidence-synthesis-forge/scripts/selftest.sh            # 78 — every gate, pass+fail
 Rscript $S/meta-analysis-forge/scripts/golden_tests.R           # 22 — engine vs metafor
 bash  $S/medical-narrative-review/scripts/selftest.sh           # 30 — narrative-review chain
-bash  $S/citation-report/scripts/selftest.sh                    # 111 — citation report, pass+fail
+bash  $S/citation-report/scripts/selftest.sh                    # 125 — citation report, pass+fail
 python3 $S/evidence-synthesis-forge/scripts/acceptance_test.py  # 17 — live adversarial
 ./verify.sh --targets cline,claude,opencode                      # install acceptance
 ```
@@ -1079,7 +1079,7 @@ PRs are welcome. Ground rules:
 
 ## Roadmap
 
-- [x] GitHub Actions CI running the 253 checks on every push
+- [x] GitHub Actions CI running the 272 checks on every push
 - [ ] Codex (TOML) MCP config support
 - [ ] A terminal demo / screen recording in the README
 - [ ] Auto re-vendor script (fetch a new upstream tag, re-apply patches)
