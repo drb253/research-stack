@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # verify.sh -- acceptance check for a research-stack install.
-#   bash verify.sh [--targets cline,claude,opencode]
+#   bash verify.sh [--targets cline,claude,opencode,dsh]
 set -u
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TARGETS="cline"
@@ -11,11 +11,12 @@ while [ $# -gt 0 ]; do
     -h|--help)
       sed -n '2,3p' "$0"
       cat <<'EOF'
-Usage: bash verify.sh [--targets cline,claude,opencode,gemini,lmstudio,...]
+Usage: bash verify.sh [--targets cline,claude,opencode,gemini,lmstudio,dsh,...]
 
 Checks an existing install and prints PASS/FAIL for: the paper-search MCP and
 its patch system, the gated review skills, the originality toolkit, the
-narrative-review harness, the client MCP configs, and optional components.
+narrative-review harness, the client MCP configs (including the DeepSeek Harness
+cordis patch layer), and optional components.
 Third-party skill packs are listed as information and never change the verdict.
 EOF
       exit 0;;
@@ -31,7 +32,8 @@ skills_dir_for() {
   case "$1" in
     cline) echo "$HOME/.cline/skills";; claude) echo "$HOME/.claude/skills";;
     opencode) echo "$HOME/.config/opencode/skills";; gemini) echo "$HOME/.gemini/skills";;
-    lmstudio) echo "$HOME/.lmstudio/skills";; codex) echo "$HOME/.codex/skills";; *) echo "";;
+    lmstudio) echo "$HOME/.lmstudio/skills";; codex) echo "$HOME/.codex/skills";;
+    dsh) echo "$HOME/.dsh/skills";; *) echo "";;
   esac
 }
 config_for() {
@@ -154,6 +156,52 @@ sys.exit(0 if '$s' in box else 1)" 2>/dev/null \
     bad "$t config missing or invalid: $cfg"
   fi
 done
+
+echo "== 3b. DeepSeek Harness (dsh) =="
+# DSH is the one non-JSON target: its config is a cordis patch layer, so it is
+# checked here rather than by the JSON block above. Two of its failure modes are
+# silent in the client, which is why they are asserted rather than assumed: a
+# comments-only patch file fails DSH boot, and rows that are not wrapped in an
+# `insert:` entry are dropped with a warning instead of registering their tools.
+case ",$TARGETS," in
+  *,dsh,*)
+    DSH_PATCH="$HOME/.dsh/cordis.patch.yml"
+    if [ -f "$DSH_PATCH" ]; then
+      ok "dsh patch present ($DSH_PATCH)"
+      while IFS='|' read -r verdict label; do
+        case "$verdict" in
+          PASS) ok "dsh: $label";;
+          FAIL) bad "dsh: $label";;
+          *)    info "dsh: $label";;
+        esac
+      done < <(python3 - "$DSH_PATCH" <<'PY'
+import re, sys
+text = open(sys.argv[1], encoding="utf-8").read()
+rows = [l for l in text.splitlines() if l.strip() and not l.strip().startswith("#")]
+print(("PASS" if rows else "FAIL") + "|patch has rows (an empty or comments-only patch fails DSH boot)")
+print(("PASS" if any(l.strip() == "- insert:" or l.strip() == "insert:" for l in rows) else "FAIL")
+      + "|rows are wrapped in an insert: patch entry")
+print(("PASS" if re.search(r"name:\s*['\"]@deepseek-ai/dsh-mcp-client['\"]", text) else "FAIL")
+      + "|rows use the @deepseek-ai/dsh-mcp-client plugin")
+for server in ("paper-search",):
+    found = re.search(r"serverName:\s*['\"]?" + re.escape(server) + r"['\"]?\s*$", text, re.M)
+    print(("PASS" if found else "FAIL") + "|server '%s' configured" % server)
+# Only paper-search is required: --servers can restrict an install to any subset
+# (ncbi and academic-search are optional, and consensus/google-scholar are npx
+# servers many users skip), so the rest are reported rather than demanded.
+configured = sorted(set(re.findall(r"serverName:\s*['\"]?([A-Za-z0-9_-]+)['\"]?\s*$", text, re.M)))
+print("INFO|servers configured: %s" % (", ".join(configured) if configured else "none"))
+for server in ("consensus", "google-scholar"):
+    if server not in configured:
+        print("INFO|optional server '%s' not configured (add it via --servers)" % server)
+PY
+      )
+    else
+      bad "dsh patch missing: $DSH_PATCH (run ./install.sh --targets dsh)"
+    fi
+    ;;
+  *) info "dsh not in --targets; skipping its patch check";;
+esac
 
 echo "== 4. optional components =="
 [ -x "$HOME/.local/share/ncbi-mcp-server/.venv/bin/python" ] && ok "ncbi installed" || info "ncbi not installed (optional)"
