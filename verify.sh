@@ -159,10 +159,11 @@ done
 
 echo "== 3b. DeepSeek Harness (dsh) =="
 # DSH is the one non-JSON target: its config is a cordis patch layer, so it is
-# checked here rather than by the JSON block above. Two of its failure modes are
-# silent in the client, which is why they are asserted rather than assumed: a
-# comments-only patch file fails DSH boot, and rows that are not wrapped in an
-# `insert:` entry are dropped with a warning instead of registering their tools.
+# checked here rather than by the JSON block above. Two of its failure modes cost
+# the tools without an obvious error, which is why they are asserted rather than
+# assumed: a comments-only patch file fails DSH boot, and rows that are not
+# wrapped in an `insert:` entry are dropped with a warning instead of
+# registering their tools.
 case ",$TARGETS," in
   *,dsh,*)
     DSH_PATCH="$HOME/.dsh/cordis.patch.yml"

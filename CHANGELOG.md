@@ -56,18 +56,19 @@ versioning follows [Semantic Versioning](https://semver.org/).
   `rm -rf "$sdir/$name"` before linking, so a user who already had a real directory at that path (for
   example a hand-written `~/.dsh/skills/sysreview`) lost it with no backup. Linking now goes through
   one helper: a symlink is replaced only when it points elsewhere, an existing real file or directory
-  is moved to `<name>.bak-<timestamp>` first, and a target that already matches the requested mode is
-  left alone. `--copy-skills` no longer re-backs-up an identical copy on every run and now converts an
-  existing correct symlink into a copy instead of silently keeping symlink mode. Found by the
-  independent verification pass, not by the installer's own tests.
+  is moved to `<name>.bak-<timestamp>` (with an ordinal appended on a same-second collision) first, and
+  a target that already matches the requested mode and content is left alone. `--copy-skills` no longer
+  re-backs-up an identical copy on every run and now converts an existing correct symlink into a copy
+  instead of silently keeping symlink mode. Found by the independent verification pass, not by the
+  installer's own tests.
 - **A broken symlink in a skills directory aborted the whole install.** The upstream and AIPOCH loops
   guarded with `[ -e "$sdir/$name" ]`, which is false for a broken symlink, so the guard fell through
   to `ln -s` and `set -e` killed the run with `ln: File exists` — and every re-run aborted the same way
   until the link was removed by hand. The guard now tests `-e` or `-L`.
 - **`verify.sh` had no `dsh` coverage.** `--targets dsh` silently checked nothing new. The dsh skills
-  root is now mapped, and a dedicated section asserts the two failure modes that are silent in the
-  client: the patch file must contain real rows (an empty or comments-only patch fails DSH boot), and
-  the `mcp-*` rows must sit inside an `insert:` entry (a top-level flat row is dropped with
+  root is now mapped, and a dedicated section asserts the two failure modes that cost the tools without
+  an obvious error: the patch file must contain real rows (an empty or comments-only patch fails DSH
+  boot), and the `mcp-*` rows must sit inside an `insert:` entry (a top-level flat row is dropped with
   `patch: entry "<id>" not found`). Only paper-search is required; the other servers are informational
   because `--servers` can restrict an install to any subset.
 
