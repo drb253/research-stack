@@ -53,6 +53,20 @@ quoted evidence span or the offending citation token.
 being *absent* from the evidence. Absence is D07 and is a warning, never red. A red is an accusation;
 it has to be checkable in seconds or it should not be printed.
 
+**A citation that matches no source is not a red.** An unmatched marker has no link to the work it
+names, and the red bar requires an identity-verified link, so D03 lands on `unattributed` and warns.
+Calling it a conflict made the tool refuse its own report, because the gate correctly rejects a red
+whose link is inferred. Pin both directions:
+
+* **Pass fixture.** A document whose only defect is a citation that resolves to nothing (for example
+  `An exploratory analysis suggested a benefit [99].` against sources S001 to S003) grades to
+  `unattributed`, records the `UNRESOLVED_CITATION` trigger, and its own gate verifies the artifacts
+  without reporting `CONFLICT_LINK_INFERRED`.
+* **Fail fixture.** Tamper a legitimate D04 red's `link_confidence` to `inferred`. The gate must still
+  exit 1 with `CONFLICT_LINK_INFERRED`. The fix narrowed D03; it did not weaken the bar.
+
+Both fixtures run in `scripts/selftest.sh`, sections 6 and 6b.
+
 ## 4. Is the orange honest?
 
 Sample ten orange sentences. Each must genuinely need a citation, and each must genuinely have none.
@@ -156,6 +170,10 @@ Take every red finding and check all three:
 Then try to break it: point a contradiction at a ledger row that records only `main_finding`, and at a
 source linked by a title match. Both must come out `unverifiable` (rules `D12` and `D11`), not red.
 
+Then check the boundary: a rule that cannot produce a link must not produce a red. D03 is that rule. An
+unmatched citation marker has no link by construction, so it warns, and the run's own gate must verify
+its artifacts instead of reporting `CONFLICT_LINK_INFERRED`. Section 3 holds both fixtures for it.
+
 **Fails when:** a red exists whose `link_confidence` is `inferred` or whose `evidence_strength` is
 `prose_summary`. Editing `verdicts.json` to create one must also fail the gate
 (`CONFLICT_LINK_INFERRED`, `CONFLICT_EVIDENCE_TOO_WEAK`).
@@ -229,7 +247,9 @@ changing any rule.
 Reading the output:
 
 * **`conflict` precision must be 1.00.** A red finding is an accusation; there is no acceptable rate of
-  false accusation here. If precision drops, narrow the rule that caused it.
+  false accusation here. If precision drops, narrow the rule that caused it. The red rules are D04
+  (retracted source) and D08 (contradicted value): both rest on an identity-verified link. D03 is not
+  among them, because an unmatched marker has no link to verify.
 * **`unattributed` precision should stay above 0.9.** Orange is the noisiest state, because
   "needs a citation" is a judgment about prose. Recall matters less than precision: a missed orange
   costs a reader a moment, a false orange costs the report its credibility.

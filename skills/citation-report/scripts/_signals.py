@@ -35,12 +35,18 @@ TRIGGER_SUPERLATIVE = "SUPERLATIVE"
 TRIGGER_VAGUE_ATTRIBUTION = "VAGUE_ATTRIBUTION"
 #: Fired on a borrowed definition, which is another author's formulation.
 TRIGGER_DEFINITION = "DEFINITION"
+#: Fired when a citable marker matches no source in a closed reference apparatus. The
+#: author asserted a source, and the assertion does not hold, so the sentence needs the
+#: citation it lacks. The classifier records this one, because it is the only code that
+#: can see the markers: `citation_triggers` runs on the sentence text without them.
+TRIGGER_UNRESOLVED_CITATION = "UNRESOLVED_CITATION"
 
 TRIGGER_CODES = (
     TRIGGER_STATISTIC,
     TRIGGER_SUPERLATIVE,
     TRIGGER_VAGUE_ATTRIBUTION,
     TRIGGER_DEFINITION,
+    TRIGGER_UNRESOLVED_CITATION,
 )
 
 #: A numbered label: `ICD-11`, `DSM-5`, `PCL-5`, `COVID-19`, `SARS-CoV-2`. The digits

@@ -199,7 +199,9 @@ CASES = [
 RULE_STATE = {
     "D01": "no_citation_needed",
     "D02": "unattributed",
-    "D03": "conflict",
+    # D03 is a broken citation, not an accusation: an unmatched marker has no link to
+    # verify, and the red bar requires one, so it warns on the same state as D02.
+    "D03": "unattributed",
     "D04": "conflict",
     "D05": "unverifiable",
     "D06": "unverifiable",

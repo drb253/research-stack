@@ -23,7 +23,7 @@ Low-density lipoprotein cholesterol is a modifiable risk factor.
 These findings are consistent with previous work [src:S001].
 
 <!--
-Shipped example for citation-report, and the pass fixture in scripts/selftest.sh.
+Shipped example for citation-report, and the sample document used by scripts/selftest.sh.
 This comment is not rendered, so it is not graded: intake strips HTML comments.
 
 Expected states, in document order, with the rule each must fire:
@@ -36,13 +36,19 @@ Expected states, in document order, with the rule each must fire:
   6  S003 is identified but holds no evidence    -> unverifiable        D05
   7  citation 99 matches no source, and the
      apparatus is closed (S001-S003), so this
-     is a finding rather than a gap in inputs    -> conflict  (ERROR)   D03
+     is a finding rather than a gap in inputs    -> unattributed (warn) D03
   8  no signal and no marker                     -> no_citation_needed  D01
   9  "previous work" is a vague attribution,
      S001 has evidence, no checkable value       -> synthesis           D10
 
-Distribution: attributed 1, synthesis 2, unverifiable 2, unattributed 1,
-conflict 2, no_citation_needed 1  =  9 sentences.
-Requiring a citation: 8. Covered (attributed + synthesis): 3. Coverage 3/8 = 37.5%.
-Gate: 2 errors, so the report is a diagnostic and the process exits non-zero.
+D03 warns rather than accuses: an unmatched marker has no link to the cited work, and the
+red bar requires an identity-verified link. It still records an UNRESOLVED_CITATION trigger,
+so the orange state stays honest -- the sentence needs the citation it lacks.
+
+Distribution: attributed 1, synthesis 2, unverifiable 2, unattributed 2,
+conflict 1, no_citation_needed 1  =  9 sentences.
+Requiring a citation: 7. Sentence 7 counts now, because a marker that resolves to nothing
+is itself an attribution-requiring signal; sentences 2 and 8 need none.
+Covered (attributed + synthesis): 3. Coverage 3/8 = 37.5%.
+Gate: 1 error (D04), so the report is a diagnostic and the process exits non-zero.
 -->

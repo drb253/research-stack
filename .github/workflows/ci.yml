@@ -78,24 +78,38 @@ jobs:
           python3 benchmarks/bench_numeric.py
           python3 benchmarks/bench_ori_guide.py
           python3 benchmarks/bench_verdicts.py
+      - name: Skill harnesses added by the accuracy pass
+        run: |
+          bash skills/environment-life-review-forge/scripts/selftest.sh
+          bash skills/sysreview/scripts/selftest.sh
+          bash skills/meta-analysis/scripts/selftest.sh
+          bash skills/umbrella-review-skeptic/scripts/selftest.sh
+      # The coverage gate asserts that every skill has a harness registered in
+      # THIS file, that every declared gate has a pass and a fail fixture, and
+      # that every eval.md item appears in its SKILL.md. The three e2e scorers
+      # run their offline halves here; their live halves are informational.
+      - name: Skill coverage + end-to-end rubrics (offline)
+        run: |
+          python3 tools/check_skill_coverage.py
+          python3 tools/e2e_citecheck.py --offline
+          python3 tools/e2e_humanizer.py --offline
+          python3 tools/e2e_citation_report.py --offline
       - name: Installer dry-run (defaults + AIPOCH flag)
         run: bash install.sh --targets cline --dry-run --minimal --no-mcp --with-aipoch-skills >/dev/null
-      # The STE and honesty gates. The skills are being rewritten from the
-      # baseline in tools/ste-baseline.json (536 errors, 31 warnings on
-      # 2026-10-14); until that reaches zero these steps are report-only, and the
-      # commit that finishes the rewrite removes `continue-on-error` so a
-      # regression fails the push. The tools' own self-tests are gates already.
-      - name: STE + semantic-preservation + honesty gates (report-only until the rewrite lands)
-        continue-on-error: true
+      # The STE, preservation and honesty gates. These were report-only while the
+      # rewrite ran (the baseline was 536 errors); the rewrite reached 0 errors on
+      # 2026-10-14, so they now fail a push. The remaining warnings are all R10
+      # list-candidates: they report and do not fail.
+      - name: STE + semantic-preservation + honesty gates
         run: |
           python3 tools/ste_lint.py --self-test
           python3 tools/normative_tokens.py --self-test
           python3 tools/normative_tokens.py --check tools/normative-baseline.json
           python3 tools/claim_guard.py --self-test
           python3 tools/check_descriptions.py --self-test
-          python3 tools/ste_lint.py --quiet --summary skills/*/SKILL.md || true
-          python3 tools/claim_guard.py skills/*/SKILL.md || true
-          python3 tools/check_descriptions.py skills || true
+          python3 tools/ste_lint.py --quiet --summary skills/*/SKILL.md
+          python3 tools/claim_guard.py skills/*/SKILL.md
+          python3 tools/check_descriptions.py skills
 
   r-tests:
     name: r-tests (engine + gates)

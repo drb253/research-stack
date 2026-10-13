@@ -21,6 +21,7 @@ from __future__ import annotations
 import re
 import shutil
 import subprocess
+import sys
 import zipfile
 import zlib
 from pathlib import Path
@@ -33,6 +34,89 @@ import verdicts
 W = "{http://schemas.openxmlformats.org/wordprocessingml/2006/main}"
 ARTIFACT_NAMES = {"pdf": "report.pdf", "docx": "report.docx", "html": "report.html"}
 MAX_REPORTED_ERRORS = 40
+#: The repository tools directory, four levels above this file:
+#: ``<repo>/skills/citation-report/scripts/report_gate.py``.
+TOOLS_DIR = Path(__file__).resolve().parents[3] / "tools"
+
+
+# --------------------------------------------------------------------------- #
+# The honesty step
+# --------------------------------------------------------------------------- #
+
+
+def load_honesty_scanner():
+    """Return ``tools/claim_guard.py``'s ``scan()``, or None when that file is absent.
+
+    The honesty gate is repository furniture, not skill furniture. A skill installed
+    on its own does not carry ``tools/``, so the gate reports the missing check
+    instead of pretending that the check ran.
+    """
+    module_path = TOOLS_DIR / "claim_guard.py"
+    if not module_path.is_file():
+        return None
+    if str(TOOLS_DIR) not in sys.path:
+        sys.path.insert(0, str(TOOLS_DIR))
+    import claim_guard
+
+    return claim_guard.scan
+
+
+def honesty_findings(text, scanner=None):
+    """Findings for one piece of report prose. ``None`` means the scanner is absent."""
+    if scanner is None:
+        scanner = load_honesty_scanner()
+    if scanner is None:
+        return None
+    return scanner(text, where="report prose")
+
+
+def report_prose(graded, record=None) -> str:
+    """Every claim the report itself prints, joined into one document.
+
+    ``claim_guard`` decides a clean result at document level, so a bound anywhere in
+    the report bounds a clean statement elsewhere in it. Joining the notes keeps that
+    semantics and stops the gate firing on a note that a reader would bound.
+    """
+    import _highlight
+
+    parts = [_highlight.note_text(verdict) for verdict in graded]
+    document = (record or {}).get("document")
+    if isinstance(document, dict) and document.get("transcribed"):
+        parts.append("the document text was transcribed by %s" % document.get("transcription", "ocr"))
+    return "\n".join(parts)
+
+
+def check_honesty(graded, record=None, scanner=None) -> list:
+    """The gate's honesty step: no universal negative may ship in a generated report.
+
+    A report that says "plagiarism-free" claims something no bounded check can
+    establish, and a clean result must name what it was checked against.
+    ``tools/claim_guard.py`` owns that rule, so the gate calls it rather than
+    re-implementing the rule and letting the two drift apart.
+    """
+    if scanner is None:
+        scanner = load_honesty_scanner()
+    if scanner is None:
+        return [
+            _common.issue(
+                "warning",
+                "HONESTY_CHECK_UNAVAILABLE",
+                detail="tools/claim_guard.py is not installed beside the skill, so the "
+                "report's own claims were not scanned for a universal negative",
+            )
+        ]
+    issues: list = []
+    for finding in honesty_findings(report_prose(graded, record), scanner) or []:
+        code = "HONESTY_UNBOUNDED" if finding["kind"] == "UNBOUNDED" else "HONESTY_CLAIM"
+        issues.append(
+            _common.issue(
+                "error",
+                code,
+                item_id=finding["kind"],
+                detail="the report's own text: %s" % finding["message"],
+            )
+        )
+    return issues
 
 
 def _empty_bundle_stub():
@@ -357,25 +441,22 @@ def check_directory(out_dir, *, document=None, bundle=None) -> int:
                 )
             )
         if verdict.evidence_strength not in _common.RED_CAPABLE_STRENGTH:
-            # D03 (a citation matching nothing) needs no source evidence: the finding
-            # is about the document's own reference apparatus.
-            if verdict.rule_id != "D03":
-                issues.append(
-                    _common.issue(
-                        "error",
-                        "CONFLICT_EVIDENCE_TOO_WEAK",
-                        item_id=verdict.sentence_id,
-                        detail="rule %s produced a conflict from %r evidence; red requires "
-                        "primary text or a recorded value"
-                        % (verdict.rule_id, verdict.evidence_strength),
-                    )
+            issues.append(
+                _common.issue(
+                    "error",
+                    "CONFLICT_EVIDENCE_TOO_WEAK",
+                    item_id=verdict.sentence_id,
+                    detail="rule %s produced a conflict from %r evidence; red requires "
+                    "primary text or a recorded value"
+                    % (verdict.rule_id, verdict.evidence_strength),
                 )
+            )
 
     # 3a-bis. A value contradiction may not rest on a transcription. The classifier
     #     enforces this with D13, but a hand-edited verdicts.json could pair D08 with OCR
     #     evidence, and the gate is the last place that can catch it. Only D08 is checked:
-    #     D03 is about the reference apparatus and D04 about a source's retraction status,
-    #     neither of which is read from transcribed text.
+    #     D04 rests on a source's retraction status, which is read from the registry rather
+    #     than from transcribed text.
     document_transcribed = bool((record.get("document") or {}).get("transcribed"))
     for verdict in graded:
         if verdict.state != "conflict" or verdict.rule_id != "D08":
@@ -446,6 +527,12 @@ def check_directory(out_dir, *, document=None, bundle=None) -> int:
                 "not on the source's own text or a value copied from it" % len(summary_only),
             )
         )
+
+    # 3d. The report's own prose must stay honest. A generated report may not carry a
+    #     universal negative ("plagiarism-free"), and a clean result must state what it
+    #     was checked against. `tools/claim_guard.py` is the repository's authority on
+    #     that, so the gate calls it instead of re-implementing the rule.
+    issues.extend(check_honesty(graded, record))
 
     for verdict in errors[:MAX_REPORTED_ERRORS]:
         issues.append(

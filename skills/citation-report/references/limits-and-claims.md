@@ -111,7 +111,7 @@ These are the claims the design is built to make good on, each with the mechanis
 |---|---|
 | A sentence is never painted green without evidence | D09 requires readable evidence; a source with `metadata_only` or `unavailable` cannot produce `attributed` |
 | A sentence is never painted red because a number was absent | D08 requires the same named measure with a different value, and quotes it. Absence is D07, a warning |
-| A fabricated citation in a known apparatus is always an error | D03 fires when the apparatus is closed and a marker matches nothing, whether or not other markers resolve |
+| A citation that matches nothing in a known apparatus is always reported, and never as a red | D03 fires when the apparatus is closed and a marker matches nothing, whether or not other markers resolve. It warns (`unattributed`): an unmatched marker has no link to verify, and the red bar requires one |
 | The advisory channel cannot change a verdict | Advisory grades are stored in a separate field, read by no rule, and `selftest.sh` asserts byte-identical deterministic output with the channel on and off |
 | Every printed number can be recomputed | `coverage.validate` refuses a summary whose parts do not sum; `report_gate.py` recomputes from the verdict list and fails on disagreement |
 | Every span still locates its own sentence | Re-checked from the document on every gate run; a mismatch is an error |

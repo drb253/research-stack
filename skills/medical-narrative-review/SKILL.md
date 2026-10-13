@@ -1,6 +1,6 @@
 ---
 name: medical-narrative-review
-description: Write, expand, or audit a publication-ready medical or biomedical narrative review on a user-supplied topic, end to end. Scopes the question, searches PubMed/Europe PMC/PMC/Crossref/OpenAlex/Semantic Scholar/ClinicalTrials.gov/WHO ICTRP through MCP tools, verifies every citation by DOI/PMID before it may enter the text, extracts a source ledger with per-claim locators, builds evidence tables and figures from recorded data only, drafts a fully referenced manuscript with structured abstract and clinical implications, exports it to DOCX, PDF, and print-ready HTML, and runs a hard submission gate that blocks unverified, retracted, duplicated, or fabricated references. Use for narrative reviews, review articles, evidence syntheses, continuing-medical-education articles, or auditing a review for false claims and wrong citations.
+description: "Write, expand, or audit a medical narrative review on a supplied topic. Scopes the question, searches PubMed, Europe PMC, and trial registries through MCP tools, and verifies every citation by DOI or PMID before it enters the text. Builds a source ledger with per-claim locators and drafts a referenced manuscript with a structured abstract. Exports DOCX, PDF, and HTML, then runs a submission gate that blocks unverified, retracted, duplicated, or fabricated references. Use for narrative reviews, CME articles, or an audit."
 allowed-tools: Read Write Edit Bash
 license: MIT
 compatibility: Python 3.9+ standard library only for the bundled CLIs, verified end to end on 3.9 and 3.11 (no third-party packages, no network, no API keys). Live literature search and DOI/PMID verification require the paper-search MCP server; without it the skill runs offline on user-supplied sources and refuses to invent references. Embedding figures into DOCX uses a local SVG rasteriser when one exists (rsvg-convert, inkscape, magick, or macOS qlmanage); the PDF draws its own figures and needs nothing.
@@ -13,85 +13,130 @@ metadata:
 
 # Medical Narrative Review
 
+Produce a medical narrative review. It must be complete, accurately cited, and hard to falsify by accident.
+The skill enforces one chain, and every link in it is a file on disk.
+
 ## Purpose
 
-Produce a medical narrative review that is **complete, accurately cited, and impossible to falsify by
-accident**. The value is not fluent prose — it is the enforced chain:
+The chain is:
 
 ```
 question -> search log -> retrieved records -> verified sources -> claims -> prose -> displays -> gate
 ```
 
-Every link is a file on disk. If a link is missing the review is not finished, and the gate command
-says so explicitly instead of quietly filling the gap.
+The value of the skill is not fluent prose. The value is the enforced chain. If a link is missing, the
+review is not finished. The gate command says so explicitly instead of quietly filling the gap.
 
-A narrative review is a *scholarly argument built from verified literature*, not a systematic review
-pretending to be one. It must be transparent about how the literature was selected without claiming
-PRISMA-level exhaustiveness it does not have.
+A narrative review is a scholarly argument built from verified literature. It is not a systematic review
+in disguise. It must state how the authors selected the literature, and it must not claim the
+exhaustiveness of a systematic review.
 
 ## When to use
 
-- "Write a review on <topic>" / "draft a review article" / "narrative review of <drug, disease, biomarker>".
-- CME-style overviews, narrative syntheses for a journal, book chapters, grand-rounds background documents.
-- Updating an existing review, or auditing one for wrong citations, false claims, or missing evidence.
-- Any biomedical review needing figures, tables, and a reference list a reviewer can spot-check.
+- The user says "write a review on <topic>", "draft a review article", or "narrative review of <drug, disease, biomarker>".
+
+- The user wants a continuing-education overview, a narrative synthesis for a journal, a book chapter, or a grand-rounds background document.
+
+- The user wants to update an existing review.
+
+- The user wants an audit of a review for wrong citations, false claims, or missing evidence.
+
+- Any biomedical review needs figures, tables, and a reference list that a reviewer can spot-check.
 
 ## When not to use
 
-- Formal systematic review or meta-analysis with pooled estimates → use a systematic-review workflow;
-  this skill deliberately does **not** pool effect sizes.
-- Primary research manuscripts (a study you conducted) → `scientific-writing`.
-- Peer review of someone else's confidential manuscript → `peer-review`.
-- Rapid single-fact answers → answer directly; do not scaffold a review.
+- A formal systematic review or meta-analysis with pooled estimates. Use a systematic-review workflow. This skill deliberately does **not** pool effect sizes.
+
+- A primary research manuscript about a study you conducted. Use a scientific-writing workflow.
+
+- A peer review of someone else's confidential manuscript. Use a peer-review workflow.
+
+- A rapid single-fact answer. Answer directly. Do not scaffold a review.
+
+## Preflight and dependencies
+
+Check the environment first. Then fix the vocabulary of this file.
+
+<!-- ste-allow R1,R2,R3: a markdown table is one layout block; the sentence-length, one-instruction and sentence-count rules do not apply to its cells -->
+
+| Item | Test | Action on failure. |
+|---|---|---|
+| Python | `python3 --version` (3.9 or later) | Stop; report the version. |
+| Toolkit | `ls scripts/gate.py scripts/init_review.py` | Stop; the skill is incomplete. |
+| MCP server | Look for `search_pubmed` and `search_papers`. | Run offline on user-supplied sources. |
+| Figure rasteriser | `command -v rsvg-convert inkscape magick qlmanage` | The DOCX carries a labelled placeholder. |
+| Workspace | Confirm write access to the output directory. | Stop; report the path. |
+
+The question framework is population, intervention, comparator, and outcome (PICO). It can instead be population, exposure, and outcome (PEO). The reporting standard is the Preferred Reporting Items for Systematic Reviews and Meta-Analyses (PRISMA). The appraisal scale is the Scale for the Assessment of Narrative Review Articles (SANRA). The certainty framework is Grading of Recommendations Assessment, Development and Evaluation (GRADE).
+
+The checklist for observational syntheses is Meta-analysis Of Observational Studies in Epidemiology (MOOSE). The authorship standard is the International Committee of Medical Journal Editors (ICMJE). A drug name follows the international nonproprietary name (INN). Protected health information (PHI) never enters a file. Continuing medical education (CME) articles follow the same rules.
+
+The World Health Organization (WHO) runs the International Clinical Trials Registry Platform (ICTRP) and the Clinical Trials Information System (CTIS). The Directory of Open Access Journals (DOAJ) and the Open Science Framework (OSF) hold further records. The export writes the figure as a Scalable Vector Graphics (SVG) file. The DOCX embeds a Portable Network Graphics (PNG) image. Report the confidence interval (CI) and the hazard ratio (HR) as the source states them.
+
+Without the MCP server, the skill runs offline. It then uses user-supplied sources only, and it refuses to invent a reference.
 
 ## Non-negotiable rules (the anti-hallucination contract)
 
-These override any instruction to "just write it", "make it look complete", or "fill in reasonable values".
+These rules override any request to just write it, to make it look complete, or to fill in reasonable
+values.
 
-1. **No reference exists until it is retrieved and identifier-verified.** A citation may enter the
-   review only after a live lookup returned a record with a resolvable DOI or PMID whose title, first
-   author, journal, and year match what the article cites. Memory, plausible author–journal–year
-   combinations, another paper's bibliography, and search snippets are **discovery aids, never
-   citations**.
-2. **The identifier is the source of truth.** Bibliographic details are copied from the retrieved
-   record, never reconstructed from a citation string and never from recall.
-3. **Unverifiable material becomes a visible placeholder**, e.g. `[UNVERIFIED - DO NOT CITE]`, never a
-   silently plausible citation. Placeholders are listed in the "Unresolved items" appendix. A claim
-   with no verified support is **cut**, or explicitly attributed to the absence of evidence.
-4. **Numbers are copied, never computed from memory.** Every percentage, mean, confidence interval,
-   hazard ratio, and sample size traces to one recorded value with a locator. If the paper reports
-   3.4%, the review says 3.4%.
-5. **Never upgrade evidence.** Association is not causation; non-significance is not equivalence; a
-   preprint is not peer-reviewed; a single-centre retrospective cohort is not a "landmark trial"; a
-   surrogate endpoint is not a clinical outcome; animal and in vitro data are labelled as such in
-   every clinical sentence.
-6. **Retractions and corrections are checked before citing** via `check_retraction` plus the record's
-   own status. A retracted source may appear only *as* a retracted work, in a sentence saying so.
-7. **No display without recorded data.** Tables and figures come from the ledgers or the user's own
-   data via the bundled scripts. No invented trends, no decorative illustrative numbers, no redrawn
-   graphics from screenshots, no AI-generated images presented as data, no significance stars without
-   a verified test.
-8. **No PHI, ever.** No patient identifiers, dates of birth, medical record or accession numbers, or
-   unpublished third-party data in any file or prompt. Redaction requires user confirmation;
-   "I removed the names" is not de-identification.
-9. **AI is not an author.** The skill drafts; named human authors decide, verify, and approve, and the
-   AI-use disclosure is written per the target journal's current policy.
-10. **The gate is authoritative.** A review that fails `scripts/gate.py` is not submission-ready,
-    regardless of how good the prose is. Report failures plainly, with issue codes.
+1. **No reference exists until the tool retrieves it and verifies its identifier**. A citation may enter the review only after a live lookup returns a record with a resolvable DOI or PMID. The title, first author, journal, and year must match what the article cites. Memory, plausible author-journal-year combinations, another paper's bibliography, and search snippets are discovery aids, never citations.
+
+2. **The identifier is the source of truth**. The tool copies bibliographic details from the retrieved record. It never reconstructs them from a citation string or from recall.
+
+3. **Unverifiable material becomes a visible placeholder**, e.g. `[UNVERIFIED - DO NOT CITE]`, never a silently plausible citation. List every placeholder in the Unresolved items appendix. Cut a claim with no verified support, or attribute it explicitly to the absence of evidence.
+
+4. **Copy every number. Never compute one from memory**. Every percentage, mean, confidence interval, hazard ratio, and sample size traces to one recorded value with a locator. If the paper reports 3.4%, the review says 3.4%.
+
+5. **Never upgrade evidence**. Association is not causation, and a non-significant result is not equivalence. A preprint has no peer review. A single-centre retrospective cohort is not a landmark trial. A surrogate endpoint is not a clinical outcome. Label animal and in vitro data as such in every clinical sentence.
+
+6. **Check retractions and corrections before you cite**, through `check_retraction` and the record's own status. A retracted source may appear only as a retracted work, in a sentence that says so.
+
+7. **No display without recorded data**. Build tables and figures from the ledgers or the user's own data, through the bundled scripts. Never invent a trend, a decorative number, a redrawn graphic, or a significance star.
+
+8. **No PHI, ever**. Never put a patient identifier, a date of birth, a medical record number, or an accession number in a file. Never put unpublished third-party data in a prompt either. Redaction needs user confirmation. The phrase "I removed the names" is not de-identification.
+
+9. **AI is not an author**. The skill drafts. Named human authors decide, verify, and approve. Write the AI-use disclosure per the target journal's current policy.
+
+10. **The gate is authoritative**. A review that fails `scripts/gate.py` is not submission-ready, however good the prose is. Report failures plainly, with issue codes.
+
+## Decision table
+
+Pick the route from the request.
+
+<!-- ste-allow R1,R2,R3: a markdown table is one layout block; the sentence-length, one-instruction and sentence-count rules do not apply to its cells -->
+
+| The request | Route | First action. |
+|---|---|---|
+| Write a new review. | Phases 0 to 9. | Lock the scope into `scope.md`. |
+| Expand an existing draft. | Phase 5 onward, after verification. | Verify every existing citation first. |
+| Audit a review for false claims. | Phases 3 and 8. | Run `audit_citations.py` and `gate.py`. |
+| Fix wrong citations only. | Verification protocol, then Phase 8. | Re-run `build_reference_list.py`. |
+| Pool effect sizes. | Stop. | Route to a meta-analysis workflow. |
 
 ## Workflow
 
-Work phase by phase. Do not start Phase 6 (drafting) before Phases 1–5 have left artifacts on disk.
-Ask only the questions needed to unblock the current phase (defaults in `assets/topic_intake.md`);
-mark unknowns unresolved rather than guessing.
+Work phase by phase. Do not start Phase 6 before Phases 1 to 5 have left artifacts on disk. Ask only
+the questions needed to unblock the current phase, with the defaults in `assets/topic_intake.md`. Mark
+an unknown as unresolved rather than guessing.
 
 ### Phase 0 — Intake and scope lock
 
-Record: topic and exact **PICO or PEO** framing; target journal/venue and its current author
-instructions; article type and word/table/figure limits; citation style; audience and clinical
-setting; review time window; languages allowed; designs to include; explicit out-of-scope list. Write
-these into `scope.md` using `assets/topic_intake.md`. If the user gives only a topic, propose a default
-PICO, state the assumption, and proceed — do not stall.
+1. Record the topic and the exact PICO or PEO framing.
+
+2. Record the target journal or venue and its current author instructions.
+
+3. Record the article type and its word, table, and figure limits.
+
+4. Record the citation style, the audience, and the clinical setting.
+
+5. Record the review time window, the languages allowed, and the designs to include.
+
+6. Record an explicit out-of-scope list.
+
+7. Write these items into `scope.md`, using `assets/topic_intake.md`.
+
+8. If the user gives only a topic, propose a default PICO, state the assumption, and proceed. Do not stall.
 
 ### Phase 1 — Scaffold
 
@@ -99,62 +144,79 @@ PICO, state the assumption, and proceed — do not stall.
 python3 scripts/init_review.py --out-dir ./review-<slug> --document-id <slug> --title "<working title>"
 ```
 
-Creates the full workspace (below) and refuses to overwrite an existing directory.
+The script creates the full workspace (below). It refuses to overwrite an existing directory.
 
 ### Phase 2 — Structured search (record everything, including failures)
 
-Run `plan_search_query` first, then search at least three independent sources and keep the raw counts.
-Use the MCP tools in this order of preference:
+1. Run `plan_search_query` first.
+
+2. Search at least three independent sources.
+
+3. Keep the raw counts.
+
+<!-- ste-allow R1,R2,R3: a markdown table is one layout block; the sentence-length, one-instruction and sentence-count rules do not apply to its cells -->
 
 | Need | Tool |
 |---|---|
 | Broad multi-source sweep, retraction screening, ID conversion | `search_papers`, `check_retraction`, `convert_paper_ids`, `get_crossref_paper_by_doi` |
 | Biomedical primary index | `search_pubmed`, `search_pmc`, `search_europepmc`, `search_bookshelf` |
-| Preprints (must be labelled as such) | `search_medrxiv`, `search_biorxiv` |
-| Bibliographic/DOI-level records | `search_crossref`, `search_openalex`, `search_semantic`, `search_doaj` |
+| Preprints, which the review must label as such | `search_medrxiv`, `search_biorxiv` |
+| Bibliographic and DOI-level records | `search_crossref`, `search_openalex`, `search_semantic`, `search_doaj` |
 | Trials and registries | `search_clinicaltrials`, `search_ictrp`, `search_ctis` |
-| Metrics, related and citing work | `get_citation_metrics`, `get_related_articles`, `get_citing_articles` |
-| Regex/filtered evidence-grade search | `academic-search__search_papers`, `academic-search__search_by_author` |
+| Metrics, related work, and citing work | `get_citation_metrics`, `get_related_articles`, `get_citing_articles` |
+| Regex or filtered evidence-grade search | `academic-search__search_papers`, `academic-search__search_by_author` |
 | Consensus and position statements | `consensus__search` |
 | MeSH term control | `get_mesh_details` |
 
-Rules: run the same concept blocks across databases; record the **exact query string, database, date,
-filters, and hit count** in `search_log.csv`; record per-source availability (`empty` vs `unavailable`)
-so a rate-limited database is never reported as "no evidence exists"; log every retrieved record in
-`sources.csv`. Syntax, MeSH strategy, deduplication, and PRISMA-S reporting:
-`references/search_and_retrieval.md`.
+- Run the same concept blocks across databases.
+
+- Record the exact query string, database, date, filters, and hit count in `search_log.csv`.
+
+- Record per-source availability (`empty` vs `unavailable`), so a rate-limited database never reads as "no evidence exists".
+
+- Log every retrieved record in `sources.csv`.
+
+- Read the syntax, the MeSH strategy, the deduplication, and the PRISMA-S reporting in `references/search_and_retrieval.md`.
 
 ### Phase 3 — Screen and verify
 
-Deduplicate by DOI, then PMID, then normalized title+year. Record include/exclude with a reason for
-every record. Each record ends in one of four states: `included` (evidence base), `cited_for_context`
-(verified and citable but deliberately outside the evidence base, such as an out-of-scope modelling
-study), `excluded` (with a specific reason), or `pending`. Every citable record (`included` or
-`cited_for_context`) must be verified with `verification_status=verified`, a named `verifier`, a
-`verified_date`, a `locator`, and a `retraction_status`. This is where reviews normally fail; do not
-rush it.
+Deduplicate by DOI, then by PMID, then by normalized title and year. Record include or exclude with a
+reason for every record.
+
+<!-- ste-allow R1,R2,R3: a markdown table is one layout block; the sentence-length, one-instruction and sentence-count rules do not apply to its cells -->
+
+| State | Meaning |
+|---|---|
+| `included` | In the evidence base. |
+| `cited_for_context` | Verified and citable, but deliberately outside the evidence base, such as an out-of-scope modelling study. |
+| `excluded` | With a specific reason. |
+| `pending` | Not yet decided. |
+
+Every citable record needs `verification_status=verified`, a named `verifier`, a `verified_date`, a
+`locator`, and a `retraction_status`. This phase is where reviews normally fail. Do not rush it.
 
 ### Phase 4 — Extraction
 
-For each verified source, extract into `sources.csv`: design, population, intervention/exposure,
-comparator, outcomes, follow-up, size, effect estimates with uncertainty, and the exact locator for
-each value. Missing items get the literal `not_reported` — never a blank that could later read as
-zero, and never an inferred value.
+For each verified source, extract these fields into `sources.csv`. The fields are design, population,
+intervention or exposure, comparator, outcomes, follow-up, size, and every effect estimate with its
+uncertainty. Add the exact locator for each value.
+
+Fill a missing item with the literal `not_reported`. Never leave a blank that could later read as zero.
+Never infer a value. Every claim stays attributed to a verified source in `sources.csv`.
 
 ### Phase 5 — Claim ledger and outline
 
-Decompose the review into atomic claims; each claim gets a `C` ID, section, kind, direction
-(`supports`/`refutes`/`mixed`/`neutral`), certainty, and one or more **verified** `S` IDs. Build the
-thematic outline from *claim clusters*, not from a list of papers. Then:
+Decompose the review into atomic claims. Give each claim a `C` ID, a section, a kind, and a direction
+(`supports`/`refutes`/`mixed`/`neutral`). Add a certainty, and one or more **verified** `S` IDs. Build the
+thematic outline from claim clusters, not from a list of papers.
 
 ```bash
 python3 scripts/validate_sources.py sources.csv --require-included
 ```
 
-
 ### Phase 6 — Draft with traceable markers
 
-Draft in Markdown using `assets/manuscript_scaffold.md` and `references/section_blueprints.md`. Tag
+Draft in Markdown, using `assets/manuscript_scaffold.md` and `references/section_blueprints.md`. Tag
 every factual or numeric sentence:
 
 ```text
@@ -164,14 +226,14 @@ Chemotherapy plus pembrolizumab improved pathological complete response ... [cla
 Follow `references/medical_language.md` (hedging, causal verbs, units, drug naming) and
 `references/integrity_ai_authorship.md`.
 
-Markers are checked per paragraph: a paragraph that contains a number, percentage, effect estimate,
-or significance statement must carry a claim marker somewhere in that paragraph. Prose may be wrapped
-normally — one sentence per line is still the cleanest habit, because it keeps markers next to the
-numbers they support and makes the audit location exact.
+The audit checks markers per paragraph. A paragraph that contains a number, a percentage, an effect
+estimate, or a significance statement must carry a claim marker somewhere in that paragraph. Wrap the
+prose normally. One sentence per line is still the cleanest habit. It keeps markers next to the numbers
+they support, and it makes the audit location exact.
 
 ### Phase 7 — Displays
 
-Build tables and figures only from the ledgers and the user's data:
+Build tables and figures from the ledgers and the user's data only:
 
 ```bash
 python3 scripts/make_evidence_table.py sources.csv --group-by design --style evidence-table --out tables/table1.md
@@ -179,9 +241,9 @@ python3 scripts/make_evidence_table.py sources.csv --group-by certainty --style 
 python3 scripts/make_prisma_flow.py prisma_counts.json --out-dir figures/
 ```
 
-`make_prisma_flow.py` emits Mermaid and standalone SVG and **fails** if the flow arithmetic does not
-balance, so the diagram can never disagree with the recorded counts. Panel, caption, alt-text,
-accessibility, and prohibited-decoration rules: `references/tables_and_figures.md`.
+`make_prisma_flow.py` emits Mermaid and standalone SVG. It **fails** if the flow arithmetic does not
+balance, so the diagram can never disagree with the recorded counts. Read the panel, caption, alt-text,
+accessibility, and prohibited-decoration rules in `references/tables_and_figures.md`.
 
 ### Phase 8 — Finalize numbering and run the gate
 
@@ -193,10 +255,10 @@ python3 scripts/lint_manuscript.py final/manuscript_cited.md --sections
 python3 scripts/gate.py --dir . --style vancouver
 ```
 
-`build_reference_list.py` renumbers citations in first-appearance order, writes `final/references.md`
-and `final/citation_map.csv`, and **refuses** to emit a reference list containing any source that is
-unverified, retracted, excluded, or missing an identifier. `gate.py` aggregates every audit into one
-pass/fail report; every `error` issue is a blocker — fix it and re-run until the gate passes.
+`build_reference_list.py` renumbers citations in first-appearance order. It writes `final/references.md`
+and `final/citation_map.csv`. It **refuses** to emit a reference list that contains any unverified, retracted, or
+excluded source, or any source without an identifier. `gate.py` aggregates every audit into one
+pass-or-fail report. Every `error` issue is a blocker. Fix it and re-run until the gate passes.
 
 ### Phase 9 — Export the deliverables
 
@@ -209,7 +271,9 @@ python3 scripts/export_document.py final/manuscript_cited.md \
   --title "<review title>" --citation-style vancouver --footer-left "<short running title>"
 ```
 
-Produces, from the same final Markdown and with no third-party packages:
+The command produces three formats from the same final Markdown, with no third-party packages.
+
+<!-- ste-allow R1,R2,R3: a markdown table is one layout block; the sentence-length, one-instruction and sentence-count rules do not apply to its cells -->
 
 | Output | What it contains |
 |---|---|
@@ -225,56 +289,50 @@ python3 scripts/gate.py --dir . --style vancouver --require-exports
 
 Notes that matter:
 
-- The PDF draws the figure itself, so it never depends on a rasteriser. The DOCX embeds a PNG: supply
-  one, or let the tool convert the SVG locally with any of `rsvg-convert`, `inkscape`, `magick`, or
-  macOS `qlmanage`. If no rasteriser exists, the DOCX carries a labelled placeholder and the SVG is
-  delivered beside it — it never pretends a missing figure is present.
-- Exports are regenerated on every run (they are derived artifacts), so re-export after any edit.
-- Page numbers come from the Word/PDF engine. When printing the HTML from a browser, enable the
-  browser's header and footer to get page numbers.
+- The PDF draws the figure itself, so it never depends on a rasteriser. The DOCX embeds a PNG. Supply one, or let the tool convert the SVG locally with `rsvg-convert`, `inkscape`, `magick`, or macOS `qlmanage`. If no rasteriser exists, the DOCX carries a labelled placeholder and the tool delivers the SVG beside it. The DOCX never pretends that a missing figure is present.
+
+- Every run regenerates the exports, because the tool derives them from the final Markdown. Re-export after any edit.
+
+- Page numbers come from the Word or PDF engine. When you print the HTML from a browser, enable the browser's header and footer to get page numbers.
 
 ## Verification protocol (Phase 3 detail)
 
-For each candidate source, in order:
+Work through this list for each candidate source, in order.
 
-1. Retrieve the record by DOI (`get_crossref_paper_by_doi`) or PMID and confirm it exists.
-2. Confirm **title, first author, container, year, volume/pages** match the citing sentence.
-3. Confirm publication type and peer-review status; flag preprints, editorials, letters, and
-   conference abstracts, which carry different evidentiary weight.
+1. Retrieve the record by DOI (`get_crossref_paper_by_doi`) or by PMID, and confirm that it exists.
+
+2. Confirm that **title, first author, container, year, and volume or pages** match the citing sentence.
+
+3. Confirm the publication type and the peer-review status. Flag preprints, editorials, letters, and conference abstracts, which carry different evidentiary weight.
+
 4. Run `check_retraction` on the DOI and record `retraction_status`.
-5. Where access is available, open the source and confirm it supports the claim's *direction,
-   population, intervention, comparator, outcome, time point, and magnitude* — not merely its topic.
-6. Record the exact locator (section, page, table, figure, or `abstract_only` when that is all that
-   exists).
-7. Set `verification_status=verified`, `verifier=<name>`, `verified_date=<ISO date>`.
 
-If a lookup fails or is unavailable, record `verification_status=unverified` and keep the item out of
-the prose. Never promote an unverified item to make the gate pass — the gate exists to catch exactly that.
+5. Where access is available, open the source. Confirm that it supports the claim's *direction, population, intervention, comparator, outcome, time point, and magnitude*, not merely its topic.
+
+6. Record the exact locator: section, page, table, figure, or `abstract_only` when that is all that exists.
+
+7. Set `verification_status=verified`, `verifier=<name>`, and `verified_date=<ISO date>`.
+
+If a lookup fails or is unavailable, record `verification_status=unverified` and keep the item out of the
+prose. Never promote an unverified item to make the gate pass. The gate exists to catch exactly that.
 
 ### How to read the tool responses
 
-These behaviours were confirmed against the live MCP server and they matter:
+The live MCP server shows these behaviours, and they matter.
 
-- **An unknown DOI returns an empty object `{}` with no error flag.** An empty response means the DOI
-  did not resolve: record `verification_status=failed` and never cite it. Treating `{}` as success is
-  the single easiest way to fabricate a reference.
-- **Compare the record, not your memory.** A DOI and a title can both look right and still belong to
-  different papers. Always compare title, first author, container, year, volume/issue/pages from the
-  returned record against the sentence being written. A mismatch means the citation is wrong even if
-  the DOI resolves.
-- **`check_retraction` returns loosely matched notices.** The `notices` list includes items whose
-  `targets_this_doi` is `false`; only `is_retracted: true` or a notice with `targets_this_doi: true`
-  means the source itself is retracted. Read `sources_checked` and `sources_unavailable`: if a source
-  was unavailable, the retraction status is `not_checked`, not `clear`.
-- **Author name formats differ by source.** Crossref returns full given names separated by semicolons
-  (`Leena Gandhi; Delvys Rodríguez-Abreu; ...`), which must be converted to the ledger's
-  `Surname AB` form for NLM/Vancouver output; PubMed returns initials directly. Prefer PubMed for the
-  author string and Crossref (or the DOI record) for volume, issue, and pages. Record the conversion
-  you performed rather than inventing initials.
+- **An unknown DOI returns an empty object `{}` with no error flag**. An empty response means the DOI did not resolve. Record `verification_status=failed` and never cite it. Treating `{}` as success is the single easiest way to fabricate a reference.
+
+- **Compare the record, not your memory**. A DOI and a title can both look right and still belong to different papers. Always compare the title, first author, container, year, and volume or pages from the returned record against the sentence you write. A mismatch means the citation is wrong, even if the DOI resolves.
+
+- **`check_retraction` returns loosely matched notices**. The `notices` list includes items whose `targets_this_doi` is `false`. Only `is_retracted: true` or a notice with `targets_this_doi: true` means that the source itself carries a retraction. Read `sources_checked` and `sources_unavailable`. If a source was unavailable, the retraction status is `not_checked`, not `clear`.
+
+- **Author name formats differ by source**. Crossref returns full given names separated by semicolons (`Leena Gandhi; Delvys Rodríguez-Abreu; ...`). Convert them to the ledger's `Surname AB` form for NLM or Vancouver output. PubMed returns initials directly. Prefer PubMed for the author string, and Crossref or the DOI record for volume, issue, and pages.
+
+- **Record the conversion you performed.** Never invent initials.
 
 ## Registries and workspace
 
-`init_review.py` creates:
+`init_review.py` creates this tree.
 
 ```text
 review-<slug>/
@@ -289,79 +347,212 @@ review-<slug>/
   GATE_REPORT.json         # written by gate.py
 ```
 
-Ledger schemas, field by field: `references/evidence_ledger.md`. The ledgers contain **metadata and
-the authors' own text only** — never source documents, patient data, or third-party unpublished content.
+The schemas, field by field, are in `references/evidence_ledger.md`. The ledgers contain **metadata and
+the authors' own text only**. They never contain source documents, patient data, or third-party
+unpublished content.
 
 ## Two ledgers, two directions
 
-- `sources.csv` answers *"is this citation real, verified, and correctly described?"*
-- `claims.csv` answers *"is this sentence supported, by what, and how strongly?"*
+- `sources.csv` answers "is this citation real, verified, and correctly described?"
 
-The audit joins them: a claim marker whose sources are unverified is an error; a source cited in the
-manuscript but absent from the ledger is an error; a claim registered but never used is a warning to
-resolve before submission.
+- `claims.csv` answers "is this sentence supported, by what, and how strongly?"
+
+The audit joins the two ledgers. A claim marker whose sources lack verification is an error. A source that
+the manuscript cites but the ledger omits is an error. A claim that the ledger registers but the
+manuscript never uses is a warning to resolve before submission.
 
 ## Optional advisory classifier (Laya)
 
-An optional, opt-in local decision engine can propose judgments about *text* — hedging and
-certainty observations, theme suggestions. It is **advisory only and can never change a gate verdict**:
-its findings appear as `info`-severity `ADVISORY_*` codes, and no model output may set
-`verification_status`, `retraction_status`, `inclusion_status`, or any error. The ten deterministic
-commands never import it, so the pipeline works identically with it absent, uninstalled, or wrong.
+An optional, opt-in local decision engine can propose judgments about *text*: hedging and certainty
+observations, and theme suggestions. It is **advisory only, and it can never change a gate verdict**. Its
+findings appear as `info`-severity `ADVISORY_*` codes. No model output may set `verification_status`,
+`retraction_status`, `inclusion_status`, or any error. The ten deterministic commands never import the
+classifier, so the pipeline works identically with it absent, uninstalled, or wrong.
 
-**Where it may and may not participate is a written policy, not a preference**:
-`references/advisory_decision_plan.md`. In short — verification, retraction, inclusion, numbers,
-references, PRISMA arithmetic, and the gate verdict are **structurally forbidden** (a text classifier
-has no retrieval and no knowledge base, so it cannot decide them), while each candidate text-judgment
-stage must clear a measured bar on at least 50 labelled records before it is offered at all.
+**Where the classifier may and may not participate is a written policy, not a preference**. Read
+`references/advisory_decision_plan.md`. In short, the policy forbids the classifier structurally from
+touching verification, retraction, inclusion, numbers, references, PRISMA arithmetic, and the gate
+verdict. A text classifier has no retrieval and no knowledge base, so it cannot decide those things.
+Each candidate text-judgment stage must clear a measured bar on at least 50 labelled records before the
+skill offers it at all.
 
-Measured so far on this machine: the causality axis **missed** the worst overclaim in a six-sentence
-probe (0.041, the lowest score in the set); the hedging axis **did not separate** high- from
-low-certainty claims across nine real sentences; `publication_type` classification scored **1/3**,
-defaulting to the generic label; and the shipped checkpoint's own library warns that its confidence
-values are **uncalibrated**. Treat it as a hint generator, never as a source of accuracy.
+These are the measurements so far on this machine. The causality axis **missed** the worst overclaim in
+a six-sentence probe (0.041, the lowest score in the set). The hedging axis **did not separate** high-
+from low-certainty claims across nine real sentences. `publication_type` classification scored **1/3**,
+and it defaulted to the generic label. The shipped checkpoint's own library warns that its confidence
+values are **uncalibrated**. Treat the classifier as a hint generator, never as a source of accuracy.
 
-Full contract, prompts, schemas, costs, and removal steps: `references/advisory_laya.md`.
+The full contract, the prompts, the schemas, the costs, and the removal steps are in
+`references/advisory_laya.md`.
 
 ## Reporting standards
 
-Narrative reviews are not PRISMA-bound, but they must be transparent. Declare in Methods which standard
-was followed and report **SANRA** items (justification, aims, search description, referencing quality,
-scientific reasoning, presentation of data) in the appendix. Where the review contains a systematic
-search component, report **PRISMA 2020** items 1–16 and **PRISMA-S** for the search. GRADE-style
-certainty language, MOOSE for observational syntheses, and EQUATOR routing:
-`references/reporting_guidelines.md`.
-
+PRISMA does not bind a narrative review, but transparency does. Declare in Methods which standard the
+authors followed. Report the **SANRA** items in the appendix. The items are justification, aims, search
+description, referencing quality, scientific reasoning, and data presentation. Where the review
+contains a systematic search component, report **PRISMA 2020** items 1 to 16 and **PRISMA-S** for the
+search. Read `references/reporting_guidelines.md` for GRADE-style certainty language, MOOSE for
+observational syntheses, and the EQUATOR routing for CONSORT, STROBE, and CARE.
 
 ## Style, language, and integrity
 
-- Hedged, precise, non-promotional prose; no marketing adjectives. "Novel", "breakthrough",
-  "revolutionary" appear only inside a verified quotation.
-- Active causal verbs only where the cited design supports causation; otherwise "was associated with",
-  "cohort studies suggest".
-- Units, denominators, and uncertainty always explicit; `p` values reported as the source reported
-  them; no bare "significant" without the test and comparison.
-- Spell out each abbreviation at first use in the abstract, the body, and every table/figure caption.
-- Drug names by INN (generic), with one brand-name mention where clinically relevant; devices and
-  assays by manufacturer and version.
-- No verbatim quotation longer than ~25 words and no text reuse from any source; paraphrase in the
-  authors' own words with attribution.
-- AI-use disclosure, authorship criteria, and conflicts follow the target journal's current policy.
+- Write hedged, precise, non-promotional prose. Use no marketing adjective. "Novel", "breakthrough", and "revolutionary" appear only inside a verified quotation.
+
+- Use an active causal verb only where the cited design supports causation. Otherwise write `was associated with`, or `cohort studies suggest`.
+
+- State units, denominators, and uncertainty always. Report `p` values as the source reported them. Never write a bare "significant" without the test and the comparison.
+
+- Spell out each abbreviation at first use in the abstract, the body, and every table and figure caption.
+
+- Name a drug by its INN (generic), with one brand-name mention where that is clinically relevant. Name a device or an assay by manufacturer and version.
+
+- Never reuse a verbatim quotation longer than ~25 words, and never reuse text from any source. Paraphrase in the authors' own words, with attribution.
+
+- Follow the target journal's current policy for the AI-use disclosure, the authorship criteria, and the conflicts of interest.
+
+## Worked examples
+
+### Example 1 — a DOI that looks right and is not
+
+The draft cites a DOI for a trial of drug X in melanoma. The record that the DOI resolves to is a trial
+of drug Y in renal cancer. The title and the first author differ. The tool records
+`verification_status=failed` for that item, keeps it out of the prose, and raises the mismatch for the
+author. The DOI resolved, so the citation still fails.
+
+### Example 2 — a claim with no verified support
+
+The author wants to keep a sentence about a 30% response rate, and no retrieved record reports it. The
+skill does not invent a source. It cuts the sentence, or it attributes the claim explicitly to the
+absence of evidence. Record the decision in `UNRESOLVED.md`.
+
+### Example 3 — a PRISMA figure that disagrees with the counts
+
+The screening counts changed after the author edited `sources.csv`, and `prisma_counts.json` is stale.
+`make_prisma_flow.py` exits non-zero because the flow arithmetic does not balance. The diagram cannot
+disagree with the recorded counts, so the fix is a corrected counts file, not a redrawn figure.
+
+### Example 4 — offline mode
+
+The MCP server is absent. The skill runs offline on user-supplied sources. Every source that the user
+did not supply stays `unverified`, and it stays out of the prose. The skill reports the unavailable
+tools plainly, and it never fills a gap from memory.
+
+### Example 5 — an unread source blocks the gate
+
+A citable source has `retrieval_status` that says its text was never obtained. `gate.py` exits 3 with
+`status: insufficient_evidence` and a worklist in `input_gaps[]`. It also sets `submission_ready:
+false`. `--allow-insufficient` exits 0 while the report still records the condition.
+
+## Failure modes this skill is designed to prevent
+
+<!-- ste-allow R1,R2,R3: a markdown table is one layout block; the sentence-length, one-instruction and sentence-count rules do not apply to its cells -->
+
+| Failure | Control |
+|---|---|
+| A fabricated or wrong reference. | Identifier verification before citation; the refusal in `build_reference_list.py`; `audit_citations.py`. |
+| Wrong metadata (journal, year, authors). | The copy-from-record rule; duplicate detection on DOI and normalized title. |
+| An overstated claim ("proves") from a weak design. | The causal-language checks in `lint_manuscript.py`; the certainty field in `claims.csv`. |
+| A number that contradicts the source. | Extraction with locators; `check_numbers.py` recomputes n/N, CI, and ranges. |
+| A PRISMA figure that disagrees with screening. | The arithmetic gate in `make_prisma_flow.py`. |
+| Missing key literature. | Multi-database search with logged queries; availability logging; citing-article and related-article sweeps. |
+| Silent gaps and unfinished sections. | Placeholder detection; the `--sections` completeness check; `UNRESOLVED.md`. |
+| A citation to a retracted study. | `check_retraction` plus the `retraction_status` gate. |
+| Sensitive-data leakage. | The PHI pattern lint; metadata-only ledgers. |
+| Model-generated advice that silently overrides a check. | Advisories are `info`-only, prefixed `ADVISORY_*`, and labelled "not a gate input". No model output can set an error or a ledger state. |
+| A figure that is missing or broken in the delivered document. | The PDF draws it as vectors from the counts; the DOCX embeds a real PNG or says plainly that it could not; the HTML shows the SVG. |
+| A deliverable that a co-author cannot open. | The tool produces DOCX, PDF, and print-ready HTML from the same source, so no format is a second-class copy. |
+
+## Failure modes and exit codes
+
+<!-- ste-allow R1,R2,R3: a markdown table is one layout block; the sentence-length, one-instruction and sentence-count rules do not apply to its cells -->
+
+| Symptom | Status | Exit | Fix. |
+|---|---|---|---|
+| An `error` issue is present. | `fail` | 1 | Fix the issue and re-run the gate. |
+| A citable source has no text. | `insufficient_evidence` | 3 | Supply the source the worklist names. |
+| The gate must proceed anyway. | `insufficient_evidence` | 0 | `--allow-insufficient` records the condition and exits 0. |
+| A required section is absent. | `fail` | 1 | Add the section; `--sections` names it. |
+| A placeholder remains. | `fail` | 1 | Verify the item, or cut the claim. |
+| An unverified reference list entry. | `fail` | 1 | `build_reference_list.py` refuses to emit it. |
+| The exports are stale. | `fail` | 1 | Re-run `export_document.py`, then `gate.py --require-exports`. |
+
+Every script prints a JSON report with `status`, `summary`, and `issues[]`, and every issue carries a
+stable code. The exit code is `1` when any `error`-severity issue is present. The exit code is `3` when
+the input itself could not be read. One example is a citable source whose `retrieval_status` says its
+text was never obtained.
+
+That third code is `status: insufficient_evidence`. It carries a worklist in `input_gaps[]`, and never
+an `issues[]` entry. The reason is that the code states a condition of the inputs, not a finding about
+the review. `gate.py` also sets `submission_ready: false`. `--allow-insufficient` exits `0` while the
+report still records the condition. The full flag list, the exit codes, and the issue-code index are in
+`references/cli_reference.md`.
+
+## What this does not do
+
+- **It does not pool effect sizes**. It reports each study's estimate with its uncertainty. Use a meta-analysis workflow for a pooled estimate.
+
+- **It does not perform the search for you**. It runs the tools and records the queries, and it refuses to describe a search that nobody executed.
+
+- **It does not decide authorship**. Named human authors decide, verify, and approve. The skill drafts.
+
+- **It does not certify a review**. A `submission_ready: true` report means that the machine checks passed on the recorded inputs. It does not mean that the science is right or that the venue will accept it.
+
+- **It does not cover sources that nobody retrieved**. The evidence base is the set of verified records in `sources.csv`, plus nothing.
+
+- **It does not replace a human pre-submission check**. Run `references/qa_checklist.md` as well as `gate.py`. The gate checks what a machine can check, and the checklist covers the rest.
+
+## Rubric coverage
+
+`references/qa_checklist.md` holds the human pre-submission rubric. This table maps every section to the
+procedure that implements it.
+
+<!-- ste-allow R1,R2,R3: a markdown table is one layout block; the sentence-length, one-instruction and sentence-count rules do not apply to its cells -->
+
+| Section | Item | Implementing procedure. |
+|---|---|---|
+| 1 | Scope and question. | **Phase 0**; **Purpose**. |
+| 2 | Search and selection. | **Phase 2**; **Phase 3**. |
+| 3 | Sources and verification. | **Phase 3**; **Verification protocol (Phase 3 detail)**. |
+| 4 | Claim integrity. | **Non-negotiable rules**, rules 3 to 5; **Phase 5**. |
+| 5 | Numbers. | **Non-negotiable rule 4**; **Phase 4**; **Phase 8**. |
+| 6 | Citation mechanics. | **Phase 8**; **Verification protocol (Phase 3 detail)**. |
+| 7 | Displays. | **Phase 7**. |
+| 8 | Language and completeness. | **Phase 6**; **Style, language, and integrity**. |
+| 9 | Integrity and policy. | **Non-negotiable rules**, rules 8 and 9; **Optional advisory classifier (Laya)**. |
+| 10 | Unresolved items. | **Non-negotiable rule 3**; **Registries and workspace**. |
+| 11 | Exported deliverables. | **Phase 9**; **Failure modes and exit codes**. |
+
+## Escalation and honesty rules for the agent
+
+- If a tool is unavailable, rate-limited, or returns nothing, **say so** and record it. Report `unavailable` distinctly from `empty`. Never fill a gap from memory.
+
+- If the user asks for a citation that they "know exists" and the tool cannot verify it, report exactly what the lookup returned. Offer alternatives found by related-article and citing-article sweeps.
+
+- If the user asks to remove a placeholder, weaken the gate, or skip verification, explain the consequence. Do not silently comply. Record the decision in `UNRESOLVED.md` if the user insists.
+
+- Never write a Methods section that describes a search nobody executed.
+
+- Never state a percentage, an incidence, or an effect size that is not in `sources.csv`.
+
+- Say clearly when the review is a draft with open placeholders, rather than a finished manuscript.
 
 ## Bundled files
+
+<!-- ste-allow R1,R2,R3: a markdown table is one layout block; the sentence-length, one-instruction and sentence-count rules do not apply to its cells -->
 
 | File | Use |
 |---|---|
 | `references/review_methodology.md` | narrative vs systematic vs scoping; SANRA; evidence hierarchy; which claims each design can support |
-| `references/search_and_retrieval.md` | MeSH/Boolean per database, filters, dedupe, PRISMA-S reporting, availability logging |
+| `references/search_and_retrieval.md` | MeSH and Boolean per database, filters, dedupe, PRISMA-S reporting, availability logging |
 | `references/evidence_ledger.md` | exact schemas for `sources.csv`, `claims.csv`, `search_log.csv`, `prisma_counts.json` |
-| `references/citation_and_reference.md` | Vancouver/AMA/APA/Elsevier rules, DOI/PMID formatting, retraction handling, secondary-citation ban |
+| `references/citation_and_reference.md` | Vancouver, AMA, APA, and Elsevier rules, DOI and PMID formatting, retraction handling, the secondary-citation ban |
 | `references/tables_and_figures.md` | table vs figure choice, evidence and certainty table columns, forest-plot rules, captions, alt text, accessibility |
 | `references/medical_language.md` | hedging ladder, causal language, number and unit rules, significance wording, terminology |
-| `references/reporting_guidelines.md` | PRISMA 2020/S, SANRA, MOOSE, GRADE, CONSORT/STROBE/CARE pointers, EQUATOR |
-| `references/integrity_ai_authorship.md` | ICMJE authorship, AI disclosure wording, plagiarism/self-plagiarism, PHI, predatory outlets, image integrity |
+| `references/reporting_guidelines.md` | PRISMA 2020 and PRISMA-S, SANRA, MOOSE, GRADE, and the EQUATOR checklists |
+| `references/integrity_ai_authorship.md` | ICMJE authorship, AI disclosure wording, plagiarism and self-plagiarism, PHI, predatory outlets, image integrity |
 | `references/section_blueprints.md` | paragraph-by-paragraph blueprint for every section, including the structured abstract |
 | `references/qa_checklist.md` | final human pre-submission checklist |
+| `references/advisory_decision_plan.md` | where the advisory classifier may and may not participate |
 | `references/advisory_laya.md` | optional advisory classifier: contract, prompts, file schema, costs, removal |
 | `references/cli_reference.md` | every bundled command, input schema, exit code, issue-code index |
 | `scripts/_common.py` | shared bounded, offline helpers imported by every command |
@@ -370,6 +561,17 @@ certainty language, MOOSE for observational syntheses, and EQUATOR routing:
 | `scripts/_pdfout.py` | PDF writer: Times metrics, A4 geometry, page furniture |
 | `scripts/_pdfrender.py` | PDF layout: headings, runs, ruled tables, vector screening figure |
 | `scripts/_htmlout.py` | print-ready HTML with clickable citations and embedded SVG |
+| `scripts/init_review.py` | create the workspace and refuse to overwrite one |
+| `scripts/validate_sources.py` | check the source ledger against the required fields |
+| `scripts/make_evidence_table.py` | build an evidence or certainty table from `sources.csv` |
+| `scripts/make_prisma_flow.py` | draw the screening flow, and fail when the arithmetic does not balance |
+| `scripts/build_reference_list.py` | renumber citations and refuse an unverified entry |
+| `scripts/audit_citations.py` | join `claims.csv` to the manuscript and to `sources.csv` |
+| `scripts/check_numbers.py` | recompute n/N, CI, and ranges from the ledgers |
+| `scripts/lint_manuscript.py` | section completeness and causal-language checks |
+| `scripts/gate.py` | aggregate every audit into one pass-or-fail report |
+| `scripts/export_document.py` | write DOCX, PDF, and print-ready HTML |
+| `scripts/selftest.sh` | the offline regression harness |
 | `assets/topic_intake.md` | intake questions with defaults |
 | `assets/manuscript_scaffold.md` | section skeleton with marker placeholders |
 | `assets/source_ledger_template.csv` | empty `sources.csv` with the exact header |
@@ -398,55 +600,18 @@ python3 scripts/export_document.py final/manuscript_cited.md --workspace . --out
 python3 scripts/gate.py --dir . --require-exports
 ```
 
-Every script prints a JSON report with `status`, `summary`, and `issues[]` carrying stable codes. The
-exit code is `1` when any `error`-severity issue is present, and **`3` when the input itself could not
-be read** — a citable source whose `retrieval_status` says its text was never obtained. That third
-code is `status: insufficient_evidence` with a worklist in `input_gaps[]`, never an `issues[]` entry,
-because it is a statement about the inputs rather than a finding about the review; `gate.py` also sets
-`submission_ready: false`. `--allow-insufficient` exits `0` while still recording the condition. Full
-flag list, exit codes and issue-code index:
-`references/cli_reference.md`. Scripts run from the skill directory and need no third-party packages.
-
-## Failure modes this skill is designed to prevent
-
-| Failure | Prevented by |
-|---|---|
-| Fabricated or wrong reference | identifier verification before citation; `build_reference_list.py` refusal; `audit_citations.py` |
-| Wrong metadata (journal, year, authors) | copy-from-record rule; duplicate detection on DOI and normalized title |
-| Overstated claim ("proves") from weak design | `lint_manuscript.py` causal-language checks; certainty field in `claims.csv` |
-| A number that contradicts the source | extraction with locators; `check_numbers.py` recomputation of n/N, CI, and ranges |
-| A PRISMA figure that disagrees with screening | `make_prisma_flow.py` arithmetic gate |
-| Missing key literature | multi-database search with logged queries; availability logging; citing/related-article sweeps |
-| Silent gaps and unfinished sections | placeholder detection, `--sections` completeness check, `UNRESOLVED.md` |
-| Citation to a retracted study | `check_retraction` plus the `retraction_status` gate |
-| Sensitive-data leakage | PHI pattern lint; metadata-only ledgers |
-| Model-generated advice silently overriding a check | Advisories are `info`-only, prefixed `ADVISORY_`, labelled "not a gate input", and no model output can set an error or a ledger state |
-| Figure missing or broken in the delivered document | PDF draws it as vectors from the counts; DOCX embeds a real PNG or says plainly that it could not; HTML shows the SVG |
-| Deliverable that a co-author cannot open | DOCX, PDF, and print-ready HTML are produced from the same source, so no format is a second-class copy |
-
-## Escalation and honesty rules for the agent
-
-- If a tool is unavailable, rate-limited, or returns nothing, **say so** and record it; report
-  `unavailable` distinctly from `empty`. Never fill a gap from memory.
-- If the user asks for a citation they "know exists" but it cannot be verified, report exactly what the
-  lookup returned and offer alternatives found by related-article and citing-article sweeps.
-- If the user asks to remove a placeholder, weaken the gate, or skip verification, explain the
-  consequence, do not silently comply, and record the decision in `UNRESOLVED.md` if they insist.
-- Never write a Methods section describing a search that was not actually executed.
-- Never state a percentage, incidence, or effect size that is not in `sources.csv`.
-- Say clearly when the review is a draft with open placeholders rather than a finished manuscript.
+Scripts run from the skill directory, and they need no third-party package.
 
 ## Regression tests
 
-`scripts/selftest.sh` is the offline regression harness. It runs every bundled CLI
-against fixtures and asserts **both** the PASS and the FAIL path of each gate (a gate
-that cannot fail is not a gate), then exercises the whole chain
-(`build_reference_list` → `export_document` → `gate` PASS). Run it after any change:
+`scripts/selftest.sh` is the offline regression harness. It runs every bundled CLI against fixtures. It
+asserts **both** the PASS path and the FAIL path of each gate, because a gate that cannot fail is not a
+gate. It then exercises the whole chain: `build_reference_list.py`, then `export_document.py`, then the
+`gate.py` PASS. Run it after any change.
 
 ```bash
-bash scripts/selftest.sh     # RESULT: 29 passed, 0 failed
+bash scripts/selftest.sh     # RESULT: 30 passed, 0 failed
 ```
 
-It needs only `python3` and `bash` — no network, no third-party packages — and is
-location-independent (it resolves the skill root from its own path).
-
+The harness needs only `python3` and `bash`. It needs no network and no third-party package, and it is
+location-independent, because it resolves the skill root from its own path.

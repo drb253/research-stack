@@ -1,0 +1,708 @@
+{
+ "context": {
+  "corpus": "/Users/drb/Documents/deepseek-harness/Research-stack/repo/benchmarks/frame_corpus/corpus.json",
+  "counts": {
+   "frame_copy": 108,
+   "human_frame_copy": 3,
+   "legit_paraphrase": 8,
+   "real_revision": 54,
+   "unrelated": 54
+  },
+  "resolution": {
+   "anchors_checked": 165,
+   "anchors_resolved": 165
+  },
+  "decision_rule": "sensitivity >= 0.90 and FPR <= 0.05 and Wilson lower bound >= 0.80 and 2-fold CV sensitivity >= 0.80",
+  "decision_negatives": [
+   "unrelated",
+   "legit_paraphrase",
+   "real_revision"
+  ],
+  "secondary": {
+   "human_frame_copy": {
+    "auc": 0.4253,
+    "auc_ci": [
+     0.1552,
+     0.8448
+    ],
+    "positives": 3,
+    "negatives": 116,
+    "operating_point": {
+     "feasible": false,
+     "fpr_floor": 0.07758620689655173,
+     "fpr_floor_threshold": 1.0,
+     "sensitivity_at_floor": 0.0,
+     "sensitivity_at_floor_ci": [
+      0.0,
+      0.5615060804490177
+     ]
+    },
+    "cv": {
+     "sensitivity": 0.0,
+     "fpr": 0.0,
+     "positives": 3,
+     "negatives": 116
+    },
+    "clears_bar": false,
+    "median_positive": 0.5149,
+    "median_negative": 0.5847
+   }
+  }
+ },
+ "measures": [
+  {
+   "auc": 0.6547,
+   "auc_ci": [
+    0.5829,
+    0.7244
+   ],
+   "positives": 108,
+   "negatives": 116,
+   "operating_point": {
+    "threshold": 0.262,
+    "sensitivity": 0.1574074074074074,
+    "fpr": 0.04310344827586207,
+    "tp": 17,
+    "fp": 5,
+    "feasible": true,
+    "sensitivity_ci": [
+     0.1006611927381274,
+     0.2376887593369502
+    ]
+   },
+   "cv": {
+    "sensitivity": 0.1296,
+    "fpr": 0.0603,
+    "positives": 108,
+    "negatives": 116
+   },
+   "clears_bar": false,
+   "median_positive": 0.1545,
+   "median_negative": 0.109,
+   "measure": "toolkit_structure",
+   "description": "existing structure_similarity (baseline)"
+  },
+  {
+   "auc": 0.7999,
+   "auc_ci": [
+    0.7545,
+    0.8491
+   ],
+   "positives": 108,
+   "negatives": 116,
+   "operating_point": {
+    "feasible": false,
+    "fpr_floor": 0.3706896551724138,
+    "fpr_floor_threshold": 1.0,
+    "sensitivity_at_floor": 0.9814814814814815,
+    "sensitivity_at_floor_ci": [
+     0.9349796714470743,
+     0.9949068823933571
+    ]
+   },
+   "cv": {
+    "sensitivity": 0.0,
+    "fpr": 0.0,
+    "positives": 108,
+    "negatives": 116
+   },
+   "clears_bar": false,
+   "median_positive": 1.0,
+   "median_negative": 0.6,
+   "measure": "best_window",
+   "description": "best-window function-word ratio"
+  },
+  {
+   "auc": 0.7543,
+   "auc_ci": [
+    0.7069,
+    0.8017
+   ],
+   "positives": 108,
+   "negatives": 116,
+   "operating_point": {
+    "feasible": false,
+    "fpr_floor": 0.49137931034482757,
+    "fpr_floor_threshold": 1.0,
+    "sensitivity_at_floor": 1.0,
+    "sensitivity_at_floor_ci": [
+     0.9656514212958326,
+     0.9999999999999998
+    ]
+   },
+   "cv": {
+    "sensitivity": 0.0,
+    "fpr": 0.0,
+    "positives": 108,
+    "negatives": 116
+   },
+   "clears_bar": false,
+   "median_positive": 1.0,
+   "median_negative": 0.8875,
+   "measure": "fw_lcs_all",
+   "description": "LCS over ALL function words (naive sibling)"
+  },
+  {
+   "auc": 0.6155,
+   "auc_ci": [
+    0.5506,
+    0.678
+   ],
+   "positives": 108,
+   "negatives": 116,
+   "operating_point": {
+    "feasible": false,
+    "fpr_floor": 0.1896551724137931,
+    "fpr_floor_threshold": 1.0,
+    "sensitivity_at_floor": 0.4537037037037037,
+    "sensitivity_at_floor_ci": [
+     0.3630114551299451,
+     0.5475763762315519
+    ]
+   },
+   "cv": {
+    "sensitivity": 0.0,
+    "fpr": 0.0,
+    "positives": 108,
+    "negatives": 116
+   },
+   "clears_bar": false,
+   "median_positive": 0.0,
+   "median_negative": 0.0,
+   "measure": "inf_lcs_unigram",
+   "description": "LCS over informative function words"
+  },
+  {
+   "auc": 0.6579,
+   "auc_ci": [
+    0.6006,
+    0.7141
+   ],
+   "positives": 108,
+   "negatives": 116,
+   "operating_point": {
+    "feasible": false,
+    "fpr_floor": 0.13793103448275862,
+    "fpr_floor_threshold": 1.0,
+    "sensitivity_at_floor": 0.4537037037037037,
+    "sensitivity_at_floor_ci": [
+     0.3630114551299451,
+     0.5475763762315519
+    ]
+   },
+   "cv": {
+    "sensitivity": 0.0,
+    "fpr": 0.0,
+    "positives": 108,
+    "negatives": 116
+   },
+   "clears_bar": false,
+   "median_positive": 0.0,
+   "median_negative": 0.0,
+   "measure": "inf_ngram_lcs",
+   "description": "LCS over informative function-word trigrams"
+  },
+  {
+   "auc": 0.5283,
+   "auc_ci": [
+    0.4887,
+    0.5679
+   ],
+   "positives": 108,
+   "negatives": 116,
+   "operating_point": {
+    "threshold": 1.0,
+    "sensitivity": 0.12962962962962962,
+    "fpr": 0.04310344827586207,
+    "tp": 14,
+    "fp": 5,
+    "feasible": true,
+    "sensitivity_ci": [
+     0.07881199094174575,
+     0.20589065995023
+    ]
+   },
+   "cv": {
+    "sensitivity": 0.1296,
+    "fpr": 0.0431,
+    "positives": 108,
+    "negatives": 116
+   },
+   "clears_bar": false,
+   "median_positive": 0.0,
+   "median_negative": 0.0,
+   "measure": "inf_lcs_bigram",
+   "description": "LCS over informative bigrams only (degenerate)"
+  },
+  {
+   "auc": 0.5283,
+   "auc_ci": [
+    0.4887,
+    0.5679
+   ],
+   "positives": 108,
+   "negatives": 116,
+   "operating_point": {
+    "threshold": 1.0,
+    "sensitivity": 0.12962962962962962,
+    "fpr": 0.04310344827586207,
+    "tp": 14,
+    "fp": 5,
+    "feasible": true,
+    "sensitivity_ci": [
+     0.07881199094174575,
+     0.20589065995023
+    ]
+   },
+   "cv": {
+    "sensitivity": 0.1296,
+    "fpr": 0.0431,
+    "positives": 108,
+    "negatives": 116
+   },
+   "clears_bar": false,
+   "median_positive": 0.0,
+   "median_negative": 0.0,
+   "measure": "inf_lcs_bigram_sentence",
+   "description": "informative bigram LCS vs best sentence (degenerate)"
+  },
+  {
+   "auc": 0.7241,
+   "auc_ci": [
+    0.66,
+    0.7866
+   ],
+   "positives": 108,
+   "negatives": 116,
+   "operating_point": {
+    "feasible": false,
+    "fpr_floor": 0.25862068965517243,
+    "fpr_floor_threshold": 1.0,
+    "sensitivity_at_floor": 0.7777777777777778,
+    "sensitivity_at_floor_ci": [
+     0.6905974226538109,
+     0.8458755891772073
+    ]
+   },
+   "cv": {
+    "sensitivity": 0.0,
+    "fpr": 0.0,
+    "positives": 108,
+    "negatives": 116
+   },
+   "clears_bar": false,
+   "median_positive": 1.0,
+   "median_negative": 0.9315,
+   "measure": "skeleton_length",
+   "description": "punctuation/clause skeleton + length ratio"
+  },
+  {
+   "auc": 0.9052,
+   "auc_ci": [
+    0.8664,
+    0.9397
+   ],
+   "positives": 108,
+   "negatives": 116,
+   "operating_point": {
+    "feasible": false,
+    "fpr_floor": 0.1896551724137931,
+    "fpr_floor_threshold": 1.0,
+    "sensitivity_at_floor": 1.0,
+    "sensitivity_at_floor_ci": [
+     0.9656514212958326,
+     0.9999999999999998
+    ]
+   },
+   "cv": {
+    "sensitivity": 0.0,
+    "fpr": 0.0,
+    "positives": 108,
+    "negatives": 116
+   },
+   "clears_bar": false,
+   "median_positive": 1.0,
+   "median_negative": 0.8333,
+   "measure": "slot_agreement",
+   "description": "content-word slot agreement"
+  },
+  {
+   "auc": 0.8171,
+   "auc_ci": [
+    0.7614,
+    0.8715
+   ],
+   "positives": 108,
+   "negatives": 116,
+   "operating_point": {
+    "feasible": false,
+    "fpr_floor": 0.07758620689655173,
+    "fpr_floor_threshold": 1.0,
+    "sensitivity_at_floor": 0.3611111111111111,
+    "sensitivity_at_floor_ci": [
+     0.2767340307537134,
+     0.45502946333077743
+    ]
+   },
+   "cv": {
+    "sensitivity": 0.0,
+    "fpr": 0.0,
+    "positives": 108,
+    "negatives": 116
+   },
+   "clears_bar": false,
+   "median_positive": 0.6667,
+   "median_negative": 0.5847,
+   "measure": "combined",
+   "description": "pre-declared mean of inf_ngram/skeleton/slot"
+  },
+  {
+   "auc": 0.3139,
+   "auc_ci": [
+    0.2434,
+    0.3886
+   ],
+   "positives": 108,
+   "negatives": 116,
+   "operating_point": {
+    "threshold": 0.853,
+    "sensitivity": 0.0,
+    "fpr": 0.008620689655172414,
+    "tp": 0,
+    "fp": 1,
+    "feasible": true,
+    "sensitivity_ci": [
+     3.3502763802645017e-18,
+     0.03434857870416731
+    ]
+   },
+   "cv": {
+    "sensitivity": 0.0,
+    "fpr": 0.0345,
+    "positives": 108,
+    "negatives": 116
+   },
+   "clears_bar": false,
+   "median_positive": 0.0405,
+   "median_negative": 0.219,
+   "measure": "lexical",
+   "description": "toolkit lexical score (context, not structural)"
+  }
+ ],
+ "sensitivity_analysis_no_revision": [
+  {
+   "auc": 0.7336,
+   "auc_ci": [
+    0.6552,
+    0.8059
+   ],
+   "positives": 108,
+   "negatives": 62,
+   "operating_point": {
+    "threshold": 0.248,
+    "sensitivity": 0.17592592592592593,
+    "fpr": 0.03225806451612903,
+    "tp": 19,
+    "fp": 2,
+    "feasible": true,
+    "sensitivity_ci": [
+     0.11561771988481864,
+     0.25849709964566014
+    ]
+   },
+   "cv": {
+    "sensitivity": 0.1296,
+    "fpr": 0.0323,
+    "positives": 108,
+    "negatives": 62
+   },
+   "clears_bar": false,
+   "median_positive": 0.1545,
+   "median_negative": 0.09,
+   "measure": "toolkit_structure",
+   "description": "existing structure_similarity (baseline)"
+  },
+  {
+   "auc": 0.9818,
+   "auc_ci": [
+    0.9541,
+    1.0
+   ],
+   "positives": 108,
+   "negatives": 62,
+   "operating_point": {
+    "threshold": 1.0,
+    "sensitivity": 0.9814814814814815,
+    "fpr": 0.0,
+    "tp": 106,
+    "fp": 0,
+    "feasible": true,
+    "sensitivity_ci": [
+     0.9349796714470743,
+     0.9949068823933571
+    ]
+   },
+   "cv": {
+    "sensitivity": 0.9815,
+    "fpr": 0.0,
+    "positives": 108,
+    "negatives": 62
+   },
+   "clears_bar": true,
+   "median_positive": 1.0,
+   "median_negative": 0.4286,
+   "measure": "best_window",
+   "description": "best-window function-word ratio"
+  },
+  {
+   "auc": 0.9355,
+   "auc_ci": [
+    0.8952,
+    0.9758
+   ],
+   "positives": 108,
+   "negatives": 62,
+   "operating_point": {
+    "feasible": false,
+    "fpr_floor": 0.12903225806451613,
+    "fpr_floor_threshold": 1.0,
+    "sensitivity_at_floor": 1.0,
+    "sensitivity_at_floor_ci": [
+     0.9656514212958326,
+     0.9999999999999998
+    ]
+   },
+   "cv": {
+    "sensitivity": 0.0,
+    "fpr": 0.0,
+    "positives": 108,
+    "negatives": 62
+   },
+   "clears_bar": false,
+   "median_positive": 1.0,
+   "median_negative": 0.6515,
+   "measure": "fw_lcs_all",
+   "description": "LCS over ALL function words (naive sibling)"
+  },
+  {
+   "auc": 0.6476,
+   "auc_ci": [
+    0.5755,
+    0.7118
+   ],
+   "positives": 108,
+   "negatives": 62,
+   "operating_point": {
+    "feasible": false,
+    "fpr_floor": 0.0967741935483871,
+    "fpr_floor_threshold": 1.0,
+    "sensitivity_at_floor": 0.4537037037037037,
+    "sensitivity_at_floor_ci": [
+     0.3630114551299451,
+     0.5475763762315519
+    ]
+   },
+   "cv": {
+    "sensitivity": 0.0,
+    "fpr": 0.0,
+    "positives": 108,
+    "negatives": 62
+   },
+   "clears_bar": false,
+   "median_positive": 0.0,
+   "median_negative": 0.0,
+   "measure": "inf_lcs_unigram",
+   "description": "LCS over informative function words"
+  },
+  {
+   "auc": 0.7269,
+   "auc_ci": [
+    0.6806,
+    0.7731
+   ],
+   "positives": 108,
+   "negatives": 62,
+   "operating_point": {
+    "threshold": 1.0,
+    "sensitivity": 0.4537037037037037,
+    "fpr": 0.0,
+    "tp": 49,
+    "fp": 0,
+    "feasible": true,
+    "sensitivity_ci": [
+     0.3630114551299451,
+     0.5475763762315519
+    ]
+   },
+   "cv": {
+    "sensitivity": 0.4537,
+    "fpr": 0.0,
+    "positives": 108,
+    "negatives": 62
+   },
+   "clears_bar": false,
+   "median_positive": 0.0,
+   "median_negative": 0.0,
+   "measure": "inf_ngram_lcs",
+   "description": "LCS over informative function-word trigrams"
+  },
+  {
+   "auc": 0.5367,
+   "auc_ci": [
+    0.493,
+    0.5795
+   ],
+   "positives": 108,
+   "negatives": 62,
+   "operating_point": {
+    "threshold": 1.0,
+    "sensitivity": 0.12962962962962962,
+    "fpr": 0.0,
+    "tp": 14,
+    "fp": 0,
+    "feasible": true,
+    "sensitivity_ci": [
+     0.07881199094174575,
+     0.20589065995023
+    ]
+   },
+   "cv": {
+    "sensitivity": 0.1296,
+    "fpr": 0.0,
+    "positives": 108,
+    "negatives": 62
+   },
+   "clears_bar": false,
+   "median_positive": 0.0,
+   "median_negative": 0.0,
+   "measure": "inf_lcs_bigram",
+   "description": "LCS over informative bigrams only (degenerate)"
+  },
+  {
+   "auc": 0.5367,
+   "auc_ci": [
+    0.493,
+    0.5795
+   ],
+   "positives": 108,
+   "negatives": 62,
+   "operating_point": {
+    "threshold": 1.0,
+    "sensitivity": 0.12962962962962962,
+    "fpr": 0.0,
+    "tp": 14,
+    "fp": 0,
+    "feasible": true,
+    "sensitivity_ci": [
+     0.07881199094174575,
+     0.20589065995023
+    ]
+   },
+   "cv": {
+    "sensitivity": 0.1296,
+    "fpr": 0.0,
+    "positives": 108,
+    "negatives": 62
+   },
+   "clears_bar": false,
+   "median_positive": 0.0,
+   "median_negative": 0.0,
+   "measure": "inf_lcs_bigram_sentence",
+   "description": "informative bigram LCS vs best sentence (degenerate)"
+  },
+  {
+   "auc": 0.7957,
+   "auc_ci": [
+    0.729,
+    0.8616
+   ],
+   "positives": 108,
+   "negatives": 62,
+   "operating_point": {
+    "feasible": false,
+    "fpr_floor": 0.0967741935483871,
+    "fpr_floor_threshold": 1.0,
+    "sensitivity_at_floor": 0.7777777777777778,
+    "sensitivity_at_floor_ci": [
+     0.6905974226538109,
+     0.8458755891772073
+    ]
+   },
+   "cv": {
+    "sensitivity": 0.0,
+    "fpr": 0.0,
+    "positives": 108,
+    "negatives": 62
+   },
+   "clears_bar": false,
+   "median_positive": 1.0,
+   "median_negative": 0.88,
+   "measure": "skeleton_length",
+   "description": "punctuation/clause skeleton + length ratio"
+  },
+  {
+   "auc": 1.0,
+   "auc_ci": [
+    1.0,
+    1.0
+   ],
+   "positives": 108,
+   "negatives": 62,
+   "operating_point": {
+    "threshold": 1.0,
+    "sensitivity": 1.0,
+    "fpr": 0.0,
+    "tp": 108,
+    "fp": 0,
+    "feasible": true,
+    "sensitivity_ci": [
+     0.9656514212958326,
+     0.9999999999999998
+    ]
+   },
+   "cv": {
+    "sensitivity": 1.0,
+    "fpr": 0.0,
+    "positives": 108,
+    "negatives": 62
+   },
+   "clears_bar": true,
+   "median_positive": 1.0,
+   "median_negative": 0.8,
+   "measure": "slot_agreement",
+   "description": "content-word slot agreement"
+  },
+  {
+   "auc": 0.9435,
+   "auc_ci": [
+    0.9092,
+    0.9731
+   ],
+   "positives": 108,
+   "negatives": 62,
+   "operating_point": {
+    "threshold": 0.6667,
+    "sensitivity": 0.8703703703703703,
+    "fpr": 0.0,
+    "tp": 94,
+    "fp": 0,
+    "feasible": true,
+    "sensitivity_ci": [
+     0.79410934004977,
+     0.9211880090582542
+    ]
+   },
+   "cv": {
+    "sensitivity": 0.8704,
+    "fpr": 0.0,
+    "positives": 108,
+    "negatives": 62
+   },
+   "clears_bar": false,
+   "median_positive": 0.6667,
+   "median_negative": 0.5472,
+   "measure": "combined",
+   "description": "pre-declared mean of inf_ngram/skeleton/slot"
+  }
+ ]
+}

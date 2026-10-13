@@ -97,8 +97,8 @@ audit_exit=$?
 expect_json "attributed" "$TMP/audit.json" "d['coverage']['states']['attributed']" "1"
 expect_json "synthesis" "$TMP/audit.json" "d['coverage']['states']['synthesis']" "2"
 expect_json "unverifiable" "$TMP/audit.json" "d['coverage']['states']['unverifiable']" "2"
-expect_json "unattributed" "$TMP/audit.json" "d['coverage']['states']['unattributed']" "1"
-expect_json "conflict" "$TMP/audit.json" "d['coverage']['states']['conflict']" "2"
+expect_json "unattributed" "$TMP/audit.json" "d['coverage']['states']['unattributed']" "2"
+expect_json "conflict" "$TMP/audit.json" "d['coverage']['states']['conflict']" "1"
 expect_json "no_citation_needed" "$TMP/audit.json" "d['coverage']['states']['no_citation_needed']" "1"
 expect_json "coverage is 3/8" "$TMP/audit.json" "'%d/%d' % (d['coverage']['citation_coverage']['numerator'], d['coverage']['citation_coverage']['denominator'])" "3/8"
 expect_json "numerator is a subset of the denominator" "$TMP/audit.json" \
@@ -211,7 +211,12 @@ if [ "$gate_exit" -eq 0 ]; then ok "gate passes a clean report"; else no "gate p
 if grep -q "ARTIFACT_MISMATCH" "$TMP/gate.json"; then no "no artifact mismatches"; else ok "no artifact mismatches"; fi
 
 echo
-echo "== 6. fabricated citation is an error (D03) =="
+echo "== 6. an unmatched citation marker warns; it is not a red (D03) =="
+# D03 has no link by construction: the marker matches nothing, so there is no verified
+# link to the cited work. The red bar requires one, and the gate refuses a conflict whose
+# link is not exact. A broken citation is still a defect -- the sentence needs the citation
+# it lacks -- so it is `unattributed` and it warns. This section pins both directions: the
+# warning alone, and the gate that must no longer refuse the report it just produced.
 cat >"$WS/fabricated.md" <<'MD'
 # Fabrication
 
@@ -220,9 +225,54 @@ Statin therapy reduced major adverse cardiovascular events (HR 0.80) [src:S001].
 An exploratory analysis suggested that statins reduce stroke risk [99].
 MD
 "${RUN[@]}" audit --document "$WS/fabricated.md" --sources "$ASSETS/sample-sources.csv" --offline >"$TMP/fab.json" 2>&1
-expect_exit 1 "fabricated citation fails" "${RUN[@]}" audit --document "$WS/fabricated.md" --sources "$ASSETS/sample-sources.csv" --offline
-expect_json "one conflict" "$TMP/fab.json" "d['coverage']['states']['conflict']" "1"
-expect_json_in "rule D03 named" "$TMP/fab.json" "str(d['issues'])" "D03"
+fab_exit=$?
+expect_json "no red for a broken citation" "$TMP/fab.json" "d['coverage']['states']['conflict']" "0"
+expect_json "the sentence is unattributed" "$TMP/fab.json" "d['coverage']['states']['unattributed']" "1"
+expect_json "D03 fires as a warning, and nothing is an error" "$TMP/fab.json" \
+  "'D03' in str(d['issues']) and d['coverage']['severity']['warning'] == 1 and d['coverage']['severity']['error'] == 0" "True"
+if [ "$fab_exit" -eq 0 ]; then ok "an unmatched citation marker does not fail the run"; else no "an unmatched citation marker must not fail the run (got $fab_exit)"; fi
+rm -rf "$TMP/fabdir"
+"${RUN[@]}" report --document "$WS/fabricated.md" --sources "$ASSETS/sample-sources.csv" \
+  --offline --format html --out-dir "$TMP/fabdir" >/dev/null 2>&1
+"${GATE[@]}" --dir "$TMP/fabdir" >"$TMP/fabgate.json" 2>&1
+expect_json "the gate verifies the artifact written for a broken citation" \
+  "$TMP/fabgate.json" "d['summary']['artifacts_verified']" "1"
+if grep -q "CONFLICT_LINK_INFERRED" "$TMP/fabgate.json"; then
+  no "no inferred-link red is invented for D03"
+else
+  ok "no inferred-link red is invented for D03"
+fi
+
+echo
+echo "== 6b. the red bar still refuses a red whose link is inferred (fail fixture) =="
+# D03 was narrowed; the bar itself was not. A D04 red is legitimate because its link is
+# verified. Tamper that link and the gate must still refuse the red, or the fix would have
+# weakened the bar instead of correcting the rule.
+cat >"$WS/retracted_inferred.md" <<'MD'
+# Retraction
+
+Vitamin D supplementation reduced all-cause mortality (RR 0.70) [src:S002].
+MD
+rm -rf "$TMP/retdir"
+"${RUN[@]}" report --document "$WS/retracted_inferred.md" --sources "$ASSETS/sample-sources.csv" \
+  --offline --format html --out-dir "$TMP/retdir" >/dev/null 2>&1
+rm -rf "$TMP/inferred"; cp -R "$TMP/retdir" "$TMP/inferred"
+python3 - "$TMP/inferred/verdicts.json" <<'PY'
+import json, sys
+path = sys.argv[1]
+payload = json.load(open(path))
+changed = 0
+for row in payload["verdicts"]:
+    if row["state"] == "conflict" and row["rule_id"] == "D04":
+        row["link_confidence"] = "inferred"
+        changed += 1
+assert changed, "no D04 red to tamper with"
+json.dump(payload, open(path, "w"), indent=2, sort_keys=True)
+print("tampered %d D04 link(s) to inferred" % changed)
+PY
+expect_exit 1 "an inferred-link red still fails the gate" "${GATE[@]}" --dir "$TMP/inferred"
+"${GATE[@]}" --dir "$TMP/inferred" >"$TMP/inferred.json" 2>&1
+expect_json_in "CONFLICT_LINK_INFERRED is still reported" "$TMP/inferred.json" "str(d['issues'])" "CONFLICT_LINK_INFERRED"
 
 echo
 echo "== 7. retracted source is an error (D04) =="

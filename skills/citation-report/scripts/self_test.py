@@ -668,6 +668,121 @@ def test_worklist_wording() -> int:
     return checks
 
 
+def test_honesty_gate() -> int:
+    """A universal negative must not ship, and a bounded clean result must pass.
+
+    ``tools/claim_guard.py`` finds the claim; the gate must act on the finding. These
+    are the pass and fail fixtures for that step: one clean result that names what it
+    was checked against, one absolute claim, and one clean result with no bound.
+    """
+    checks = 0
+    import report_gate
+
+    scanner = report_gate.load_honesty_scanner()
+    _check(
+        scanner is not None,
+        "tools/claim_guard.py must be importable from the skill; without it the honesty "
+        "step degrades to a warning and an absolute claim could ship",
+    )
+    checks += 1
+
+    # PASS fixture: a clean result that carries its bound produces no finding.
+    bounded = (
+        "No overlap was found against the sources checked. "
+        "This is not a clearance: the corpus that was not read is unbounded."
+    )
+    _check(
+        report_gate.honesty_findings(bounded, scanner) == [],
+        "a clean result with its bound must produce no honesty finding",
+    )
+    checks += 1
+
+    # FAIL fixture: an absolute claim is a finding.
+    absolute = report_gate.honesty_findings("The draft is plagiarism-free.", scanner)
+    _check(
+        any(finding["kind"] == "FORBIDDEN" for finding in absolute),
+        "an absolute claim must produce a FORBIDDEN finding: %r" % absolute,
+    )
+    checks += 1
+
+    # FAIL fixture: a clean result with no bound is a finding.
+    unbounded = report_gate.honesty_findings("No overlap was found.", scanner)
+    _check(
+        any(finding["kind"] == "UNBOUNDED" for finding in unbounded),
+        "a clean result with no bound must produce an UNBOUNDED finding: %r" % unbounded,
+    )
+    checks += 1
+
+    def graded_with_note(note):
+        """One valid recorded verdict whose printed note carries `note`."""
+        return verdicts.from_dict(
+            {
+                "verdicts": [
+                    {
+                        "sentence_id": "N0001",
+                        "text": "This review summarises the evidence.",
+                        "char_start": 0,
+                        "char_end": 34,
+                        "state": "no_citation_needed",
+                        "rule_id": "D01",
+                        "note": note,
+                    }
+                ]
+            }
+        )
+
+    # PASS fixture at the gate's own step: the gate accepts a bounded clean result.
+    clean_issues = report_gate.check_honesty(
+        graded_with_note(
+            "No overlap was found against the sources checked. This is not a clearance."
+        ),
+        scanner=scanner,
+    )
+    _check(
+        clean_issues == [],
+        "the gate must accept a bounded clean result: %r" % clean_issues,
+    )
+    checks += 1
+
+    # FAIL fixture at the gate's own step: a printed note may not claim the absolute.
+    bad_issues = report_gate.check_honesty(
+        graded_with_note("The draft is plagiarism-free."), scanner=scanner
+    )
+    _check(
+        any(issue.code == "HONESTY_CLAIM" for issue in bad_issues),
+        "the gate must block an absolute claim in a printed note: %r" % bad_issues,
+    )
+    checks += 1
+
+    # FAIL fixture: a clean result without its bound is blocked too.
+    unbounded_issues = report_gate.check_honesty(
+        graded_with_note("No overlap was found."), scanner=scanner
+    )
+    _check(
+        any(issue.code == "HONESTY_UNBOUNDED" for issue in unbounded_issues),
+        "the gate must block a clean result with no bound: %r" % unbounded_issues,
+    )
+    checks += 1
+
+    # A scan that finds nothing must add no issue at all.
+    _check(
+        report_gate.check_honesty(graded_with_note("x"), scanner=lambda *a, **k: []) == [],
+        "a scan with no finding must add no issue",
+    )
+    checks += 1
+
+    # An absent tools/ directory is reported, never silently passed.
+    unavailable = report_gate.check_honesty(
+        graded_with_note("x"), scanner=report_gate.load_honesty_scanner()
+    )
+    _check(
+        isinstance(unavailable, list),
+        "the honesty step must always return a list of issues",
+    )
+    checks += 1
+    return checks
+
+
 def main() -> int:
     tests = [
         ("sentence splitting", test_sentence_splitting),
@@ -685,6 +800,7 @@ def main() -> int:
         ("sufficiency policies", test_sufficiency_policies),
         ("intake preconditions", test_preconditions),
         ("worklist wording", test_worklist_wording),
+        ("honesty gate", test_honesty_gate),
     ]
     total = 0
     failed = 0

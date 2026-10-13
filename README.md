@@ -847,7 +847,7 @@ flowchart LR
 
 <div align="center"><img src="assets/coverage.svg" width="620" alt="automated checks by suite"></div>
 
-**301 automated checks, all passing.** Run them after any change:
+**444 automated checks, all passing.** Run them after any change:
 
 ```bash
 S=~/.research-stack/skills
@@ -855,19 +855,42 @@ bash  $S/evidence-synthesis-forge/scripts/doctor.sh              # toolchain rep
 bash  $S/evidence-synthesis-forge/scripts/selftest.sh            # 78 — every gate, pass+fail
 Rscript $S/meta-analysis-forge/scripts/golden_tests.R           # 22 — engine vs metafor
 bash  $S/medical-narrative-review/scripts/selftest.sh           # 30 — narrative-review chain
-bash  $S/citation-report/scripts/selftest.sh                    # 154 — citation report, pass+fail
+bash  $S/citation-report/scripts/selftest.sh                    # 159 — citation report, pass+fail
+bash  $S/environment-life-review-forge/scripts/selftest.sh      # 45 — PECO/PICO intake, 8 gates
+bash  $S/sysreview/scripts/selftest.sh                          # 40 — routing contract
+bash  $S/meta-analysis/scripts/selftest.sh                      # 29 — alias routing contract
+bash  $S/umbrella-review-skeptic/scripts/selftest.sh            # 24 — pooling defensibility
 python3 $S/evidence-synthesis-forge/scripts/acceptance_test.py  # 17 — live adversarial
 ./verify.sh --targets cline,claude,opencode                      # install acceptance
 ```
+
+**The skill prose is gated too.** A skill is an instruction a model acts on, so five gates check the
+text itself and a program decides each one:
+
+```bash
+python3 tools/ste_lint.py --quiet --summary skills/*/SKILL.md   # ASD-STE100 rules: 0 errors
+python3 tools/normative_tokens.py --check tools/normative-baseline.json  # no rule lost in a rewrite
+python3 tools/claim_guard.py skills/*/SKILL.md                  # no absolute claim
+python3 tools/check_descriptions.py skills                      # routing text, 40-100 words
+python3 tools/check_skill_coverage.py                           # harness + fixtures + rubric coverage
+python3 tools/e2e_citecheck.py --offline                        # a real run vs the skill's own rubric
+```
+
+`ste_lint` enforces the mechanical rules of ASD-STE100 (Issue 9) — sentence length, one instruction per
+sentence, paragraph length, contractions, progressive verbs, passive voice, abbreviations, terminology.
+Two rules are reported and never decided, and the module docstring says why: a noun cluster cannot be
+decided without a part-of-speech model, and a rule that flags legitimate writing is worse than the gap.
+`normative_tokens` is what makes a rewrite safe: it fails if any exit code, flag, tool name, path,
+threshold, verdict string, gate id or MUST/MUST NOT clause disappears.
 
 The citation-report suite is written for **three** PDF environments, because the expected behaviour
 changes with the tools installed, and a suite that assumed one of them failed on CI:
 
 | environment | unreadable PDF | suite |
 |---|---|---|
-| CI: no `pdftotext`, no `pypdf`, no OCR engine | `no_pdf_extractor`, exit 4 | **137 passed, 0 failed** |
-| a machine with a text extractor, no OCR engine | `no_text_layer`, exit 4, names the install route | **139 passed, 0 failed** |
-| a machine with OCR (tesseract + poppler) | transcribed, labelled, input-bound by default, never an accusation | **154 passed, 0 failed** |
+| CI: no `pdftotext`, no `pypdf`, no OCR engine | `no_pdf_extractor`, exit 4 | **142 passed, 0 failed** |
+| a machine with a text extractor, no OCR engine | `no_text_layer`, exit 4, names the install route | **144 passed, 0 failed** |
+| a machine with OCR (tesseract + poppler) | transcribed, labelled, input-bound by default, never an accusation | **159 passed, 0 failed** |
 
 `CITATION_REPORT_PDF_EXTRACTOR=none`, `CITATION_REPORT_OCR=none` and
 `CITATION_REPORT_OCR_ENGINES=none` force the absent branches, so any machine can exercise all

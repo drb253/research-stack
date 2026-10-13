@@ -193,9 +193,9 @@ reason, suggested_action, worklist_key, resolved`.
   "sentences_with_support_claim": 8,
   "sentences_not_requiring": 3,
   "states": {"attributed": 1, "synthesis": 2, "unverifiable": 1,
-             "unattributed": 1, "conflict": 2, "no_citation_needed": 0},
+             "unattributed": 2, "conflict": 1, "no_citation_needed": 0},
   "rules": {"D02": 1, "D03": 1, "D04": 1, "D07": 1, "D09": 1, "D10": 2},
-  "severity": {"error": 2, "warning": 2, "info": 3},
+  "severity": {"error": 1, "warning": 3, "info": 3},
   "citation_coverage": {
     "numerator": 3, "denominator": 8, "ratio": 0.375, "percent": 37.5,
     "definition": "(attributed + synthesis) / all sentences carrying a claim",

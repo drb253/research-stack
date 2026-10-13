@@ -7,6 +7,41 @@ versioning follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- **Six accuracy gates, four new skill harnesses and three end-to-end rubric scorers.** The skills are
+  instructions a model acts on, so the pass added gates that a program can decide and a harness for
+  every skill:
+  * `tools/ste_lint.py` — the mechanical ASD-STE100 rules (sentence length 20 words for an instruction
+    and 25 for a description, one instruction per sentence, paragraph length, contractions,
+    progressive verbs, passive voice, abbreviations, glossary terminology, list candidates). Two rules
+    are reported and never decided, and the docstring says why: a noun cluster needs a
+    part-of-speech model ("report", "record" and "list" are nouns and instruction verbs here — the
+    first version produced 281 hits, almost all legitimate prose). The standard's dictionary is
+    copyrighted, so terminology lives in this repository's own `tools/ste-glossary.yml`.
+  * `tools/normative_tokens.py` — extracts exit codes, flags, tool names, paths, thresholds, verdict
+    strings, gate ids and MUST/MUST NOT clauses, snapshots them, and fails when a rewrite loses one.
+    Additions are allowed; a loss is an error. This is what stops a rewrite from dropping a rule.
+  * `tools/claim_guard.py` — refuses an absolute claim ("plagiarism-free", "error-free", "perfect",
+    "medical grade", "certified", "clearance") and requires the bounding sentence when a clean result
+    is reported. Negated uses ("this is not a clearance") are exempt.
+  * `tools/check_descriptions.py` — the frontmatter description is the routing text, so it must be
+    40–100 words, carry no absolute claim, and its `name` must equal the directory.
+  * `tools/check_skill_coverage.py` — every skill has a harness whose exact path is registered in
+    `ci.yml`, every declared gate has a pass **and** a fail fixture, and every `eval.md` item appears
+    in its `SKILL.md`.
+  * `tools/e2e_citecheck.py`, `tools/e2e_humanizer.py`, `tools/e2e_citation_report.py` — score a real
+    run against that skill's own `eval.md` rubric, with `--offline` halves gated in CI and every
+    undecided check printed with its reason instead of being skipped.
+- **`benchmarks/frame_corpus/` and `benchmarks/bench_frame_copy.py` — the G4 frame-copying question,
+  measured.** 227 labelled items (108 machine-generated frame copies, 3 hand-written, 54 unrelated
+  documents, 54 same-work revisions, 8 ORI-labelled correct paraphrases), and ten structural measures
+  reported including the failures. No measure met the pre-registered bar (90% sensitivity at ≤5% false
+  positives, Wilson lower bound ≥80%), so **no `FRAME-COPY` state was wired** and the toolkit ships the
+  disclosure instead — see Changed.
+- **A harness for the four skills that had none:** `environment-life-review-forge` (45 checks),
+  `sysreview` (40), `meta-analysis` (29) and `umbrella-review-skeptic` (24). Each pins its own
+  contract with a pass and a fail fixture and the repository's exit-code discipline.
+- **`eval.md` for the eight skills that had none**, each mapped by a `## Rubric coverage` table in the
+  matching `SKILL.md`.
 - **DeepSeek Harness is a first-class install target: `./install.sh --targets dsh`.** It writes the
   13 review skills into `~/.dsh/skills` (`bin/mcp_config.py` gained the matching skills-dir mapping)
   and the MCP servers into `~/.dsh/cordis.patch.yml` through a new `dsh` platform in
@@ -24,6 +59,22 @@ versioning follows [Semantic Versioning](https://semver.org/).
   roots are also in `docs/PLATFORMS.md`.
 
 ### Changed
+- **All 13 `SKILL.md` files are rewritten in ASD-STE100 Simplified Technical English and expanded.**
+  Measured with the new linter: **536 errors and 31 warnings across 1129 sentences → 0 errors and 42
+  warnings across 2472 sentences** (26.5K words → 42.9K words); the 42 remaining warnings are all R10
+  list-candidates, which report and do not fail. Each skill gained a preflight/dependencies section, a
+  decision table, worked examples, a failure-modes table with the exact exit code or status, a
+  "What this does not do" section, and a `## Rubric coverage` table. The semantic-preservation gate
+  proves no exit code, flag, tool name, path, threshold, verdict string, gate id or MUST/MUST NOT
+  clause was lost, and every pre-existing harness still passes (citation-report grew 154 → 159 checks).
+- **The G4 blind spot is now disclosed, not silent.** The measurement above shows structure *does*
+  separate a frame copy from unrelated text (best AUC 1.000 on that pair) but **not** from a legitimate
+  same-work revision — a preprint against its own published version keeps the frame too, which is why a
+  threshold would flag legitimate writing. Every report, clean or flagged, and every `--json` payload now
+  carries a measured `Structural coverage (ORI Guideline 4)` line: how many sentences were compared,
+  that frame-copying is not covered above the measured separation, and that a clean result is a known
+  limitation rather than a clearance. `guard_report()` refuses any report with an absolute claim or a
+  clean result without its bound.
 - **A transcribed run is input-bound by default.** A transcription is a machine's reading, so a run
   whose evidence rests on one is `insufficient_evidence` (exit 3) with an
   `INPUT-BOUND — TRANSCRIBED EVIDENCE` banner that names transcription — not missing sources — as the
@@ -46,6 +97,19 @@ versioning follows [Semantic Versioning](https://semver.org/).
   ignored rather than silently pretended.
 
 ### Fixed
+- **Three absolute claims the new honesty gate found in the text a model reads first.** `citecheck`'s
+  description ended "…is what makes writing plagiarism-free" (twice in the file) and `humanizerdrb`
+  promised a "guarantee". All three now state what is actually checked and what it does not cover.
+- **A red finding rested on a link that could not be verified.** `citation-report` classified an
+  unmatched citation marker (rule D03) as `conflict` — an accusation — while its own gate refuses a red
+  with an inferred link (`CONFLICT_LINK_INFERRED`). The tool could not pass its own gate on a document
+  with a broken citation, and the accusation was not defensible: an unmatched marker is a citation that
+  resolves to nothing, not evidence of a conflict. D03 is now `unattributed` (a warning) with a new
+  `UNRESOLVED_CITATION` trigger, so the orange state stays honest; D04 (retracted source) and D08
+  (contradicted value) remain red because both rest on an identity-verified link. Both directions are
+  pinned by fixtures (a `[99]`-only document grades 0 conflict / 1 unattributed and passes its own
+  gate; a tampered D04 red still fails it), and `benchmarks/bench_verdicts.py` was updated to the new
+  rule table (conflict precision 1.000 over 23 conflict cases). Found by the end-to-end rubric scorer.
 - **The citation-report suite raced with itself.** One fixture wrote its tampered verdict file to a
   fixed global path (`/tmp/cr_badadvisory.json`), so two concurrent runs — a `verify.sh` and a
   hand-run suite, which is exactly what happened — read each other's file and one failed

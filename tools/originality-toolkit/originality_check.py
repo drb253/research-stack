@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import json
 import os
 import re
@@ -180,18 +181,23 @@ def structure_similarity(sentence, candidate):
 
     ORI Guideline 4 requires a paraphrase to use its own syntactical structure,
     not merely its own words, so a swap that keeps the frame ("whether X are able
-    to Y") is still plagiarism while scoring near zero on lexical overlap. Two
-    stdlib-only formulations were measured against that case:
+    to Y") is still plagiarism while scoring near zero on lexical overlap.
 
-      * whole-candidate frame ratio  -> dilutes to ~0.2 when the candidate is a
-        full abstract, so the check never fires in real use;
-      * best-window / best-source-sentence ratio -> over-matches: unrelated text
-        reached 0.857 against frame-copies starting at 0.533.
+    Measured on a labelled corpus (benchmarks/frame_corpus/, 108 machine-generated
+    frame copies against 116 negatives; benchmarks/bench_frame_copy.py):
 
-    Neither separates, because function words are too generic -- two unrelated
-    sentences share a frame. A threshold on either would flag legitimate writing,
-    which is worse than the gap, so the number is exposed for a human to weigh
-    and no verdict depends on it. Frame-copying is therefore a KNOWN LIMITATION.
+      * this whole-candidate ratio does not separate: AUC 0.655, and at a 5%
+        false-positive cap it reaches only 15.7% sensitivity;
+      * a best-window ratio and a content-slot agreement measure DO separate
+        frame copies from unrelated text (AUC 0.982 and 1.000), but they also fire
+        on a preprint against its own published version (false-positive floors
+        37.1% and 19.0%): a legitimate same-work revision keeps the frame too.
+
+    No structural measure reached the pre-registered bar (>=90% sensitivity at
+    <=5% FPR with a lower confidence bound >=80%) over all three negative classes,
+    so no structural threshold exists to wire. The number stays reported, the
+    limitation is disclosed in every clean report, and frame-copying remains a
+    KNOWN LIMITATION rather than a verdict.
     """
     def frame(text):
         return [w for w in normalise(text) if w in _FUNCTION_WORDS]
@@ -306,6 +312,98 @@ def _source_ref(candidate):
     return " ".join(bits)
 
 
+# ---------------------------------------------------------------------------
+# ORI Guideline 4 disclosure, and the guard on every generated report.
+# ---------------------------------------------------------------------------
+# The measured constants come from benchmarks/bench_frame_copy.py over the frozen
+# corpus in benchmarks/frame_corpus/ (108 machine-generated frame copies; 116
+# negatives: 54 unrelated real documents, 8 ORI-labelled correct paraphrases, 54
+# preprint-vs-own-published revisions). No measure met the pre-registered bar, so
+# no threshold is wired and every clean report says so.
+STRUCTURAL_MARKER = "Structural coverage (ORI Guideline 4)"
+STRUCTURAL_COVERAGE = (
+    "%s: **{sentences}** sentence(s) were compared against {scope}. Frame-copying "
+    "-- a rewrite that swaps every content word but keeps the function-word frame "
+    "-- is **not covered above the measured separation**: on the frozen 108-case "
+    "frame-copy benchmark, against 116 negatives (54 unrelated documents, 8 "
+    "ORI-labelled correct paraphrases, 54 preprint-vs-own-published revisions), no "
+    "structural measure reached the pre-registered bar of 90%% sensitivity at "
+    "<=5%% false positives (best AUC 0.905, false-positive floor 19.0%%), because a "
+    "legitimate same-work revision keeps the frame too. No structural threshold is "
+    "therefore wired, so this report does not cover a structure-preserving rewrite: "
+    "a clean result here is a known limitation, not a clearance." % STRUCTURAL_MARKER
+)
+
+# Claims no bounded measurement supports. Kept in step with tools/claim_guard.py;
+# this copy exists so the deployed toolkit, which ships without tools/, still
+# refuses them.
+_REPORT_FORBIDDEN = [
+    (re.compile(p, re.I), why) for p, why in (
+        (r"plagiari[sz]m[\s-]?free", "plagiarism-free is a universal negative"),
+        (r"\berror[\s-]?free\b", "state the measured error rate"),
+        (r"\bperfect(?:ly)?\b", "state the measured result, not a judgement"),
+        (r"\bmedical[\s-]?grade\b", "regulatory status is not a code property"),
+        (r"\bcertified?\b", "nothing here certifies"),
+        (r"\bclearance\b", "a clean report is not a clearance"),
+        (r"\bguarantee[ds]?\b", "a guarantee needs a bound and a population"),
+        (r"\bflawless\b", "state the measured result"),
+        (r"\bbulletproof\b", "state the measured result"),
+        (r"\b100%\s*(?:accurate|correct|reliable)\b", "give the n and the CI"),
+    )
+]
+_REPORT_NEGATION = re.compile(
+    r"(?i)\b(?:not|no|never|without|cannot|can't|isn't|aren't|doesn't)\b[^.]{0,24}$")
+
+
+def structural_coverage_line(sentences, corpus_size=None, source_names=None):
+    """The bound every clean report must carry (ORI Guideline 4 disclosure)."""
+    if corpus_size is not None:
+        scope = "**%d** local-corpus document(s)" % corpus_size
+    elif source_names:
+        scope = "%d configured source(s)" % len(list(source_names))
+    else:
+        scope = "the configured sources"
+    return STRUCTURAL_COVERAGE.format(sentences=sentences, scope=scope)
+
+
+def _load_claim_guard():
+    """Load tools/claim_guard.py when the toolkit sits inside the repository."""
+    for candidate in (Path(__file__).resolve().parent / "claim_guard.py",
+                      Path(__file__).resolve().parent.parent / "claim_guard.py"):
+        if candidate.is_file():
+            spec = importlib.util.spec_from_file_location("claim_guard", candidate)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            return module
+    return None
+
+
+def guard_report(report, clean):
+    """Return the reasons a generated report must not be emitted.
+
+    Two independent properties:
+      1. it never contains an absolute claim ("plagiarism-free", "clearance",
+         "guaranteed", ...), and
+      2. a clean result carries its bound -- the ORI Guideline 4 coverage line.
+    The full repository gate (tools/claim_guard.py) runs when it is reachable;
+    the local copy covers the deployed toolkit, which ships without tools/.
+    """
+    problems = []
+    if clean and STRUCTURAL_MARKER not in report:
+        problems.append("clean report carries no bound: the structural-coverage "
+                        "line is missing")
+    for pattern, why in _REPORT_FORBIDDEN:
+        match = pattern.search(report)
+        if match and not _REPORT_NEGATION.search(report[max(0, match.start() - 30):
+                                                 match.start()]):
+            problems.append("forbidden claim %r (%s)" % (match.group(0), why))
+    module = _load_claim_guard()
+    if module is not None:
+        for finding in module.scan(report, where="<generated report>"):
+            problems.append("%s: %s" % (finding["kind"], finding["message"]))
+    return problems
+
+
 def render_report(draft_name, rows, source_names, threshold, statuses,
                   corpus_size=None, corpus_gaps=None, corpus_path=None):
     checked = len(rows)
@@ -354,6 +452,13 @@ def render_report(draft_name, rows, source_names, threshold, statuses,
         lines.append("> Not reachable this run (results NOT clean for these): %s"
                      % ", ".join(unavailable))
         lines.append("")
+    # The structural bound is part of EVERY report, flagged or clean. A reader of a
+    # violations table must see, in the same document, that ORI Guideline 4 is not
+    # covered -- otherwise a report with zero violations reads as more than it is.
+    lines.append("## %s" % STRUCTURAL_MARKER)
+    lines.append("")
+    lines.append(structural_coverage_line(checked, corpus_size, source_names))
+    lines.append("")
     if not flagged:
         if corpus_empty:
             lines.append("**Cannot determine.** No passage could be compared against the local "
@@ -521,6 +626,68 @@ def _self_test():
     if '"--threshold", type=float, default=' not in Path(__file__).read_text(encoding="utf-8"):
         problems.append("the --threshold default pattern the benchmarks parse is gone")
 
+    # (i) ORI Guideline 4 disclosure: a clean report must carry the measured
+    # structural-coverage bound, with the sentence count in it. No structural
+    # threshold was wired (benchmarks/bench_frame_copy.py measured none that
+    # clears the bar), so the disclosure is the whole control.
+    clean = render_report("d.md", [], ["local"], 0.30, {}, corpus_size=2)
+    if STRUCTURAL_MARKER not in clean:
+        problems.append("a clean report does not carry the structural-coverage line")
+    for must in ("frame-copying", "not covered", "known limitation", "not a clearance"):
+        if must not in clean.lower():
+            problems.append("the structural-coverage line does not say %r" % must)
+    if "**0** sentence(s) were compared" not in structural_coverage_line(0):
+        problems.append("the structural-coverage line does not carry the sentence count")
+    if "**7** sentence(s) were compared" not in structural_coverage_line(7, 2):
+        problems.append("the structural-coverage line ignores its inputs")
+    if guard_report(clean, clean=True):
+        problems.append("the report guard refused a clean report: %r"
+                        % guard_report(clean, clean=True))
+    # A clean claim with the disclosure stripped must be refused.
+    stripped = clean.replace(STRUCTURAL_MARKER, "Nothing to see here")
+    if not guard_report(stripped, clean=True):
+        problems.append("the report guard accepted a clean report with no bound")
+    # A FLAGGED report carries the same disclosure: a violations table must not
+    # read as if the structural channel had been checked.
+    flagged_row = {
+        "sentence": "This study examines whether workers assist their mothers.",
+        "verdict": "PARAPHRASE + CITE",
+        "best": {"score": 0.8, "cosine": 0.8, "run_words": 12,
+                 "run_span": "this study examines whether workers",
+                 "candidate": {"source": "local", "id": "/tmp/c.txt", "title": "c"}},
+    }
+    flagged_report = render_report("d.md", [flagged_row], ["local"], 0.30, {},
+                                   corpus_size=1)
+    if STRUCTURAL_MARKER not in flagged_report:
+        problems.append("a flagged report does not carry the structural-coverage line")
+    if guard_report(flagged_report, clean=False):
+        problems.append("the report guard refused a flagged report: %r"
+                        % guard_report(flagged_report, clean=False))
+
+    # (j) the report-guard fixtures: one overclaiming report, one unbounded one.
+    fixtures = Path(__file__).resolve().parent / "fixtures"
+    forbidden = fixtures / "report_forbidden.md"
+    unbounded = fixtures / "report_unbounded.md"
+    for fixture in (forbidden, unbounded):
+        if not fixture.is_file():
+            problems.append("report-guard fixture is missing: %s" % fixture)
+    if forbidden.is_file():
+        text = forbidden.read_text(encoding="utf-8")
+        if not guard_report(text, clean=True):
+            problems.append("the guard accepted the forbidden-claim fixture")
+        if "forbidden claim" not in " ".join(guard_report(text, clean=True)):
+            problems.append("the guard did not name the forbidden claim in the fixture")
+    if unbounded.is_file():
+        text = unbounded.read_text(encoding="utf-8")
+        if not guard_report(text, clean=True):
+            problems.append("the guard accepted the unbounded-clean fixture")
+        module = _load_claim_guard()
+        if module is not None:
+            kinds = {f["kind"] for f in module.scan(text)}
+            if "UNBOUNDED" not in kinds:
+                problems.append("claim_guard did not report UNBOUNDED on the fixture; "
+                                "got %r" % sorted(kinds))
+
     for p in problems:
         print("self-test FAILED: %s" % p)
     if problems:
@@ -617,6 +784,17 @@ def main(argv=None):
                            args.threshold, seen_statuses,
                            corpus_size=n_docs, corpus_gaps=corpus_gaps,
                            corpus_path=args.corpus)
+    flagged = sum(1 for r in rows if r["verdict"] != "ok")
+    # The report is a product, not a debug dump: it must not overclaim and a
+    # clean result must carry its bound. Refuse to emit a report that fails either
+    # property rather than print it and hope a reader notices.
+    guard_problems = guard_report(report, clean=(flagged == 0 and n_docs != 0))
+    if guard_problems:
+        print("report guard REFUSED the report (this is a bug in the report template, "
+              "not a result about the draft):", file=sys.stderr)
+        for problem in guard_problems:
+            print("  - %s" % problem, file=sys.stderr)
+        return 1
     if args.out:
         with open(args.out, "w", encoding="utf-8") as handle:
             handle.write(report)
@@ -624,7 +802,6 @@ def main(argv=None):
     else:
         print(report)
 
-    flagged = sum(1 for r in rows if r["verdict"] != "ok")
     print("Checked %d sentences; %d flagged." % (len(rows), flagged), file=sys.stderr)
 
     if args.json_out:
@@ -645,6 +822,13 @@ def main(argv=None):
                            else ("pass" if args.corpus else "not_configured")),
             },
             "status": "insufficient_evidence" if corpus_gaps else "pass",
+            # The bound travels with the result: a consumer that reads only the
+            # JSON must still see that frame-copying is not covered.
+            "structural_coverage": {
+                "sentences_compared": len(rows),
+                "frame_copy_covered": False,
+                "line": structural_coverage_line(len(rows), n_docs, source_names),
+            },
             "results": [
                 {
                     "index": i,

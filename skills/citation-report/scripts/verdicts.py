@@ -48,8 +48,8 @@ RULES = {
         "states a checkable fact, figure or borrowed formulation with no resolvable citation",
     ),
     "D03": (
-        "conflict",
-        "error",
+        "unattributed",
+        "warning",
         "citation marker matches no source in the document's reference apparatus",
     ),
     "D04": (
@@ -294,6 +294,17 @@ def classify(document, bundle, indexes: dict, *, advisory=None) -> list:
         checkable_quantities = [q for q in quantities if q.checkable]
         resolved, unresolved = _collect_tokens(sentence, bundle)
 
+        # A citable marker that the document's own apparatus cannot account for is itself
+        # an attribution-requiring signal: the author asserted a source, and the assertion
+        # does not hold. Recording it as a trigger keeps the `unattributed` state honest --
+        # an orange sentence must genuinely need the citation it lacks. It applies only
+        # when the apparatus is closed, because with no source list an unresolved marker
+        # describes our inputs (D06), not the document.
+        broken_citation = closed and any(
+            token["kind"] in CITABLE_MARKER_KINDS or token["kind"] == "author_year"
+            for token in unresolved
+        )
+
         state, rule_id, note, extra = _classify(
             sentence, stripped, triggers, quantities, resolved, unresolved, indexes, closed,
             checkable=checkable_quantities,
@@ -305,6 +316,15 @@ def classify(document, bundle, indexes: dict, *, advisory=None) -> list:
         severity = _rule(rule_id)[1]
         source_records = _source_records(resolved, indexes, quantities)
         strength, origin, link_confidence = _evidence_summary(resolved)
+        if broken_citation:
+            triggers = triggers + [
+                {
+                    "code": _signals.TRIGGER_UNRESOLVED_CITATION,
+                    "match": "",
+                    "start": 0,
+                    "end": 0,
+                }
+            ]
 
         verdict = Verdict(
             sentence_id=sentence.sentence_id,
@@ -417,7 +437,7 @@ def _classify(
         ]
         if closed and citation_like:
             return (
-                "conflict",
+                "unattributed",
                 "D03",
                 "Citation %s matches no source in the document's reference apparatus."
                 % ", ".join("`%s`" % token["token"] for token in citation_like[:4]),
@@ -431,8 +451,12 @@ def _classify(
             {},
         )
 
-    # D03 — some markers resolve and others do not, in a closed apparatus. A
-    # fabricated citation sitting beside real ones is still a fabricated citation.
+    # D03 — some markers resolve and others do not, in a closed apparatus. The unmatched
+    # marker is still a defect: the sentence cites a work that the document's own
+    # reference apparatus cannot account for, so the sentence needs a citation. It does
+    # not contradict a source, though, and it has no link to accuse: an unmatched marker
+    # is by construction unlinked. The red bar requires an identity-verified link, so
+    # this stays a warning. A red is an accusation, and this is not one.
     stray = [
         token
         for token in unresolved
@@ -440,7 +464,7 @@ def _classify(
     ]
     if stray:
         return (
-            "conflict",
+            "unattributed",
             "D03",
             "Citation %s resolves to no source while other citations in the same "
             "sentence do; the reference apparatus is known, so this is not a gap in "

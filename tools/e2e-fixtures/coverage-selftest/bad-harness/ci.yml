@@ -1,0 +1,2 @@
+steps:
+  - run: python3 skills/beta/scripts/gate.py

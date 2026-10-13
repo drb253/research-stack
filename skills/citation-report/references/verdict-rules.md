@@ -75,7 +75,7 @@ and the difference is documented in `docs/BENCHMARK-RESULTS.md`.
 
 ## D03 — citation resolves to nothing
 
-**State** `conflict` · **Severity** **error** · **Colour** red
+**State** `unattributed` · **Severity** warning · **Colour** orange
 
 Predicate: a citation marker is present, the reference apparatus **is** closed (a reference list, a
 BibTeX file, a ledger, or numbered sources — so we know what the citable set is), and the marker
@@ -84,8 +84,15 @@ matches no source in it.
 Two shapes:
 
 * every marker in the sentence is unmatched;
-* some markers resolve and others do not. A fabricated citation beside three real ones is still a
-  fabricated citation, so this is an error either way.
+* some markers resolve and others do not. An unmatched marker beside three real ones is still a defect.
+
+**Why this is not a red.** The finding has no link to accuse: the marker matches nothing, so there is
+no identity-verified link to the work that it names. The red bar requires one, and `report_gate.py`
+refuses a `conflict` whose link is not exact. Treating a broken citation as a conflict therefore made
+the tool refuse the report it had just produced, on a document whose only defect was a citation that
+resolves to nothing. A broken citation is still a defect — the sentence needs the citation it lacks, so
+it lands on `unattributed` and warns. The classifier also records an `UNRESOLVED_CITATION` trigger, so
+the orange state stays honest: an orange sentence must genuinely need the citation it lacks.
 
 This is the finding the reference tool structurally cannot produce, because it never checks that a
 citation resolves to a real work. The note names the offending marker: `Citation `99` matches no
