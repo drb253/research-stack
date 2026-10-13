@@ -12,9 +12,9 @@ versioning follows [Semantic Versioning](https://semver.org/).
   and the MCP servers into `~/.dsh/cordis.patch.yml` through a new `dsh` platform in
   `bin/mcp_config.py`. DSH's config is not JSON, so the writer emits and reads the YAML by hand — the
   repo stays stdlib-only, no PyYAML — and the merge is non-destructive: an existing file is backed up,
-  every other patch entry, inserted row and comment survives byte-for-byte, only the rows whose id is
-  `mcp-<server>` are replaced, and a file that is not a top-level array of loader patch entries is
-  refused rather than risked. A second run is byte-identical. **The rows are wrapped in an `insert:`
+  every other patch entry, inserted row and comment survives byte-for-byte, only the rows inside the
+  managed `insert:` entry whose id is `mcp-<server>` are replaced, and a file that is not a top-level
+  array of loader patch entries is refused rather than risked. A second run is byte-identical. **The rows are wrapped in an `insert:`
   entry**, which is the shape the shipped MCP template and every bundle patch use: a flat
   `- id: <new-server>` row is a non-insert patch, and DSH drops it with
   `patch: entry "<id>" not found` because the row does not exist yet. The home layer is composed after
@@ -52,6 +52,24 @@ versioning follows [Semantic Versioning](https://semver.org/).
   intermittently. It now writes into the suite's own temporary directory. Found by chasing an
   unexplained `24 passed, 1 failed` instead of re-running it away; two concurrent runs now both pass
   154/0.
+- **`install.sh` deleted a real skill directory it did not own.** The skills step ran
+  `rm -rf "$sdir/$name"` before linking, so a user who already had a real directory at that path (for
+  example a hand-written `~/.dsh/skills/sysreview`) lost it with no backup. Linking now goes through
+  one helper: a symlink is replaced only when it points elsewhere, an existing real file or directory
+  is moved to `<name>.bak-<timestamp>` first, and a target that already matches the requested mode is
+  left alone. `--copy-skills` no longer re-backs-up an identical copy on every run and now converts an
+  existing correct symlink into a copy instead of silently keeping symlink mode. Found by the
+  independent verification pass, not by the installer's own tests.
+- **A broken symlink in a skills directory aborted the whole install.** The upstream and AIPOCH loops
+  guarded with `[ -e "$sdir/$name" ]`, which is false for a broken symlink, so the guard fell through
+  to `ln -s` and `set -e` killed the run with `ln: File exists` — and every re-run aborted the same way
+  until the link was removed by hand. The guard now tests `-e` or `-L`.
+- **`verify.sh` had no `dsh` coverage.** `--targets dsh` silently checked nothing new. The dsh skills
+  root is now mapped, and a dedicated section asserts the two failure modes that are silent in the
+  client: the patch file must contain real rows (an empty or comments-only patch fails DSH boot), and
+  the `mcp-*` rows must sit inside an `insert:` entry (a top-level flat row is dropped with
+  `patch: entry "<id>" not found`). Only paper-search is required; the other servers are informational
+  because `--servers` can restrict an install to any subset.
 
 ### Fixed
 - **Four measure formats a real corpus writes were unread.** A comma between label and value
