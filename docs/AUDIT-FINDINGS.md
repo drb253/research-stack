@@ -501,6 +501,25 @@ maintainer could extend without justification.
 
 ---
 
+**What this round does not establish**, recorded so §9 is not read as a clean bill of health:
+
+- The vendored package is kept in the patched state, so the patch run against it is idempotent by
+  construction. The gate catches drift, breakage and a toothless suite; it does **not** reconstruct
+  the fixed files from pristine upstream `0.1.4`, which would need those upstream files.
+- `report_gate.py` and `report.py` now share one gap emitter, but the other intake failures (an
+  unsupported extension, a malformed JSON sidecar) are still `INVALID_INPUT`, exit 1, by design: they
+  are usage errors about the request rather than a resource that could not be read. That distinction
+  is a judgement, not a measurement.
+- The mutation probe proves the availability suite detects one reintroduced defect. It does not
+  establish that the suite covers every way the invariant could break.
+- Both CI-discovered violations were environment-dependent, which means other gates could still be
+  asserting an environment. §10 addresses that for `citation-report`: its suite now branches on the
+  tools installed, and the README records all three environments (137 / 139 / 144 checks). No other
+  gate has been run on a machine stripped of its optional tooling, and that is how these two were
+  found.
+
+---
+
 ## 10. Fifth round — the OCR tier, and the rule that keeps it honest
 
 The user asked for a working OCR tier and chose the safety rule: **a transcription may never create a
@@ -560,17 +579,3 @@ prints none of it.
   report says so, and D13 covers accusations, but a misread word could still change which sentences
   exist. Nothing here measures that.
 
-**What this round does not establish**, recorded so §9 is not read as a clean bill of health:
-
-- The vendored package is kept in the patched state, so the patch run against it is idempotent by
-  construction. The gate catches drift, breakage and a toothless suite; it does **not** reconstruct
-  the fixed files from pristine upstream `0.1.4`, which would need those upstream files.
-- `report_gate.py` and `report.py` now share one gap emitter, but the other intake failures (an
-  unsupported extension, a malformed JSON sidecar) are still `INVALID_INPUT`, exit 1, by design: they
-  are usage errors about the request rather than a resource that could not be read. That distinction
-  is a judgement, not a measurement.
-- The mutation probe proves the availability suite detects one reintroduced defect. It does not
-  establish that the suite covers every way the invariant could break.
-- Both CI-discovered violations were environment-dependent, which means other gates could still be
-  asserting an environment. Round three asked each gate a code question; nobody has yet run the whole
-  suite on a machine stripped of optional tooling, which is what actually found these two.
