@@ -65,6 +65,12 @@ versioning follows [Semantic Versioning](https://semver.org/).
   guarded with `[ -e "$sdir/$name" ]`, which is false for a broken symlink, so the guard fell through
   to `ln -s` and `set -e` killed the run with `ln: File exists` — and every re-run aborted the same way
   until the link was removed by hand. The guard now tests `-e` or `-L`.
+- **`--with-aipoch-skills` aborted the whole install after an interrupted clone.** The clone was
+  guarded with `[ -d "$AIPOCH/.git" ]`; a directory left behind by a failed clone has no `.git`, so the
+  guard fell through to `git clone` into a non-empty destination, the sparse fallback failed the same
+  way, and `set -e` killed the run with rc=128 on every re-run. A plain network failure had the same
+  effect. The directory is now kept — it is not ours to delete — and the pack is skipped with a warning
+  that says how to repair it; a failed clone is reported as the optional third-party step it is.
 - **`verify.sh` had no `dsh` coverage.** `--targets dsh` silently checked nothing new. The dsh skills
   root is now mapped, and a dedicated section asserts the two failure modes that cost the tools without
   an obvious error: the patch file must contain real rows (an empty or comments-only patch fails DSH
