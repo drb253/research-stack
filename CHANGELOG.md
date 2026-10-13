@@ -70,7 +70,14 @@ versioning follows [Semantic Versioning](https://semver.org/).
   guard fell through to `git clone` into a non-empty destination, the sparse fallback failed the same
   way, and `set -e` killed the run with rc=128 on every re-run. A plain network failure had the same
   effect. The directory is now kept — it is not ours to delete — and the pack is skipped with a warning
-  that says how to repair it; a failed clone is reported as the optional third-party step it is.
+  that says how to repair it; a failed **AIPOCH** clone is reported as the optional third-party step it
+  is.
+- **A failed upstream (K-Dense) clone aborted the default install.** `--with-upstream-skills` is the
+  default, and that clone had no failure fallback: offline, without a usable `git`, or against a
+  rate-limited GitHub, `./install.sh --targets dsh` exited 1 **before** linking any skill and before
+  writing `~/.dsh/cordis.patch.yml`, so the target ended up not wired at all. It now warns and skips the
+  optional pack — and keeps, rather than deletes, a directory left behind by an interrupted clone — so
+  the install completes. Found by the verification pass, once the AIPOCH fix made the asymmetry visible.
 - **`verify.sh` had no `dsh` coverage.** `--targets dsh` silently checked nothing new. The dsh skills
   root is now mapped, and a dedicated section asserts the two failure modes that cost the tools without
   an obvious error: the patch file must contain real rows (an empty or comments-only patch fails DSH
