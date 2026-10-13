@@ -304,7 +304,13 @@ if [ "$DO_SKILLS" = 1 ]; then
       # path, so an abort here left the target with no skills and no MCP patch
       # at all. Keep the directory and say how to repair it.
       warn "$UP exists but is not a git clone (interrupted clone?)"
-      warn "  upstream scientific skills skipped; remove that directory and re-run to fetch them"
+      if [ -d "$UP/skills" ]; then
+        # The link loop below still links whatever is on disk, so the message
+        # must not claim the pack was skipped.
+        warn "  linking the skills already present; remove the directory and re-run to re-clone for updates"
+      else
+        warn "  upstream scientific skills skipped; remove that directory and re-run to fetch them"
+      fi
     else
       # Optional third-party pack: being offline, or having no usable git, must
       # not fail an install whose own skills are already on disk.
