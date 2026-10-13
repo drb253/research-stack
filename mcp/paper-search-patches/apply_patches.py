@@ -526,12 +526,19 @@ def main() -> int:
         target = pkg / rel
         if not target.exists():
             continue
-        result = subprocess.run(
-            [sys.executable, "-m", "py_compile", str(target)],
-            capture_output=True,
-        )
-        if result.returncode != 0:
-            broken.append((rel, result.stderr.decode(errors="replace").strip()[-400:]))
+        # Compile in memory rather than shelling out to `py_compile`. py_compile writes a
+        # .pyc into the interpreter's cache directory, and when that directory is not
+        # writable -- a sandboxed run, a read-only home, a container -- every file is
+        # reported as a SYNTAX ERROR when nothing is wrong: a run on a perfectly good
+        # install reported failed=37. The question here is only whether the patched source
+        # parses, and that needs no cache file.
+        try:
+            source = target.read_text(encoding="utf-8", errors="replace")
+            compile(source, str(target), "exec")
+        except SyntaxError as exc:
+            broken.append((rel, "%s (line %s)" % (exc.msg, exc.lineno)))
+        except OSError as exc:
+            broken.append((rel, "could not read the patched file: %s" % exc))
 
     for rel, err in broken:
         print(f"SYNTAX ERROR in {rel}:\n{err}")

@@ -169,6 +169,12 @@ _Nothing yet._
   not a failure. Retraction remains a hard failure.
 
 ### Fixed
+- **The patch system cried wolf on a good install.** `apply_patches.py` verified the patched files
+  by shelling out to `py_compile`, which writes a `.pyc` into the interpreter's cache directory; when
+  that directory is not writable — a sandboxed run, a read-only home, a container — a perfectly good
+  install was reported as `failed=37` with a `SYNTAX ERROR` per file. It now compiles the patched
+  source in memory, which needs no cache file, and the same run reports `applied=0
+  already_applied=46 failed=0`. Installer version bumped to 1.1.0 to match the release.
 - **Three vendored MCP servers reported a failed lookup as "no results".** `paper-search-mcp`'s
   openaire and unpaywall connectors swallowed every transport error into an empty result — a refused
   connection, a 429 and a 500 were indistinguishable from "nothing matched" (`search_openaire`
