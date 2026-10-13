@@ -173,7 +173,7 @@ Before any finding is reported, four questions about whether the tool understood
 | Code | Fails when | Blocks |
 |---|---|---|
 | `CITATION_STYLE_UNRECOGNISED` | ≥10 reference entries and no citation marker in the prose | yes |
-| `TRIGGER_LANGUAGE_UNSUPPORTED` | ≥50 sentences and under 2% matched any attribution signal | yes |
+| `TRIGGER_LANGUAGE_UNSUPPORTED` | ≥50 sentences and (under 2% matched any attribution signal **or** the document does not look like English); below 50 sentences, only when it is clearly another language | yes |
 | `SENTENCE_SPLIT_SUSPECT` | median sentence over 400 characters, or one sentence over 20% of a large document | yes |
 | `NO_SOURCE_LIST` | the prose cites something and there is no reference list, bib, ledger or DOI list | yes |
 

@@ -55,12 +55,15 @@ jobs:
           # originality toolkit: pins the corpus-gap routing (an unreadable corpus file must
           # reach the report and the exit code, not only stderr).
           python3 tools/originality-toolkit/originality_check.py --self-test
-      - name: medical-narrative-review selftest (29 checks)
+          # meta-ml-screener: this script was run nowhere at all, and a log with no data rows
+          # reported through the finding channel until it gained this suite.
+          python3 skills/meta-ml-screener/scripts/validate_screening_log.py --self-test
+      - name: medical-narrative-review selftest (30 checks)
         run: bash skills/medical-narrative-review/scripts/selftest.sh
       # citation-report writes its own PDF and DOCX, and verifies both by re-opening
       # them, so this passes with no poppler and no pypdf: the PDF text-layer check
       # degrades to a reported skip rather than a failure.
-      - name: citation-report selftest (95 checks)
+      - name: citation-report selftest (111 checks)
         run: bash skills/citation-report/scripts/selftest.sh
       # The offline benchmarks measure the claims in the README (arithmetic gate,
       # overlap detector vs the ORI guide's expert labels). They need no network,
@@ -85,9 +88,9 @@ jobs:
       - name: Install R engine packages (binary)
         run: |
           Rscript -e 'install.packages(c("metafor","robvis","ggplot2","clubSandwich"), repos="https://packagemanager.posit.co/cran/__linux__/jammy/latest")'
-      - name: Golden tests — engine vs metafor (17 checks)
+      - name: Golden tests — engine vs metafor (22 checks)
         run: Rscript skills/meta-analysis-forge/scripts/golden_tests.R
-      - name: evidence-synthesis-forge selftest (50 checks)
+      - name: evidence-synthesis-forge selftest (73 checks)
         run: bash skills/evidence-synthesis-forge/scripts/selftest.sh
 
   mcp-tests:
@@ -101,12 +104,39 @@ jobs:
       # Both suites shipped in the repo but no CI job ever ran them (103 tests).
       # `mcp` must stay <2 — the server imports mcp.server.fastmcp, which mcp 2.x
       # renamed to MCPServer (see mcp/ncbi-mcp-server/requirements.txt).
-      - name: ncbi-mcp-server tests (52 unit; integration deselected by marker)
+      - name: ncbi-mcp-server tests (57 unit; integration deselected by marker)
         run: |
           python3 -m pip install --quiet -r mcp/ncbi-mcp-server/requirements.txt
           python3 -m pip install --quiet pytest pytest-asyncio pytest-cov
           cd mcp/ncbi-mcp-server && PYTHONPATH=src python3 -m pytest tests/
-      - name: academic-search tests (51, fully offline)
+      - name: academic-search tests (57, fully offline)
         run: |
           python3 -m pip install --quiet fastmcp numpy pandas requests
           cd mcp/academic-search-mcp && python3 -m unittest discover -s tests
+      # The paper-search patch system was shipped but never exercised on a push, so nothing
+      # would have caught a patch that stopped applying or a replacement that drifted from
+      # the vendored file it mirrors.
+      - name: paper-search patch system + availability invariant (offline, gated)
+        run: |
+          python3 -m pip install --quiet requests
+          PYTHONPATH=mcp/paper-search-mcp python3 mcp/paper-search-patches/audit_fix_check.py
+          PYTHONPATH=mcp/paper-search-mcp python3 mcp/paper-search-patches/test_availability_invariant.py
+          # Every whole-file replacement must stay byte-identical to the vendored file it
+          # mirrors, or a reinstall silently reverts the fix it encodes.
+          python3 - <<'PY'
+          import pathlib, sys
+          rep = pathlib.Path("mcp/paper-search-patches/replacements")
+          vend = pathlib.Path("mcp/paper-search-mcp/paper_search_mcp")
+          bad = []
+          for f in sorted(rep.glob("*.py")):
+              cands = list(vend.rglob(f.name))
+              if cands and not any(c.read_bytes() == f.read_bytes() for c in cands):
+                  bad.append(f.name)
+          print("replacements checked;", "drifted:", bad if bad else "none")
+          sys.exit(1 if bad else 0)
+          PY
+      # verify_fixes.py also performs LIVE searches; it is informational here so a network
+      # hiccup cannot fail a push, but its offline check 10 runs above as a gate.
+      - name: paper-search live checks (informational)
+        continue-on-error: true
+        run: PYTHONPATH=mcp/paper-search-mcp python3 mcp/paper-search-patches/verify_fixes.py

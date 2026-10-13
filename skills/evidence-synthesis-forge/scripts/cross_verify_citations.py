@@ -325,15 +325,25 @@ def pubmed_is_retracted(pmid, mailto):
 def apply_retraction_signals(rec, doi, row, mailto, crossref_msg=None):
     """Attach every retraction signal to ``rec`` and set its status.
 
-    Kept separate from :func:`verify_one` so the "not Crossref-registered" path
-    cannot return early without it. That path used to skip retraction checking
-    entirely, so a retracted paper whose DOI lives outside Crossref was reported
-    as verified even when OpenAlex and PubMed both flagged it -- measured on a
-    920-citation benchmark as the single missed retraction.
+    Kept separate from :func:`verify_one` so no path can return early without it. The
+    "not Crossref-registered" path used to skip retraction checking entirely, so a
+    retracted paper whose DOI lives outside Crossref was reported as verified even when
+    OpenAlex and PubMed both flagged it -- measured on a 920-citation benchmark as the
+    single missed retraction. The PMID-only path did the same thing for the same reason
+    -- it returned "verified" without asking anybody -- until it was routed through here.
+
+    It also records WHICH signals could actually be consulted. "Not retracted" is only a
+    finding if somebody was asked: when every signal failed, the retraction status is
+    unknown, and this returns ``unreachable`` -- an input condition -- rather than a clean
+    bill of health.
     """
+    consulted: list = []
+    failed: list = []
     notices = []
     cr_retracted = False
     if crossref_msg is not None:
+        # Crossref answered, so its own retraction relation was readable.
+        consulted.append("crossref")
         cr_retracted, notices = crossref_retraction(crossref_msg)
         # ORI Guideline 17 also asks about CORRECTIONS. A correction is a warning,
         # not a failure: the paper still stands, but the cited version may be
@@ -344,19 +354,42 @@ def apply_retraction_signals(rec, doi, row, mailto, crossref_msg=None):
     oa = None
     try:
         oa = openalex_is_retracted(doi, mailto)
+        consulted.append("openalex")
     except Exception as e:  # noqa: BLE001
         rec["openalex_error"] = str(e)
-    # Third, independent signal: PubMed's publication type for this PMID.
+        failed.append("openalex")
+    # Third, independent signal: PubMed's publication type for this PMID. It returns None when
+    # the lookup could not be made, which is a failure to ask rather than a clean result.
     pm_retracted = None
     if row and (row.get("pmid") or "").strip():
         pm_retracted = pubmed_is_retracted(row.get("pmid"), mailto)
         if pm_retracted is not None:
             rec["pubmed_retraction_check"] = pm_retracted
+            consulted.append("pubmed")
+        else:
+            failed.append("pubmed")
+    rec["retraction_signals_consulted"] = consulted
+    rec["retraction_signals_failed"] = failed
     rec["retraction_evidence"] = (notices
                                   + (["openalex:is_retracted"] if oa else [])
                                   + (["pubmed:retracted-publication-type"] if pm_retracted else []))
     rec["retracted"] = bool(cr_retracted or oa or pm_retracted)
-    rec["status"] = "retracted" if rec["retracted"] else "verified"
+    if rec["retracted"]:
+        rec["status"] = "retracted"
+    elif not consulted:
+        # Nobody was asked. Reporting "verified" here would be reading an absence of evidence
+        # as evidence of absence, which is the same defect as reading a 404 as a check.
+        rec["status"] = "unreachable"
+        rec["note"] = ("no retraction signal could be consulted (%s failed), so this source's "
+                       "retraction status is unknown -- it is not clear"
+                       % (", ".join(failed) or "every signal"))
+    else:
+        rec["status"] = "verified"
+        if failed:
+            # A partial check is still a check, but the record says which part is missing.
+            rec["note"] = ("retraction check is PARTIAL: %d of %d signal(s) could not be "
+                           "consulted (%s)"
+                           % (len(failed), len(failed) + len(consulted), ", ".join(failed)))
     return rec
 
 
@@ -370,11 +403,15 @@ def verify_one(doi, mailto, row=None):
     if not doi:
         pm = pmid_verified((row or {}).get("pmid"), mailto)
         if pm:
-            rec["status"] = "verified"
-            rec["note"] = "no DOI exists for this record; verified via its PubMed PMID at Europe PMC"
+            rec["note"] = ("no DOI exists for this record; verified via its PubMed PMID at "
+                           "Europe PMC")
             rec["verified_via"] = "PMID"
             rec["title"] = pm["title"]
-            return rec
+            # Route through the retraction signals. This path used to return "verified" here,
+            # so a PMID-only citation was reported clean without anybody ever being asked
+            # whether the paper had been retracted -- the same early-return defect that was
+            # fixed for the not-Crossref-registered path and left standing here.
+            return apply_retraction_signals(rec, "", row, mailto)
         rec["status"] = "no_identifier"
         rec["note"] = "empty doi in ledger row and no resolvable PMID"
         return rec
@@ -553,6 +590,30 @@ def _self_test():
             {"doi": "10.1/x", "status": "verified", "retracted": False,
              "retraction_evidence": []}, "10.1/x", {}, "x@y.z")
         assert clean["retracted"] is False and clean["status"] == "verified", clean
+        # Every signal failing means NOBODY was asked. "Not retracted" is then an unknown, not
+        # a finding, and the record must not read "verified" -- that is an absence of evidence
+        # presented as evidence of absence.
+        def _boom(*_a):
+            raise RuntimeError("connection refused")
+        openalex_is_retracted = _boom
+        pubmed_is_retracted = lambda p, m: None
+        blind = apply_retraction_signals(
+            {"doi": "10.1/x", "status": None, "retracted": False, "retraction_evidence": []},
+            "10.1/x", {"pmid": "1"}, "x@y.z")
+        assert blind["status"] == "unreachable", blind
+        assert "not clear" in blind["note"], blind
+        assert blind["retraction_signals_consulted"] == [], blind
+        assert set(blind["retraction_signals_failed"]) == {"openalex", "pubmed"}, blind
+        # A PARTIAL check is still a check, and it says which part is missing.
+        openalex_is_retracted = lambda d, m: False
+        pubmed_is_retracted = lambda p, m: None
+        partial = apply_retraction_signals(
+            {"doi": "10.1/x", "status": None, "retracted": False, "retraction_evidence": []},
+            "10.1/x", {"pmid": "1"}, "x@y.z")
+        assert partial["status"] == "verified", partial
+        assert "PARTIAL" in partial["note"], partial
+        assert partial["retraction_signals_consulted"] == ["openalex"], partial
+        assert partial["retraction_signals_failed"] == ["pubmed"], partial
     finally:
         openalex_is_retracted, pubmed_is_retracted = _oa, _pm
     # ...and guard the WIRING: verify_one() must run the signals on the
@@ -572,6 +633,25 @@ def _self_test():
         assert ok["status"] == "verified", ok
     finally:
         _crossref_message, verify_alt_agency = _cm, _va
+    # ...and the PMID-only path must run the signals as well. It used to return "verified"
+    # straight out of verify_one(), so a PMID-only citation -- a ledger row with no DOI --
+    # was reported clean without anyone ever being asked whether the paper was retracted.
+    global pmid_verified
+    _pv = pmid_verified
+    try:
+        pmid_verified = lambda p, m: {"title": "T", "journal": "J"}
+        openalex_is_retracted = lambda d, m: True
+        pubmed_is_retracted = lambda p, m: None
+        only = verify_one("", "x@y.z", {"pmid": "1", "s_id": "S1"})
+        assert only["status"] == "retracted", only
+        assert only["verified_via"] == "PMID", only
+        assert only["retraction_evidence"] == ["openalex:is_retracted"], only
+        # and when nothing can be asked, it says so instead of "verified"
+        openalex_is_retracted = lambda d, m: (_ for _ in ()).throw(RuntimeError("refused"))
+        blind_pmid = verify_one("", "x@y.z", {"pmid": "1", "s_id": "S1"})
+        assert blind_pmid["status"] == "unreachable", blind_pmid
+    finally:
+        pmid_verified = _pv
     assert _norm_title("Hello, World! (2020)") == "hello world 2020"
     # Crossref returns JATS markup inside titles; a markup difference must not be
     # reported as "DOI resolves to a different paper".

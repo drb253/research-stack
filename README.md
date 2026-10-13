@@ -12,7 +12,7 @@ Built for one promise: **no false citations, no hallucinated numbers, no silent 
 [![platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-lightgrey.svg)](#requirements)
 [![MCP servers](https://img.shields.io/badge/MCP%20servers-5-2f6feb.svg)](#the-mcp-layer)
 [![skills](https://img.shields.io/badge/skills-13-8957e5.svg)](#the-skills-layer)
-[![tests](https://img.shields.io/badge/checks-220%20passing-2ea043.svg)](#verification--testing)
+[![tests](https://img.shields.io/badge/checks-253%20passing-2ea043.svg)](#verification--testing)
 [![ci](https://github.com/drb253/research-stack/actions/workflows/ci.yml/badge.svg)](https://github.com/drb253/research-stack/actions/workflows/ci.yml)
 [![install](https://img.shields.io/badge/install-one--command-brightgreen.svg)](#install)
 
@@ -496,6 +496,9 @@ flowchart LR
 | Gate coverage | any gate is exercised on only one path | `check_selftest_coverage.py` |
 | Sentence-level support | a recorded verdict no longer locates its own sentence, the coverage arithmetic disagrees with the verdict list, or a rendered artifact does not actually contain the notes it claims | `citation-report/scripts/report_gate.py` |
 | Evidence invariant | a missing input is presented in the same status, shape or colour as a finding about the document | `citation-report/scripts/sufficiency.py`, `preconditions.py` |
+| Retrieval availability (MCP) | a lookup that failed because a source was unreachable is reported as "no results found" instead of unavailable | `paper-search-mcp` openaire/unpaywall, `ncbi-mcp-server` MeSH, `academic-search-mcp` providers |
+| Analysis completeness (engine) | rows the engine could not use are dropped and the remainder is pooled in the shape of a complete run | `meta-analysis-forge/scripts/cochrane_meta.R`, `run_meta_analysis.R`, `forest_funnel.R` |
+| Assessable input (guard skills) | a draft or ledger the tool cannot analyse is reported as clean | `humanizerdrb/scripts/humanizer_check.py`, `meta-ml-screener/scripts/validate_screening_log.py` |
 | Acceptance (live) | any adversarial case (retracted DOI, unregistered DOI, false human-screening claim, stale waiver, mixed estimands) does **not** fail | `acceptance_test.py` |
 
 ---
@@ -504,15 +507,15 @@ flowchart LR
 
 <div align="center"><img src="assets/coverage.svg" width="620" alt="automated checks by suite"></div>
 
-**220 automated checks, all passing.** Run them after any change:
+**253 automated checks, all passing.** Run them after any change:
 
 ```bash
 S=~/.research-stack/skills
 bash  $S/evidence-synthesis-forge/scripts/doctor.sh              # toolchain report
-bash  $S/evidence-synthesis-forge/scripts/selftest.sh            # 62 — every gate, pass+fail
-Rscript $S/meta-analysis-forge/scripts/golden_tests.R           # 17 — engine vs metafor
-bash  $S/medical-narrative-review/scripts/selftest.sh           # 29 — narrative-review chain
-bash  $S/citation-report/scripts/selftest.sh                    # 95 — citation report, pass+fail
+bash  $S/evidence-synthesis-forge/scripts/selftest.sh            # 73 — every gate, pass+fail
+Rscript $S/meta-analysis-forge/scripts/golden_tests.R           # 22 — engine vs metafor
+bash  $S/medical-narrative-review/scripts/selftest.sh           # 30 — narrative-review chain
+bash  $S/citation-report/scripts/selftest.sh                    # 111 — citation report, pass+fail
 python3 $S/evidence-synthesis-forge/scripts/acceptance_test.py  # 17 — live adversarial
 ./verify.sh --targets cline,claude,opencode                      # install acceptance
 ```
@@ -659,15 +662,42 @@ retraction where the quoted figure is correct, and citation numbers the referenc
 list cannot account for. All 26 classify correctly, so precision stays 1.000 and its
 Wilson lower bound moves **0.510 → 0.871**.
 
-**Two safety properties are asserted, not just printed.** The benchmark *fails*
-if either breaks, so they cannot silently regress in CI:
+**Two more properties are asserted with them**, because "the gate found nothing" and
+"the gate invented something" are different failures:
 
 ```
-SAFETY PROPERTIES HOLD:
   conflict precision is 1.000 over 26 conflict case(s) -- no false accusation
   trigger specificity is 1.000 over 40 unseen real sentences -- no sentence was
     told it needs a citation when it did not
+  0 of 4 ordinary-prose probes were accused -- the parser never invented a measure
+  10 of 10 real-source contradictions caught -- no contradiction in the externally
+    grounded set was missed
 ```
+
+The last two lines answer the objection this section would otherwise invite. The
+hand-written set was written by the author of the rules, so a second conflict set was
+built whose **ground truth is the literature**: ten contradictions, each value copied
+verbatim out of a real open-access article fetched through the tool's own acquisition,
+each sentence a plausible digit transposition of it, with the article's own wording
+recorded beside it. Yield, stated plainly: 19 of 60 DOIs from a real clinical
+bibliography were obtained (31.7%, all from the Europe PMC tier) and only 4 of those
+contain a measure the parser accepts. Building it immediately found a defect — the same
+statistic written `relative risk` on one side and `RR` on the other was not recognised
+as the same measure, losing two of ten — so a canonical measure vocabulary now runs on
+both sides, and it went from 8 of 10 to **10 of 10**.
+
+The "ordinary prose" line exists because the reverse error is worse. The English
+conjunction **"or"** was being read as the odds-ratio label `OR`, so
+
+```text
+"Treatment continued for 6 or 12 weeks at the clinician's discretion [src:S006]."
+cited against a source recording  OR 1.42
+```
+
+was reported as a **conflict** — an accusation, produced by the word "or" and the number
+12. Three guards now prevent it, and the benchmark runs four such probes through the real
+CLI and fails if any is classified as a contradiction. A missed measure is a recall cost;
+an invented one is an accusation.
 
 Calling a citation false is the one output that accuses someone, so precision
 leads and is *structurally* enforced: no contradiction may stand unless the link
@@ -767,9 +797,20 @@ Three more, for the citation gate:
 - **"Nothing found" is not "nothing there."** With no sources supplied the run is
   `insufficient_evidence` (exit 3), never a clean bill of health. Read the exit code
   and the worklist, not the absence of red.
-- **English only.** The signals are English-language rules; in a document whose
-  prose matches no signal at all the run blocks as `insufficient_input` (exit 4)
-  instead of reporting a document with nothing to check.
+- **English only.** The signals are English-language rules, so a document in another
+  language is blocked as `insufficient_input` (exit 4) rather than reported as a document
+  with nothing to check. The language is identified from function-word and script share,
+  *not* from the trigger regexes — an earlier version used the trigger share, and one
+  percentage was then enough to make a 60-sentence Spanish document "readable" and report
+  it clean. A very short (<40 token) non-English document in a Latin script is still
+  exempted as too short to tell, deliberately, so a short English methods paragraph is not
+  blocked.
+- **Some real measure formats are still invisible**, each a missed contradiction rather
+  than a false one: `RR` is not equated with the phrase "risk ratio" in every position,
+  and comma (`aOR, 3.15`), parenthetical (`( OR) = 2.15`) and negative (`β = −0.22`) forms
+  are not parsed — a negative measure cannot be, because the number pattern has no sign.
+  These were found by harvesting real articles, and they are the binding constraint on a
+  larger real-source conflict set, not access to the literature.
 
 #### Reproduce any of it
 
@@ -1038,7 +1079,7 @@ PRs are welcome. Ground rules:
 
 ## Roadmap
 
-- [x] GitHub Actions CI running the 220 checks on every push
+- [x] GitHub Actions CI running the 253 checks on every push
 - [ ] Codex (TOML) MCP config support
 - [ ] A terminal demo / screen recording in the README
 - [ ] Auto re-vendor script (fetch a new upstream tag, re-apply patches)

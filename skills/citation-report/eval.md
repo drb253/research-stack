@@ -166,7 +166,7 @@ Read the `preconditions` array in the audit output. All four report an observed 
 or fail. Then try to make each one fail:
 
 * a document with a real bibliography and no citation marker in its prose → `CITATION_STYLE_UNRECOGNISED`
-* a non-English body of 50+ sentences → `TRIGGER_LANGUAGE_UNSUPPORTED`
+* a non-English body → `TRIGGER_LANGUAGE_UNSUPPORTED`, with or without numbers in it, and at any length once it is clearly another language (a short English method paragraph is not blocked)
 * one enormous unpunctuated block → `SENTENCE_SPLIT_SUSPECT`
 * citations with no reference list, bib or ledger → `NO_SOURCE_LIST`
 

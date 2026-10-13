@@ -6,7 +6,39 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+_Nothing yet._
+
+## [1.1.0] — 2026-10-13
+
 ### Added
+- **A conflict ground truth taken from the literature, and the parser defect it found.** Ten
+  contradictions whose ground truth is a real open-access article: each value was copied verbatim
+  out of the fetched full text, each sentence is a plausible digit transposition of it, and the
+  article's own wording is recorded beside it so the pairing can be checked rather than trusted.
+  Yield stated plainly: 19 of 60 DOIs from a real clinical bibliography were obtained (31.7%, all
+  from the Europe PMC tier), and only 4 of those 19 contain a measure the parser accepts. Scored
+  and reported separately from the hand-written set, so ten real cases cannot inherit that set's
+  caveat. Building it found that the same measure written long-form on one side and short-form on
+  the other was not recognised as the same statistic, which lost two real contradictions; a
+  canonical measure vocabulary now maps relative risk / risk ratio / hazard ratio / odds ratio /
+  prevalence ratio / rate ratio / standardised mean difference / mean difference / risk difference
+  onto their short forms on both sides, and adjusted forms are deliberately *not* conflated with
+  unadjusted ones. Result: 8 of 10 -> **10 of 10** caught.
+- **A false-parse guard, and the false accusation that motivated it.** The English conjunction "or"
+  was being read as the odds-ratio label `OR`, so "Treatment continued for 6 or 12 weeks", cited
+  against a source recording `OR 1.42`, was reported as a **conflict** — the tool accused an author
+  of contradicting a source using the word "or" and the number 12. Three guards now apply: the
+  short labels that are also English words or fragments must be written in upper case (a lower-case
+  leading `a` is still allowed, because `aOR` is written that way); a number immediately followed by
+  a percent sign is a percentage, not the measure (`OR 95% CI` is a table header); and no effect
+  measure reaches 1000, so a larger value after a short label is an identifier (`MD 21702` is a ZIP
+  code). Every measured metric is unchanged, and the benchmark now runs four ordinary-prose probes
+  through the real CLI and **fails** if any is classified as a contradiction.
+- **`--self-test` for `meta-ml-screener` and the originality toolkit**, and a `check_refusal()`
+  helper in the meta-analysis golden tests that captures the engine's exit status — the suite had
+  discarded it and tested only the happy path. CI now runs the screener self-test, the paper-search
+  availability suite, and a byte-identity check that every patch replacement still matches the
+  vendored file it mirrors.
 - **Evidence acquisition** (`citation-report/scripts/_acquire.py`): when a cited source has no readable
   evidence, three open-access tiers are tried in order — keyless full text from Europe PMC, an
   open-access PDF resolved through OpenAlex, and the vendored `paper-search` package as an optional
@@ -137,6 +169,58 @@ versioning follows [Semantic Versioning](https://semver.org/).
   not a failure. Retraction remains a hard failure.
 
 ### Fixed
+- **Three vendored MCP servers reported a failed lookup as "no results".** `paper-search-mcp`'s
+  openaire and unpaywall connectors swallowed every transport error into an empty result — a refused
+  connection, a 429 and a 500 were indistinguishable from "nothing matched" (`search_openaire`
+  returned `result=[]`, `search_papers(sources="openaire")` reported `status: empty` with no
+  warning). `ncbi-mcp-server`'s `search_mesh_terms` turned a descriptor-fetch failure into a note
+  saying the term "may not exist in the MeSH controlled vocabulary". `academic-search-mcp` returned
+  `{"papers": []}` with no error key when all four providers had failed, and its diagnostic called an
+  outage `provider_returned_no_candidates`. All three now distinguish "the API answered and holds no
+  such record" from "the API could not be reached", using the `SourceUnavailable` / `_last_request_error`
+  machinery already present in each codebase. 21 offline tests added, each stubbing the transport to
+  raise and to return 429/500, with a genuine-zero control; the patch system's replacement files were
+  brought back in step (37 byte-identical, 0 drifting) and the unreachable openaire snippet was
+  replaced by a whole-file copy.
+- **A statistical engine dropped the rows it could not use and pooled the rest as if complete.**
+  `cochrane_meta.R`, `run_meta_analysis.R` and `forest_funnel.R` filtered out rows with a blank,
+  non-numeric or zero effect size or standard error, then printed a pooled estimate in exactly the
+  shape and exit code of a complete run — a review's headline number silently computed over a subset.
+  They now write a `worklist.json` naming each dropped row and why, print an `INPUT CONDITION` block,
+  and exit 3 **before writing any pooled estimate**; `--allow-incomplete` is the logged opt-out. The
+  same treatment was applied to `validate_coding_sheet.py`, whose blank/zero rows were a hard error
+  in the finding channel, and a missing sheet is now `insufficient_input` (exit 4) there and in the R
+  scripts. Two studies with identical effects no longer print `I² = 0.0%`; with `QE <= k-1` the
+  heterogeneity is reported as `not estimable`. The golden tests had discarded the engine's exit
+  status and tested only the happy path; they now assert five refusal paths (17 → 22 checks).
+- **Two guard skills reported an input they could not assess as a clean result.** `humanizerdrb`
+  printed `No mechanical problems found.` and exited 0 for a 0-byte draft, a markup-only draft and a
+  non-English draft, including one carrying an AI tell — a document it could not analyse reported as
+  clean. It now refuses with `insufficient_input` (exit 3) and suppresses the clean wording.
+  `meta-ml-screener` reported a screening log with no data rows through the finding channel
+  (`Validation failed: 1 error(s)`, exit 1), indistinguishable from a genuine bad row; it is now an
+  input condition (exit 3) reported on stderr with a JSON worklist. Both scripts gained a `--self-test`
+  that drives `main()` — the humanizer's previous self-test passed even when `main()` was mutated to
+  return 0 on a real finding.
+- **Four instruction-only skills could not record a source they had not read.** Templates in
+  `umbrella-review-skeptic` totalled "unique primary studies" with no field for a review whose list
+  was unreadable, and two instructions turned a gap into a datapoint (a failed effect-size conversion
+  became "direction and significance" for vote counting; an unavailable duration became a mean). In
+  `environment-life-review-forge`, a study's core result was asserted as fact from a third-party
+  summary while the source was recorded as abstract-level, and the text then argued that reading was
+  "stronger than leaving the stress interaction as a black-box pattern". `paper-search` printed an
+  error code in a results cell, contradicted itself on its own source count (27/28/30 — now 28,
+  determined by counting its registry), and pointed at an architecture file no repository file
+  creates. `meta-analysis` named a script without a path. One audit claim was checked and rejected:
+  the `statistical-analysis` reference is an optional upstream skill the installer clones by default,
+  not a broken one, and is left in place with the reason recorded.
+- **A document in another language was graded and reported clean.** The language precondition tested
+  a share of sentences matching any signal, and a bare digit is a signal, so one percentage was enough
+  to make a 60-sentence Spanish document "readable" — `pass`, exit 0 — while a three-sentence Spanish
+  document was exempted as too short to tell. The precondition now identifies the language from
+  evidence independent of the English triggers (function-word share plus Latin-script share), splits
+  the short-document exemption into "too short to tell" and "clearly another language", and blocks the
+  latter. Citation-report harness 95 → 111 checks.
 - **The five sibling gates named in `docs/EVIDENCE-INVARIANT.md` were audited, and all five broke
   the rule.** Each was answered by reading its code path and running it against a fixture where the
   input was missing; each fix ships a pass-and-fail test and is its own commit. The question-by-question
@@ -338,5 +422,6 @@ First release: reliable literature-review tooling for AI coding agents.
   exclude their `.env*` files; the installer writes configs and `.env` with
   mode `600`.
 
-[Unreleased]: https://github.com/drb253/research-stack/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/drb253/research-stack/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/drb253/research-stack/releases/tag/v1.1.0
 [1.0.0]: https://github.com/drb253/research-stack/releases/tag/v1.0.0

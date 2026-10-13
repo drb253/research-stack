@@ -707,7 +707,7 @@ Every fix is reversible without re-cloning.
 ~/.local/share/
 ├── scientific-agent-skills/         # git checkout of the 166-skill pack
 ├── uv/tools/paper-search-mcp/       # the installed package the patches edit
-├── paper-search-mcp-patches/        # apply_patches.py + 43 replacements + ARCHITECTURE.md
+├── paper-search-mcp-patches/        # apply_patches.py + 43 replacements + verify_fixes.py
 ├── ncbi-mcp-server/                 # patched clone (Python 3.11.16 venv)
 ├── academic-search-mcp/             # fork 0.8.0+local1 (Python 3.12.14 venv)
 ├── browser-probe/.venv/             # playwright + pypdf + pypdfium2 + reportlab
