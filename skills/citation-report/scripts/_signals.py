@@ -226,6 +226,38 @@ MEASURE_RE = re.compile(r"\b(" + MEASURE + r")\b\s*[:=]?\s*(" + NUMBER + r")", r
 #: `beta` are unaffected: `beta 0.67` is the normal spelling of a regression coefficient.
 CASE_SENSITIVE_MEASURES = {"OR", "MD", "HR", "RR", "PR", "RD", "IRR", "SMD", "WMD"}
 
+#: Long and short spellings of the SAME effect measure. A sentence may write "relative risk"
+#: where the source's ledger recorded "RR"; they are the same statistic, and treating them as
+#: different lost two of the ten contradictions in the real-source benchmark set -- a false
+#: negative rather than an accusation, but still a contradiction the gate existed to catch.
+#:
+#: Deliberately NOT included: `aHR`/`aOR` and their unadjusted forms. Those are genuinely
+#: different statistics, and conflating them would be a way to manufacture an accusation.
+MEASURE_CANON = {
+    "RELATIVERISK": "RR",
+    "RISKRATIO": "RR",
+    "HAZARDRATIO": "HR",
+    "ODDSRATIO": "OR",
+    "PREVALENCERATIO": "PR",
+    "RATERATIO": "IRR",
+    "INCIDENCERATERATIO": "IRR",
+    "STANDARDISEDMEANDIFFERENCE": "SMD",
+    "STANDARDIZEDMEANDIFFERENCE": "SMD",
+    "MEANDIFFERENCE": "MD",
+    "RISKDIFFERENCE": "RD",
+}
+
+
+def canonical_measure(label: str) -> str:
+    """Reduce a measure label to one spelling, so both sides of a comparison agree.
+
+    Run on the sentence side and on the evidence side, so "relative risk" in a sentence and
+    "RR" in a ledger row are recognised as the same measure. Input is whatever the regex
+    captured: any case, spaces allowed.
+    """
+    key = (label or "").upper().replace(" ", "")
+    return MEASURE_CANON.get(key, key)
+
 #: No effect measure reaches this magnitude, so anything larger is an identifier that happens to
 #: follow a short label (`MD 21702` is a ZIP code in an address). Rejecting it costs nothing that
 #: was ever a statistic; accepting it costs a false accusation.
@@ -393,7 +425,7 @@ def extract_quantities(text: str) -> list:
                 kind="measure",
                 raw=match.group(0),
                 values=[value],
-                measure=re.sub(r"\s+", " ", match.group(1)).upper(),
+                measure=canonical_measure(match.group(1)),
                 start=match.start(),
                 end=match.end(),
             ),

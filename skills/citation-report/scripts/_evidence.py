@@ -58,7 +58,7 @@ class EvidenceIndex:
 
     def measure_values(self, label: str) -> list:
         """Every `value, offset` recorded for a measure such as HR or OR."""
-        normalized = (label or "").upper().replace(" ", "")
+        normalized = _signals.canonical_measure(label)
         entries = self.measures.get(normalized)
         if entries:
             return entries
@@ -85,7 +85,7 @@ class EvidenceIndex:
             value = _signals._to_float(match.group(2))
             if value is None:
                 continue
-            label = match.group(1).upper().replace(" ", "")
+            label = _signals.canonical_measure(match.group(1))
             self.measures.setdefault(label, []).append((value, match.start()))
         return self
 

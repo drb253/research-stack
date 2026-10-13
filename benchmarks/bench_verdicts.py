@@ -37,6 +37,8 @@ Usage:
 
 from __future__ import annotations
 
+import csv
+import io
 import json
 import math
 import subprocess
@@ -436,6 +438,124 @@ def format_metrics(entry: dict, label: str) -> list:
         "    F1           %6.3f" % entry["f1"],
     ]
 
+# --------------------------------------------------------------------------- #
+# Conflict ground truth from REAL open-access articles
+# --------------------------------------------------------------------------- #
+#: The same decision as the hand-written set above, but with a ground truth that was NOT
+#: written by the author of the rule table. Every value below was copied verbatim out of an
+#: open-access article fetched through the skill's own acquisition path, and every sentence is
+#: a plausible digit transposition of it -- the kind of error a real author makes. `quote` is
+#: the article's own wording, so the pairing can be checked rather than trusted.
+#:
+#: Kept SEPARATE from the constructed set, and reported on its own line, because it is a
+#: different population: merging them would let ten real cases inherit the caveat that the
+#: constructed ones were written to fit the rules, and hide the fact that these were not.
+#:
+#: Yield, stated honestly: 19 of the 60 DOIs in a real clinical bibliography were obtained
+#: (31.7%, all from the Europe PMC open-access tier; the OpenAlex PDF tier returned 0, with
+#: publishers refusing a non-browser client), and only 4 of those 19 contain a measure in a
+#: form the parser accepts, which is what these ten cases come from. The binding constraint on
+#: a larger harvest is the parser's format expectations -- `RR` is not equated with "relative
+#: risk", and comma, parenthetical and negative forms are invisible -- not network access.
+REAL_CONFLICTS = [
+    ("S101", "10.1016/j.heliyon.2023.e20289", "PMC10522950", "OR", 1.92,
+     "tertiary hospital ( OR = 1.92, 95% CI : 1.12-3.31, p = 0.018)",
+     "Working at a tertiary hospital was independently associated with PTSD among nurses (OR 1.29)",
+     "the article reports OR 1.92; 1.29 transposes 92 -> 29"),
+    ("S102", "10.1016/j.heliyon.2023.e20289", "PMC10522950", "OR", 2.36,
+     "OR = 2.36 for the >40 years group",
+     "Nurses older than 40 years had higher odds of PTSD than those aged 25 years or younger (OR 2.63)",
+     "the article reports OR 2.36 for the >40 group; 2.63 transposes 36 -> 63"),
+    ("S103", "10.1016/j.heliyon.2023.e20289", "PMC10522950", "OR", 2.35,
+     "level of depression (moderate-to-severe, OR = 2.35, 95% CI : 1.18-4.69, p = 0.004)",
+     "Moderate-to-severe depression was independently associated with PTSD among nurses (OR 2.53)",
+     "the article reports OR 2.35 for moderate-to-severe depression; 2.53 transposes 35 -> 53"),
+    ("S104", "10.1016/j.heliyon.2023.e20289", "PMC10522950", "OR", 18.46,
+     "anxiety ( OR = 18.46, 95% CI : 5.35-63.71, p < 0.001)",
+     "Anxiety showed the strongest association with PTSD among the nurses studied (OR 18.64)",
+     "the article reports OR 18.46 for anxiety; 18.64 transposes 46 -> 64"),
+    ("S105", "10.1016/j.heliyon.2023.e20289", "PMC10522950", "OR", 4.15,
+     "sleep disorders ( OR = 4.15, 95% CI : 1.98-8.68, p < 0.001)",
+     "Sleep disorders were independently associated with PTSD among nurses (OR 4.51)",
+     "the article reports OR 4.15 for sleep disorders; 4.51 transposes 15 -> 51"),
+    ("S106", "10.1016/j.jmh.2024.100225", "PMC11390179", "beta", 0.67,
+     "the history of mental disorder was the only variable affecting PTSD ( beta = 0.67",
+     "In the first-stage model, a history of mental disorder was the only variable affecting PTSD (beta = 0.76)",
+     "the article reports beta 0.67; 0.76 transposes 67 -> 76"),
+    ("S107", "10.1016/j.jmh.2024.100225", "PMC11390179", "beta", 0.16,
+     "self-control ( beta = 0.16 ; p < 0.05 )",
+     "Self-control was a relatively good predictor of PTSD in the second-stage model (beta = 0.61)",
+     "the article reports beta 0.16 for self-control; 0.61 transposes 16 -> 61"),
+    ("S108", "10.1016/j.jmh.2024.100225", "PMC11390179", "beta", 0.13,
+     "perceived controllability ( beta = 0.13 ; p < 0.05 )",
+     "Perceived controllability was a relatively good predictor of PTSD in the second-stage model (beta = 0.31)",
+     "the article reports beta 0.13; 0.31 transposes 13 -> 31"),
+    ("S109", "10.1016/j.bbih.2023.100631", "PMC10209702", "RR", 8.08,
+     "a relative risk = 8.08 for diagnosed stroke in the Pathological Class",
+     "Responders in the Pathological Class with cerebrovascular disease had a much higher "
+     "relative risk of diagnosed stroke than those in the Normal Class (relative risk = 8.80)",
+     "the article reports relative risk 8.08; 8.80 transposes 08 -> 80"),
+    ("S110", "10.1016/j.xcrm.2023.101045", "PMC10213980", "HR", 1.47,
+     "veterans with PTSD were at increased risk for developing heart failure "
+     "(hazard ratio = 1.47; 95% confidence interval = 1.13-1.91)",
+     "Veterans with PTSD were at increased risk of developing heart failure compared with "
+     "veterans without PTSD (hazard ratio = 1.74)",
+     "BORDERLINE: the article is summarising another longitudinal study when it reports HR 1.47, "
+     "so the value is real but the attribution is to a secondary report; 1.74 transposes 47 -> 74"),
+]
+
+
+def real_conflict_ledger() -> str:
+    """Build the ledger for the real-source cases: one row per case, with the verbatim value.
+
+    One row per case rather than one per article, because a real article reports many measures
+    and the classifier pairs a sentence with the first same-label value it finds in a source.
+    A ledger holding only the value this case is about is the configuration in which that
+    pairing is unambiguous; it is also the configuration a reviewer would use to check a single
+    claim by hand.
+    """
+    fields = SOURCES_CSV.splitlines()[0].split(",")
+    buffer = io.StringIO()
+    writer = csv.DictWriter(buffer, fieldnames=fields)
+    writer.writeheader()
+    for source_id, doi, pmcid, measure, value, _quote, _sentence, _why in REAL_CONFLICTS:
+        writer.writerow({
+            "source_id": source_id, "title": "open-access article %s" % pmcid,
+            "authors": "as published", "container": "open-access article", "year": "2023",
+            "doi": doi, "pmcid": pmcid, "publication_type": "journal_article",
+            "peer_reviewed": "yes", "effect_estimate": "%s %s" % (measure, value),
+            "verification_status": "verified", "verifier": "bench",
+            "verified_date": "2026-01-01", "locator": pmcid,
+            "retraction_status": "clear", "inclusion_status": "included",
+            "retrieval_status": "returned",
+        })
+    return buffer.getvalue()
+
+
+def run_real_conflicts() -> list:
+    """Run the real-source conflict cases through the real CLI.
+
+    Returns (sentence, why, provenance, verdict). This set is the answer to "the labelled set
+    was written by the same author as the rules": the values here came from the literature.
+    """
+    workspace = Path(tempfile.mkdtemp(prefix="bench-realconflict-"))
+    ledger = workspace / "sources.csv"
+    ledger.write_text(real_conflict_ledger(), encoding="utf-8")
+    verdicts = _run_cli(
+        "real-conflict",
+        document_text="\n\n".join(
+            "%s [src:%s]." % (sentence.rstrip("."), source_id)
+            for source_id, _d, _p, _m, _v, _q, sentence, _w in REAL_CONFLICTS
+        ),
+        extra_args=["--sources", str(ledger), "--allow-insufficient"],
+    )
+    return [
+        (sentence, why, "%s %s" % (doi, pmcid), verdict)
+        for (source_id, doi, pmcid, _m, _v, _q, sentence, why), verdict
+        in zip(REAL_CONFLICTS, verdicts)
+    ]
+
+
 #: Ordinary prose that a measure parser can mistake for a statistic. Every one of these was
 #: measured producing a measure token before the guard in `_signals.extract_quantities()`, and
 #: the first was measured producing a **CONFLICT** against a source recording `OR 1.42` --
@@ -727,12 +847,28 @@ def main() -> int:
     accused = [(sentence, verdict["rule_id"])
                for sentence, _, verdict in false_parse if verdict["state"] == "conflict"]
     false_parse_ok = not accused
+    # The externally grounded set: real articles, values copied from the fetched text. It is
+    # scored on its own so its result cannot be attributed to the constructed set's caveat.
+    real_conflicts = run_real_conflicts()
+    real_conflict_rows = [
+        (sentence, RULE_STATE["D08"], why, provenance, verdict)
+        for sentence, why, provenance, verdict in real_conflicts
+    ]
+    real_missed = [(sentence, verdict["rule_id"], provenance)
+                   for sentence, _expected, _why, provenance, verdict in real_conflict_rows
+                   if verdict["state"] != "conflict"]
+    real_conflict_precision = (
+        (len(real_conflict_rows) - len(real_missed)) / len(real_conflict_rows)
+        if real_conflict_rows else float("nan")
+    )
+    real_conflict_ok = bool(real_conflict_rows) and not real_missed
     safety_ok = (
         conflict["support"] > 0
         and conflict_precision == 1.0
         and not weak_conflicts
         and trigger_safety_ok
         and false_parse_ok
+        and real_conflict_ok
     )
 
     result = {
@@ -750,6 +886,17 @@ def main() -> int:
         "conflict_precision_must_be_one": safety_ok,
         "trigger_false_positive_free_on_real_prose": trigger_safety_ok,
         "false_parse_never_accuses": false_parse_ok,
+        "real_source_conflict_recall": real_conflict_ok,
+        "real_source_conflicts": {
+            "cases": len(real_conflict_rows),
+            "recall": (1.0 - len(real_missed) / len(real_conflict_rows))
+            if real_conflict_rows else float("nan"),
+            "caught": ["%s (%s)" % (sentence[:60], provenance)
+                       for sentence, _e, _w, provenance, v in real_conflict_rows
+                       if v["state"] == "conflict"],
+            "missed": ["%s -> %s (%s)" % (sentence[:60], rule, provenance)
+                       for sentence, rule, provenance in real_missed],
+        },
         "false_parse_probes": [
             {"sentence": sentence, "why": why, "rule": verdict["rule_id"],
              "state": verdict["state"]}
@@ -859,6 +1006,16 @@ def main() -> int:
           % exit_code)
 
     print()
+    print("CONFLICT GROUND TRUTH FROM REAL ARTICLES (values copied from the fetched text):")
+    for sentence, _expected, _why, provenance, verdict in real_conflict_rows:
+        mark = "caught" if verdict["state"] == "conflict" else "MISSED"
+        print("  %-7s %-5s %s" % (mark, verdict["rule_id"], sentence[:62]))
+        print("  %-7s %-5s %s" % ("", "", provenance))
+    print("  caught %d of %d real-source contradictions (precision %.3f; a miss is a false "
+          "negative, not an accusation)"
+          % (len(real_conflict_rows) - len(real_missed), len(real_conflict_rows),
+             real_conflict_precision))
+    print()
     print("FALSE-PARSE GUARD -- ordinary prose that must never be accused:")
     for sentence, why, verdict in false_parse:
         mark = "ACCUSED!" if verdict["state"] == "conflict" else "not accused"
@@ -877,11 +1034,16 @@ def main() -> int:
         print("    told it needs a citation when it did not")
         print("  %d of %d ordinary-prose probes were accused -- the parser never invented a "
               "measure" % (len(accused), len(false_parse)))
+        print("  %d of %d real-source contradictions caught -- no contradiction in the "
+              "externally grounded set was missed"
+              % (len(real_conflict_rows) - len(real_missed), len(real_conflict_rows)))
     else:
         print("SAFETY PROPERTY VIOLATED: conflict precision is %.3f over %d case(s)."
               % (conflict_precision, conflict.get("support", 0)))
         for sentence, rule in accused:
             print("  ACCUSED %s: %s" % (rule, sentence[:70]))
+        for sentence, rule, provenance in real_missed:
+            print("  MISSED  %s: %s (%s)" % (rule, sentence[:60], provenance))
         print("A false red is an accusation of fabrication. Narrow the rule that caused it.")
     print()
     print(result["advisory_channel"])
