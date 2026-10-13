@@ -45,6 +45,16 @@ expect_file() { local name="$1" path="$2"
 RUN=(python3 "$HERE/report.py")
 GATE=(python3 "$HERE/report_gate.py")
 
+# Which optional tools this machine has. Probed once, next to the other helpers, because
+# the expected *behaviour* changes with them: a scan is refused where no OCR exists and
+# transcribed where it does, and a suite that assumed one of those failed on CI.
+have_ocr_engine=0
+if command -v tesseract >/dev/null 2>&1 && command -v pdftoppm >/dev/null 2>&1; then
+  have_ocr_engine=1
+fi
+have_scan_builder=0
+if python3 -c "import PIL" >/dev/null 2>&1; then have_scan_builder=1; fi
+
 echo "== 1. offline logic self-test =="
 if python3 "$HERE/self_test.py" --self-test >/dev/null 2>&1; then
   ok "pure-function assertions pass"
@@ -470,7 +480,17 @@ expect_exit 4 "a PDF nothing can read is refused as an input gap" "${RUN[@]}" re
 "${RUN[@]}" report --document "$WS/blank.pdf" --offline --out-dir "$TMP/blankout" >"$TMP/blank.json" 2>&1
 expect_json "the status names the input gap, not a verdict" "$TMP/blank.json" "d['status']" "insufficient_input"
 expect_json_in "the gap says how to close it" "$TMP/blank.json" "d['input_gaps'][0]['how_to_close']" "install"
-if [ "$have_pdf_extractor" -eq 1 ]; then
+if [ "$have_pdf_extractor" -eq 1 ] && [ "$have_ocr_engine" -eq 1 ]; then
+  # An extractor ran, found no text, and OCR then read the page images and found nothing
+  # either. The gap is OCR's own, and it still names what to check.
+  expect_json "the gap names the condition: OCR found no text" "$TMP/blank.json" "d['input_gaps'][0]['kind']" "ocr_empty"
+  expect_json_in "the reason says OCR read it and found nothing" "$TMP/blank.json" "str(d['issues'])" "OCR read"
+  if grep -q "no PDF text extractor is available" "$TMP/blank.json"; then
+    no "the refusal must not blame a missing extractor"
+  else
+    ok "the refusal does not blame a missing extractor"
+  fi
+elif [ "$have_pdf_extractor" -eq 1 ]; then
   expect_json "the gap names the condition: no text layer" "$TMP/blank.json" "d['input_gaps'][0]['kind']" "no_text_layer"
   expect_json_in "the reason names the missing text layer" "$TMP/blank.json" "str(d['issues'])" "no text layer"
   expect_json_in "and calls the file a scan" "$TMP/blank.json" "str(d['issues'])" "scan"
@@ -838,6 +858,111 @@ before="$(shasum -a 256 <"$WS/untouched.md" | awk '{print $1}')"
   --offline --format html --out-dir "$TMP/nomod" >/dev/null 2>&1
 after="$(shasum -a 256 <"$WS/untouched.md" | awk '{print $1}')"
 if [ "$before" = "$after" ]; then ok "input document is byte-identical after a run"; else no "input document was modified"; fi
+
+echo
+echo "== 18. OCR: a scan is read, and a transcription never becomes an accusation =="
+# The engine half of this needs tesseract, poppler's rasteriser and Pillow to build the
+# fixture. The rule half -- transcribed evidence is not `red_capable`, and D13 lands on
+# unverifiable -- is pinned in self_test.py, which needs no engine, so it holds on CI,
+# where none of these three is installed. What is skipped here is said out loud.
+if [ "$have_ocr_engine" -eq 1 ] && [ "$have_scan_builder" -eq 1 ]; then
+  python3 - "$WS" <<'PY'
+import sys
+from pathlib import Path
+from PIL import Image, ImageDraw, ImageFont
+
+work = Path(sys.argv[1])
+lines = ["Statin therapy reduced major adverse cardiovascular events",
+         "(HR 0.50) in the treatment arm [src:S001]."]
+image = Image.new("RGB", (1900, 900), "white")
+draw = ImageDraw.Draw(image)
+try:
+    font = ImageFont.truetype("/System/Library/Fonts/Supplemental/Arial.ttf", 44)
+except Exception:
+    try:
+        font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 44)
+    except Exception:
+        font = ImageFont.load_default()
+y = 200
+for line in lines:
+    draw.text((100, y), line, fill="black", font=font)
+    y += 90
+# An image-only PDF: no text layer, which is what a scan is.
+image.save(work / "scan-manuscript.pdf", "PDF", resolution=150.0)
+print("built a one-page scan of:", lines[1])
+PY
+  # The sentence says HR 0.50; the shipped ledger records HR 0.80. Read as text that is a
+  # contradiction (D08, exit 1). Transcribed, it must be disclosed as unverifiable (D13)
+  # and must not be an accusation -- the same words, a different provenance.
+  "${RUN[@]}" report --document "$WS/scan-manuscript.pdf" --sources "$ASSETS/sample-sources.csv" \
+    --offline --format json --out-dir "$TMP/ocrout" >"$TMP/ocr.json" 2>&1
+  ocr_exit=$?
+  if [ "$ocr_exit" -eq 0 ]; then
+    ok "a scanned document is transcribed rather than refused (exit 0)"
+  else
+    no "a scanned document is transcribed rather than refused (want 0, got $ocr_exit)"
+  fi
+  expect_json "the document is marked transcribed" "$TMP/ocrout/verdicts.json" "d['document']['transcribed']" "True"
+  expect_json "the transcription names its engine" "$TMP/ocrout/verdicts.json" "d['document']['transcription']" "tesseract:eng"
+  expect_json "the run records how many sentences rest on OCR" "$TMP/ocrout/verdicts.json" "d['transcription']['sentences_resting_on_ocr'] >= 1" "True"
+  expect_json "the OCR'd sentence is unverifiable, not a conflict" "$TMP/ocrout/verdicts.json" "d['coverage']['states']['conflict']" "0"
+  expect_json_in "rule D13 names the transcription" "$TMP/ocrout/verdicts.json" "str(d['verdicts'])" "D13"
+  # The control: identical content with a text layer IS a contradiction, so what changed
+  # the verdict is the provenance, not the value.
+  printf '# Control\n\nStatin therapy reduced major adverse cardiovascular events (HR 0.50) [src:S001].\n' >"$WS/ocr-control.md"
+  "${RUN[@]}" audit --document "$WS/ocr-control.md" --sources "$ASSETS/sample-sources.csv" --offline >"$TMP/ocrcontrol.json" 2>&1
+  expect_exit 1 "the same value read from text is still a contradiction" "${RUN[@]}" audit --document "$WS/ocr-control.md" --sources "$ASSETS/sample-sources.csv" --offline
+  expect_json "the control is a conflict, not a downgrade" "$TMP/ocrcontrol.json" "d['coverage']['states']['conflict']" "1"
+else
+  ok "OCR engine or scan builder absent here: the engine half of the tier is not exercised (rule half is in self_test.py)"
+fi
+
+# The refusal paths hold on every machine. A scan with OCR switched off is an input gap,
+# and the reason must be true: "this build cannot transcribe" would be a lie wherever
+# tesseract is installed.
+printf '%%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 595 842]>>endobj\ntrailer<</Root 1 0 R>>\n%%%%EOF\n' >"$WS/blank-ocr.pdf"
+expect_exit 4 "OCR switched off leaves a scan an input gap" "${RUN[@]}" report --document "$WS/blank-ocr.pdf" --offline --no-ocr --out-dir "$TMP/ocroff"
+"${RUN[@]}" report --document "$WS/blank-ocr.pdf" --offline --no-ocr --out-dir "$TMP/ocroff" >"$TMP/ocroff.json" 2>&1
+# Which gap comes first depends on the machine: with no text extractor at all, "nothing can
+# read a PDF" outranks "the scan has no text layer", and with no engine the scan refusal
+# names the install. Assert the truth for this environment rather than one environment's
+# truth for all of them -- that mistake is what failed this suite on CI.
+if [ "$have_pdf_extractor" -eq 1 ]; then
+  expect_json "the OCR-off refusal is an input gap" "$TMP/ocroff.json" "d['input_gaps'][0]['kind']" "no_text_layer"
+else
+  expect_json "with no extractor, the gap is the extractor's" "$TMP/ocroff.json" "d['input_gaps'][0]['kind']" "no_pdf_extractor"
+fi
+if [ "$have_ocr_engine" -eq 1 ]; then
+  expect_json_in "with the engine installed, the refusal names the switch, not a missing build" "$TMP/ocroff.json" "str(d['issues'])" "switched off"
+elif [ "$have_pdf_extractor" -eq 1 ]; then
+  expect_json_in "with an extractor but no engine, the scan refusal names the install route" "$TMP/ocroff.json" "str(d['issues'])" "install tesseract"
+else
+  expect_json_in "with neither, the refusal names the extractor install route" "$TMP/ocroff.json" "str(d['issues'])" "install poppler"
+fi
+
+# The gate must reject a red finding that rests on a transcription, even when the verdict
+# file was edited by hand to claim one. This needs no OCR engine: the tamper is applied to a
+# text-layer contradiction, which is exactly what a hand-edited file would look like.
+"${RUN[@]}" report --document "$WS/contradict.md" --sources "$ASSETS/sample-sources.csv" \
+  --offline --format json --out-dir "$TMP/gateocr" >/dev/null 2>&1
+python3 - "$TMP/gateocr/verdicts.json" "$WS/tampered" <<'PYTAMPER'
+import json, pathlib, sys
+payload = json.loads(pathlib.Path(sys.argv[1]).read_text())
+out = pathlib.Path(sys.argv[2]); out.mkdir(parents=True, exist_ok=True)
+changed = 0
+for verdict in payload["verdicts"]:
+    if verdict.get("rule_id") == "D08":
+        for entry in verdict.get("sources", []):
+            entry["transcribed"] = True
+            entry["transcription"] = "tesseract:eng"
+        changed += 1
+assert changed, "the contradiction fixture produced no D08 to tamper with"
+(out / "verdicts.json").write_text(json.dumps(payload, indent=2))
+print("tampered %d D08 verdict(s) to claim OCR evidence" % changed)
+PYTAMPER
+expect_exit 1 "the gate rejects a red finding that claims OCR evidence" "${GATE[@]}" --dir "$WS/tampered"
+"${GATE[@]}" --dir "$WS/tampered" >"$TMP/gateocr.json" 2>&1
+expect_json_in "and names the transcription bar" "$TMP/gateocr.json" "str(d['issues'])" "CONFLICT_TRANSCRIBED_EVIDENCE"
 
 echo
 printf 'RESULT: %d passed, %d failed\n' "$pass" "$fail"

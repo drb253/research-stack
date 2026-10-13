@@ -109,7 +109,7 @@ status:
 | `pass` | 0 | adequate evidence; any findings are warnings |
 | `fail` | 1 | error-severity findings about the document |
 | `insufficient_evidence` | 3 | the document was readable; not enough source text was held |
-| `insufficient_input` | 4 | the document itself could not be read well enough to make findings |
+| `insufficient_input` | 4 | the document itself could not be read well enough to make findings (including a scan when OCR is off or unavailable) |
 
 **Blocking is the default.** `--allow-insufficient` proceeds while keeping the status visible in the
 JSON. A blocked run still writes every artifact and a worklist; the artifacts carry an
@@ -142,9 +142,10 @@ Acquired text is used only after its identity is confirmed against the cited wor
 discarded. Full detail: `references/evidence-and-limits.md`.
 
 A red finding additionally requires a **verified link** (a declared id, a supplied file, or a resolved
-DOI — never a title match) and **machine-comparable evidence** (the source's own text, or a value copied
-verbatim into a ledger). A prose summary may support a positive claim but may never convict, so rules
-`D11` and `D12` downgrade such a contradiction to `unverifiable` with the reason.
+DOI — never a title match), **machine-comparable evidence** (the source's own text, or a value copied
+verbatim into a ledger), and **text that was read rather than transcribed**. A prose summary may support
+a positive claim but may never convict, so `D11` and `D12` downgrade such a contradiction to
+`unverifiable` with the reason; OCR on either side is `D13`, which does the same and names the side.
 
 ## Hard rules
 
@@ -203,10 +204,21 @@ verbatim into a ledger). A prose summary may support a positive claim but may ne
   sentence is `unverifiable`, which looks weak — and is correct. Supply the PDFs, or allow DOI
   resolution to fetch abstracts, to do better.
 - **An abstract is weaker evidence than full text**, and every note that relies on one says so.
-- **Scanned PDFs have no text layer.** They are refused as `insufficient_input` (exit 4) with a
-  reason that says the document has no text layer — a scan — not that an extractor is missing.
-  There is no OCR: the refusal names the `tesseract` install route, but OCR text is never graded,
-  because a transcription error would be reported as a finding about the document.
+- **A scan is transcribed when OCR is available, and the transcription is labelled.** With
+  `tesseract` and poppler's rasteriser installed, a PDF with no usable text layer is read by OCR
+  (on by default; `--no-ocr` refuses instead, `--ocr-lang` picks the language data, and a scan
+  longer than `--ocr-max-pages` is refused rather than partly read). Everything read that way is
+  marked: the document carries `transcribed: true` and `transcription: tesseract:<lang>`, a
+  transcribed source's `evidence_origin` begins `ocr:`, every artifact states how many sentences
+  rested on a transcription, and **a transcription can never support an accusation** — see the
+  next bullet. Without the engine a scan is refused as `insufficient_input` (exit 4), naming the
+  install route.
+- **A transcription may describe, but never convict.** A contradiction is an accusation, so it
+  needs three things: a verified link, machine-comparable evidence, and text that was *read* on
+  both sides. Where the sentence or the source's evidence came from OCR, rule `D13` reports the
+  disagreement as `unverifiable` and says which side was transcribed. Measured, on a real scan:
+  tesseract read `95% CI` as `95% Cl`, and on a two-sentence page it read `HR 0.50` correctly. One
+  misread digit is all it takes, so the bar is provenance, not confidence.
 - **Every unreadable PDF is an input gap, including the two that are not scans.** A machine with
   neither `pdftotext` nor `pypdf` cannot read any PDF at all, and a file an extractor refuses to
   decode is not a file with nothing in it. All three routes exit 4 as `insufficient_input` with a

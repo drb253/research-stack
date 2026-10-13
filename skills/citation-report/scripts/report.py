@@ -49,6 +49,25 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--style", default="all", choices=("numeric", "author-year", "ledger", "all"))
     parser.add_argument("--offline", action="store_true", help="make no network calls at all")
     parser.add_argument(
+        "--no-ocr",
+        action="store_true",
+        help="never transcribe a scanned PDF, even where tesseract is installed: a scan "
+        "then refuses as an input gap naming the install route",
+    )
+    parser.add_argument(
+        "--ocr-lang",
+        default="eng",
+        help="tesseract language data for a scan (default eng); a missing pack is refused "
+        "as an input gap naming what to install",
+    )
+    parser.add_argument(
+        "--ocr-max-pages",
+        type=int,
+        default=40,
+        help="refuse to OCR a scan longer than this rather than reading part of it "
+        "(default 40)",
+    )
+    parser.add_argument(
         "--acquire",
         default="all",
         choices=("all", "api", "pdf", "cli", "none"),
@@ -137,7 +156,7 @@ def _advisory_grades(value: str, verdict_list=None) -> dict:
 
 def build_all(arguments):
     """Read the document, build the bundle, classify. Returns the working set."""
-    document = _intake.read_document(arguments.document)
+    document = _read_document(arguments)
     if arguments.style != "all":
         document.sentences = _intake._sentences.split_sentences(
             document.text, styles=_styles(arguments.style)
@@ -227,8 +246,35 @@ def _verdict_payload(document, bundle, graded, summary, meta, evidence=None) -> 
             "errors": len(errors),
             "warnings": len(warnings),
         },
+        # How much of this report rests on a machine's reading. A contradiction built on
+        # OCR is `unverifiable` (rule D13) rather than red, so a reader who cannot see this
+        # number cannot tell why a disagreement was disclosed instead of asserted.
+        "transcription": {
+            "document_transcribed": bool(getattr(document, "transcribed", False)),
+            "document_transcription": getattr(document, "transcription", ""),
+            "sentences_resting_on_ocr": _transcribed_sentence_count(
+                graded, bool(getattr(document, "transcribed", False))
+            ),
+        },
         "verdicts": [verdict.to_dict() for verdict in graded],
     }
+
+
+def _transcribed_sentence_count(graded, document_transcribed: bool = False) -> int:
+    """Sentences whose evidence, or whose own text, came from OCR.
+
+    If the document itself was transcribed then every graded sentence rests on a
+    transcription, so the count is the whole set rather than the subset whose *sources*
+    were scanned.
+    """
+    if document_transcribed:
+        return len(graded)
+    count = 0
+    for verdict in graded:
+        payload = verdict.to_dict()
+        if any(record.get("transcribed") for record in payload.get("sources", []) or []):
+            count += 1
+    return count
 
 
 def _combine_status(evidence: dict, intake: dict) -> str | None:
@@ -257,12 +303,32 @@ def _meta(document, bundle, summary, graded, sufficiency_result=None, intake_res
     gate_status = "fail" if errors else "pass"
     input_bound = bool(result.get("blocking")) or bool(intake.get("blocking"))
     reasons = list(intake.get("reason", []) or []) + list(result.get("reason", []) or [])
+    # A run-level warning, because warnings are rendered by all three artifacts while the
+    # evidence block only appears on an input-bound banner -- which a transcribed run is
+    # not. A reader who cannot see that the text was a machine's reading cannot weigh the
+    # findings, and cannot tell why a disagreement was disclosed instead of asserted.
+    warnings = list(bundle.warnings) + list(document.warnings)
+    transcribed_sentences = _transcribed_sentence_count(
+        graded, bool(getattr(document, "transcribed", False))
+    )
+    if transcribed_sentences:
+        warnings.append(
+            "OCR: %d of %d graded sentence(s) rest on a transcription (%s), not on the "
+            "document's own text layer. A value that appears to contradict a source is "
+            "reported as unverifiable rather than as a finding (rule D13), because a "
+            "misread digit would make it an accusation about the author."
+            % (
+                transcribed_sentences,
+                len(graded),
+                getattr(document, "transcription", "") or "OCR",
+            )
+        )
     return {
         "title": document.title or "Citation report",
         "document_path": document.path,
         "generated": datetime.date.today().isoformat(),
         "gate_status": gate_status,
-        "warnings": list(bundle.warnings) + list(document.warnings),
+        "warnings": warnings,
         "advisory_enabled": any(verdict.advisory for verdict in graded),
         "coverage": summary,
         # The input side, carried into every artifact so a reader cannot see the
@@ -280,6 +346,15 @@ def _meta(document, bundle, summary, graded, sufficiency_result=None, intake_res
             "undecided_sentences": result.get("undecided_sentences"),
             "detail": result.get("detail"),
             "preconditions_failed": list(intake.get("failed", []) or []),
+            # How much of this report rests on a machine's reading rather than on text
+            # somebody's software wrote. A reader who does not know this cannot weigh the
+            # findings, and a contradiction that would have been red is `unverifiable`
+            # here instead (rule D13), so the count is the honest summary of that.
+            "document_transcribed": bool(getattr(document, "transcribed", False)),
+            "document_transcription": getattr(document, "transcription", ""),
+            "ocr_transcription_sentences": _transcribed_sentence_count(
+                graded, bool(getattr(document, "transcribed", False))
+            ),
         },
     }
 
@@ -352,6 +427,20 @@ def render_formats(formats: list, out_dir: Path, layout, summary, bundle, meta, 
                 )
             )
     return artifacts, issues
+
+
+def _read_document(arguments) -> "_intake.Document":
+    """Read the graded document, honouring the OCR flags.
+
+    One helper for all three modes: the alternative is three call sites that each have to
+    remember `--no-ocr`, and one of them silently not honouring it.
+    """
+    return _intake.read_document(
+        arguments.document,
+        ocr=not getattr(arguments, "no_ocr", False),
+        ocr_lang=getattr(arguments, "ocr_lang", "eng"),
+        ocr_max_pages=getattr(arguments, "ocr_max_pages", 40),
+    )
 
 
 def cmd_report(arguments) -> int:
@@ -503,7 +592,7 @@ def cmd_worklist(arguments) -> int:
 
 
 def cmd_sources(arguments) -> int:
-    document = _intake.read_document(arguments.document)
+    document = _read_document(arguments)
     tiers = _acquire_policy(arguments.acquire, arguments.no_download)
     # With --offline nothing is attempted, and the tier list is emptied rather than
     # merely ignored, so the bundle cannot report a misleading skip message.
@@ -598,7 +687,7 @@ def cmd_verify(arguments) -> int:
         raise _common.InputError("verify mode needs --verdicts <verdicts.json>")
     record = _common.read_json(arguments.verdicts)
     graded = verdicts.from_dict(record)
-    document = _intake.read_document(arguments.document)
+    document = _read_document(arguments)
     issues: list = []
 
     # Every span must still locate its own sentence in the document.

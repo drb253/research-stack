@@ -532,7 +532,7 @@ identical. It does.
 - The originality benchmark measures the **deterministic scorer**, not the live retrieval step.
 - All intervals are Wilson 95%; "lower bound" always means the 95% lower bound.
 
-## 6. Reproduce
+## 7. Reproduce
 
 ```bash
 cd <repo>
@@ -545,3 +545,28 @@ python3 benchmarks/bench_originality_real.py                                    
 python3.11 tools/originality-toolkit/originality_check.py DRAFT \
     --corpus ./sources/ --sources "" --out report.md
 ```
+
+---
+
+## 8. OCR: what the engine actually did, and why the bar is provenance
+
+Measured on this machine with tesseract 5.5.3 (`eng`, 300 dpi rasterisation via poppler), against a
+one-page image PDF built with Pillow — no text layer, so every character came from OCR.
+
+| Fixture | What OCR returned | Verdict |
+|---|---|---|
+| two sentences, 1,700 × 2,200 px | 178 characters, `method=tesseract`, `transcribed=true` | read, and labelled |
+| the same page, upper-case `CI` | `95% Cl` — an upper-case I read as a lower-case l | one character from a false accusation |
+| scanned manuscript `(HR 0.50)` vs a source recording `HR 0.80` | transcribed correctly | `unverifiable` / **D13**, exit 0 |
+| the identical sentence as `.md` (control) | read from the text layer | `conflict` / **D08**, exit 1 |
+| a scanned *source* PDF, cited by a text manuscript | transcribed, `evidence_origin = ocr:S001.pdf:tesseract:eng` | `unverifiable` / **D13**, exit 0 |
+| a blank page | no text | `ocr_empty`, exit 4 (input gap) |
+
+The control row is the point of the whole tier: the same words, the same values, the same source — and
+a different verdict, because one side was a machine's reading. Without the rule, the scanned-manuscript
+row would have been a red finding against an author, resting on OCR.
+
+**Not measured here:** any error *rate*. One misread character in one page is evidence that the failure
+mode is real, not an estimate of how often it occurs. No scan corpus was assembled, so no
+per-character or per-value accuracy figure is claimed for OCR, and the tier's honesty rests on the
+provenance rule rather than on the engine's quality.

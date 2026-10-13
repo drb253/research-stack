@@ -4,11 +4,12 @@ Every sentence gets exactly one state, assigned by exactly one rule. The rule id
 note in every format, so a reader can look up why a sentence was coloured the way it was. The table is
 mirrored in code at `scripts/verdicts.py::RULES`, and `selftest.sh` asserts that the two never drift.
 
-Rules are evaluated **in the order below, first match wins**. The order matters: D11 and D12 sit before
-D09 so that a contradiction which cannot be asserted is recorded as unverifiable, never quietly
+Rules are evaluated **in the order below, first match wins**. The order matters: D11, D12 and D13 sit
+before D09 so that a contradiction which cannot be asserted is recorded as unverifiable, never quietly
 downgraded into a green.
 
-Every red must also clear the **red bar** — an identity-verified link and machine-comparable evidence.
+Every red must also clear the **red bar** — an identity-verified link, machine-comparable evidence, and
+text that was read rather than transcribed by OCR.
 `report_gate.py` re-checks that from the recorded verdicts, so the bar cannot be bypassed by editing a
 file. Full detail: `evidence-and-limits.md`.
 
@@ -173,7 +174,8 @@ instead of asserted. The note says which source and what would confirm it.
 An `exact` link is one the document declared (`[src:S001]`), one the user declared (a BibTeX
 `file = {...}` or a supplied file), or one confirmed by resolving the DOI against an authority.
 
-**Not** this rule: a link that is exact but whose evidence is weak. That is D12.
+**Not** this rule: a link that is exact but whose evidence is weak. That is D12, or D13 when the
+weakness is that OCR read it.
 
 ## D12 — the evidence is a summary, so the conflict cannot be asserted
 
@@ -192,6 +194,30 @@ estimate.
 **Accepted cost:** conflict recall falls. Some genuine contradictions visible only through a prose
 summary are no longer red. The benchmark measures the change rather than hiding it, and conflict
 precision stays at 1.000.
+
+## D13 — the value came from OCR, so the conflict cannot be asserted
+
+**State** `unverifiable` · **Severity** warning · **Colour** steel blue
+
+Predicate: a rule would have produced a `conflict` (D04 or D08), the link is exact, the evidence is
+machine-comparable — but the sentence's text, or the evidence held for the cited source, was
+transcribed by OCR.
+
+A transcription is a machine's reading of an image. It is good enough to *describe* what a paper says
+and to support a positive attribution; it is not good enough to accuse an author of contradicting a
+source, because a single misread character moves a value. Measured on a real scan built for the test:
+tesseract read `95% CI` as `95% Cl` — an upper-case I became a lower-case l. A contradiction built on
+that would be the tool's error presented as the author's.
+
+The note names the side that was transcribed (`tesseract:eng`) and what would close the gap: a
+text-layer copy of the document, or a corrected text export for the source. Both directions are
+covered, because a misread *sentence* value against a correctly read source is just as false an
+accusation as the reverse.
+
+**Accepted cost:** a genuine contradiction visible only through a scan stays `unverifiable`. It is
+counted in `transcription.sentences_resting_on_ocr` and stated in every artifact, so the cost is
+visible rather than silent. On the control fixture — the same words with a text layer — the verdict is
+still `conflict`/D08, so what changed the outcome is provenance, not the value.
 
 ### What may serve as a checkable value
 

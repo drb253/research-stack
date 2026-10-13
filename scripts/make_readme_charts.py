@@ -53,10 +53,14 @@ def save(fig, name):
 # below instead. That check is the point: this chart previously showed four suites summing
 # to 103 while the README said 198, and it omitted citation-report's 95 entirely.
 SUITES = [
-    ("evidence-synthesis\nforge selftest", 62, BLUE),
-    ("medical-narrative\nreview selftest", 29, GREEN),
-    ("citation-report\nselftest", 95, "#cf222e"),
-    ("meta-analysis-forge\ngolden tests", 17, AMBER),
+    ("evidence-synthesis\nforge selftest", 78, BLUE),
+    ("medical-narrative\nreview selftest", 30, GREEN),
+    # citation-report is environment-dependent: 137 where no PDF extractor and no OCR exist
+    # (CI), 139 with an extractor but no OCR, 144 on the machine that built this chart. The
+    # README's headline number uses the same configuration as this row, and its table lists
+    # the other two; the check below is what keeps the two in step.
+    ("citation-report\nselftest", 144, "#cf222e"),
+    ("meta-analysis-forge\ngolden tests", 22, AMBER),
     ("live acceptance\n(adversarial)", 17, "#8250df"),
 ]
 labels = [name for name, _, _ in SUITES]

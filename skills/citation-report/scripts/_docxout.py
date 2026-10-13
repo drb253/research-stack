@@ -891,6 +891,19 @@ class _Composer:
             "model-generated, cannot set, change or veto a verdict, and are disclosed "
             "as: %s." % _common.ADVISORY_DISCLOSURE,
         ]
+        evidence = self.meta.get("evidence") or {}
+        if evidence.get("ocr_transcription_sentences"):
+            paragraphs.append(
+                "OCR: %s of the graded sentence(s) rest on a transcription (%s) rather "
+                "than on the document's own text layer. A value that appears to "
+                "contradict a source is reported as unverifiable rather than as a finding "
+                "(rule D13), because a misread digit would make it an accusation about "
+                "the author."
+                % (
+                    evidence.get("ocr_transcription_sentences"),
+                    evidence.get("document_transcription") or "OCR",
+                )
+            )
         if getattr(self.bundle, "offline", False):
             paragraphs.append(
                 "This run was offline: no DOI was resolved over the network, and every "

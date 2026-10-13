@@ -176,6 +176,27 @@ reported as `INVALID_INPUT` with the *finding* exit code 1, which reads as a ver
 when nothing had been read. Set `CITATION_REPORT_PDF_EXTRACTOR=none` to force that route where an
 extractor is installed; the self-test uses it so both routes are covered on every machine.
 
+### OCR: reading a scan, and what it costs
+
+A scan — no text layer, or a text layer too thin to grade — is transcribed when `tesseract` and
+poppler's rasteriser (`pdftoppm`) are both installed. The tier is on by default, and every part of it
+is labelled:
+
+- the document carries `transcribed: true` and `transcription: tesseract:<lang>`;
+- a transcribed source's `evidence_origin` begins `ocr:`, and `red_capable` is false for it;
+- `transcription.sentences_resting_on_ocr` counts the sentences that rest on a transcription, and all
+  three artifact formats print that count in their Limits section;
+- **a contradiction where either side was transcribed is `unverifiable` (rule D13), never a
+  conflict.** Measured: tesseract read `95% CI` as `95% Cl` on a real scan, and on the same fixture
+  the same words with a text layer are still a `conflict` — so provenance, not the value, is what
+  decides.
+
+The refusals are input gaps like every other unreadable-PDF outcome: `ocr_failed`, `ocr_empty`,
+`ocr_page_limit` (a scan longer than `--ocr-max-pages`, refused rather than partly read),
+`ocr_language_missing`, and `no_pdf_rasterizer`. `--no-ocr` (or `CITATION_REPORT_OCR=none`) switches
+the tier off, and the refusal then names the switch rather than claiming the build cannot transcribe
+— a machine with the engine installed is told the truth about why nothing was read.
+
 ---
 
 ## Intake preconditions

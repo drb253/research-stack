@@ -322,6 +322,13 @@ class Source:
     #: source.
     retrieval_status: str = "not_attempted"
     attempts: list = field(default_factory=list)
+    #: True when `evidence_text` was transcribed by OCR rather than read from a text
+    #: layer. A transcription is a machine's reading: it can support what a sentence
+    #: *says*, but it can never support an accusation, because a misread digit would make
+    #: the tool accuse an author of contradicting a source using the tool's own error.
+    transcribed: bool = False
+    #: What produced the transcription, e.g. `tesseract:eng`. Empty when not transcribed.
+    transcription: str = ""
 
     @property
     def citable(self) -> bool:
@@ -339,8 +346,16 @@ class Source:
 
     @property
     def red_capable(self) -> bool:
-        """True when the evidence may support an accusation. See `_common`."""
-        return self.evidence_strength in _common.RED_CAPABLE_STRENGTH
+        """True when the evidence may support an accusation. See `_common`.
+
+        Transcribed evidence never is, whatever its strength: the second bar for a red
+        finding is that a human wrote the number down and we read it, and OCR breaks the
+        second half of that.
+        """
+        return (
+            self.evidence_strength in _common.RED_CAPABLE_STRENGTH
+            and not self.transcribed
+        )
 
     @property
     def link_verified(self) -> bool:
@@ -437,6 +452,8 @@ class Source:
             ],
             "retrieval_status": self.retrieval_status,
             "attempts": list(self.attempts),
+            "transcribed": self.transcribed,
+            "transcription": self.transcription,
             "warnings": list(self.warnings),
         }
 
@@ -808,7 +825,19 @@ def attach_local_evidence(source: Source, path: Path) -> bool:
     source.evidence_method = extracted.method
     source.evidence_availability = "full_text"
     source.evidence_strength = "primary"
-    source.evidence_origin = "file:" + path.name
+    # A transcribed source says so in its origin, and `red_capable` refuses it. Both are
+    # needed: the origin is what a reader sees, the flag is what the engine obeys.
+    if getattr(extracted, "transcribed", False):
+        source.transcribed = True
+        source.transcription = getattr(extracted, "transcription", "") or "ocr"
+        source.evidence_origin = "ocr:%s:%s" % (path.name, source.transcription)
+        source.warnings.append(
+            "evidence for %s came from OCR (%s): a transcription, so a value that appears "
+            "to contradict the sentence is reported as unverifiable rather than as a "
+            "finding" % (source.source_id, source.transcription)
+        )
+    else:
+        source.evidence_origin = "file:" + path.name
     source.acquisition_method = "supplied-pdf"
     source.acquisition_endpoint = str(path)
     source.identity_check = "user_supplied"

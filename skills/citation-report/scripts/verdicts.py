@@ -97,6 +97,11 @@ RULES = {
         "warning",
         "would be a conflict, but the evidence is a prose summary rather than the source's own text or a recorded value",
     ),
+    "D13": (
+        "unverifiable",
+        "warning",
+        "would be a conflict, but the value on one side came from OCR: a transcription may not support an accusation",
+    ),
 }
 
 #: Quantities that must never be looked up in evidence. A confidence level is
@@ -292,6 +297,10 @@ def classify(document, bundle, indexes: dict, *, advisory=None) -> list:
         state, rule_id, note, extra = _classify(
             sentence, stripped, triggers, quantities, resolved, unresolved, indexes, closed,
             checkable=checkable_quantities,
+            transcribed={
+                "transcribed": bool(getattr(document, "transcribed", False)),
+                "transcription": getattr(document, "transcription", ""),
+            },
         )
         severity = _rule(rule_id)[1]
         source_records = _source_records(resolved, indexes, quantities)
@@ -351,11 +360,19 @@ def _evidence_summary(resolved) -> tuple:
 
 def _classify(
     sentence, stripped, triggers, quantities, resolved, unresolved, indexes, closed,
-    checkable=None,
+    checkable=None, transcribed=None,
 ) -> tuple:
-    """The ladder. First matching rule wins, in rule-id order."""
+    """The ladder. First matching rule wins, in rule-id order.
+
+    `transcribed` is the *document's* transcription record (`{"transcribed": bool,
+    "transcription": str}`), not the sources': a contradiction needs both sides to have
+    been read rather than transcribed, and the sources carry their own flag.
+    """
     if checkable is None:
         checkable = quantities
+    transcribed = transcribed or {}
+    document_transcribed = bool(transcribed.get("transcribed"))
+    document_transcription = str(transcribed.get("transcription") or "")
     # A source can be reached through more than one marker (`[claim:C001]` and
     # `[src:S001]` name the same work), so collapse before reasoning about it.
     deduped: list = []
@@ -460,16 +477,20 @@ def _classify(
         )
 
     # D08 — a number contradicts the same named measure in evidence we hold. A
-    # contradiction is an accusation, so it has to clear two bars: the link must be
-    # verified, and the evidence must be machine-comparable rather than a human's
-    # summary. Failing either bar downgrades to `unverifiable` with the reason, so the
-    # finding is disclosed without being asserted.
+    # contradiction is an accusation, so it has to clear three bars: the link must be
+    # verified, the evidence must be machine-comparable rather than a human's summary, and
+    # neither side may have been transcribed by OCR. Failing any bar downgrades to
+    # `unverifiable` with the reason, so the disagreement is disclosed without being
+    # asserted.
     candidates = _find_contradictions(checkable, sources, indexes)
     if candidates:
         defencible = [
             candidate
             for candidate in candidates
-            if candidate["link_verified"] and candidate["red_capable"]
+            if candidate["link_verified"]
+            and candidate["red_capable"]
+            and not candidate["transcribed"]
+            and not document_transcribed
         ]
         if defencible:
             contradiction = defencible[0]
@@ -497,6 +518,33 @@ def _classify(
                     weakest["sentence_value"],
                     weakest["measure"],
                     weakest["source_id"],
+                ),
+                {"downgraded_from": "D08", "candidate_contradiction": weakest},
+            )
+        if weakest["transcribed"] or document_transcribed:
+            # Which side was transcribed decides what would close the gap, so say it.
+            if weakest["transcribed"]:
+                side = ("the evidence held for %s was read by OCR (%s)"
+                        % (weakest["source_id"], weakest["transcription"] or "ocr"))
+                remedy = ("Supply that source's text layer, or a corrected text export, to "
+                          "turn this into a finding.")
+            else:
+                side = ("the sentence itself was read by OCR (%s)"
+                        % (document_transcription or "ocr"))
+                remedy = ("Supply a text-layer copy of the document, or its text export, to "
+                          "turn this into a finding.")
+            return (
+                "unverifiable",
+                "D13",
+                "The value %s differs from the %s of %s, but %s. OCR is a transcription, "
+                "and a single misread digit would make this an accusation about the author "
+                "rather than a finding. %s"
+                % (
+                    weakest["sentence_value"],
+                    weakest["measure"],
+                    weakest["source_id"],
+                    side,
+                    remedy,
                 ),
                 {"downgraded_from": "D08", "candidate_contradiction": weakest},
             )
@@ -630,6 +678,8 @@ def _find_contradictions(quantities, sources, indexes) -> list:
                         "evidence_strength": source.evidence_strength,
                         "evidence_origin": source.evidence_origin,
                         "red_capable": source.red_capable,
+                        "transcribed": bool(getattr(source, "transcribed", False)),
+                        "transcription": getattr(source, "transcription", ""),
                     }
                 )
                 break
@@ -686,6 +736,8 @@ def _source_records(resolved, indexes, quantities) -> list:
                 "evidence_origin": source.evidence_origin,
                 "link_method": source.link_method or source.resolution,
                 "link_verified": source.link_verified,
+                "transcribed": bool(getattr(source, "transcribed", False)),
+                "transcription": getattr(source, "transcription", ""),
                 "locator": locator,
                 "quote": quote,
             }

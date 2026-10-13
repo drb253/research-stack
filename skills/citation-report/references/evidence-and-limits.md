@@ -93,9 +93,13 @@ the document's value contradicts the source's. Each is an accusation, so each mu
    guess may not convict.
 2. **Machine-comparable evidence.** `primary` text or a `recorded_estimate`. Never a prose summary.
 3. **Positive evidence.** The same named measure with a different value, quoted, with a locator.
+4. **Read, not transcribed.** Neither the sentence's own text nor the evidence held for the source
+   may have come from OCR. A transcription is a machine's reading of an image, and one misread
+   character moves a value; the tool would be accusing an author of its own reading error.
 
-Failing bar 1 produces rule `D11`; failing bar 2 produces `D12`. Both land on `unverifiable` with the
-reason and with what would confirm it, so the finding is disclosed without being asserted.
+Failing bar 1 produces rule `D11`; bar 2 produces `D12`; bar 3 is the search itself (no contradicting
+value, no candidate); bar 4 produces `D13`. All of them land on `unverifiable` with the reason and with
+what would confirm it, so the finding is disclosed without being asserted.
 
 `report_gate.py` re-checks all three from the recorded verdicts, so a hand-edited file cannot smuggle
 an unsupported accusation past the gate either

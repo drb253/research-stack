@@ -139,6 +139,28 @@ to have.** The fix is not just the branch: `CITATION_REPORT_PDF_EXTRACTOR=none` 
 absent-extractor route, so each machine exercises both. The paper-search gate now takes the same
 shape — a mutation probe asserts its checks can still fail.
 
+### A transcription is evidence about our reading, not about the author
+
+OCR is the one feature that can *manufacture* an input gap's opposite: it turns "we could not read
+this" into text that looks exactly like a read document. The rule says a gap must never be reported in
+the shape of a finding; a transcription creates the mirror-image risk, that a **reading error is
+reported in the shape of a finding about the author**.
+
+So the tier is built around provenance rather than confidence:
+
+- the text is marked (`transcribed`, `transcription`, `ocr:` origins) and the marking reaches every
+  artifact, because a reader who cannot see it cannot weigh the findings;
+- **a contradiction requires that both sides were read.** A transcribed sentence or a transcribed
+  source yields `D13` — `unverifiable`, with the side named and the remedy — never `conflict`. A
+  misread digit is the tool's error, and the tool may not bill it to the author;
+- every OCR failure (engine absent, rasteriser absent, language data missing, page cap exceeded, engine
+  error, empty output) is an input gap with a worklist, in the same channel as the other unreadable-PDF
+  conditions, never a document that graded to zero sentences.
+
+This is the same rule applied to a new direction. The first three rounds asked "is this gap dressed up
+as a finding?"; this asks "is our own error dressed up as a finding about the author?" The answer is
+the same shape: name it, put it in its own field, and hand over what would close it.
+
 ## What this rule does not claim
 
 It does not make a report *accurate*; it makes a report **honest about its own basis**. A run that

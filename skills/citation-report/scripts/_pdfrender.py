@@ -679,6 +679,21 @@ class _Renderer:
             "a paper that was not supplied, and it treats an identifier that did not "
             "resolve as identified-only rather than as support."
         )
+        evidence = (meta or {}).get("evidence") or {}
+        if evidence.get("ocr_transcription_sentences"):
+            # Printed in the artifact, not only in the JSON: a reader weighing a finding
+            # has to know when the text behind it was a machine's reading.
+            self.prose(
+                "OCR: %s of the graded sentence(s) rest on a transcription (%s) rather "
+                "than on the document's own text layer. A value that appears to "
+                "contradict a source is reported as unverifiable rather than as a "
+                "finding (rule D13), because a misread digit would make it an "
+                "accusation about the author."
+                % (
+                    evidence.get("ocr_transcription_sentences"),
+                    evidence.get("document_transcription") or "OCR",
+                )
+            )
         if getattr(bundle, "offline", False):
             self.prose(
                 "No DOI was resolved over the network for this run: it ran offline, and "

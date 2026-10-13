@@ -669,6 +669,8 @@ def _try_pdf(source, *, mailto: str, cache_dir, state: dict):
         return None
 
     text = extracted.text[: _bundle.MAX_EVIDENCE_CHARS]
+    transcribed = bool(getattr(extracted, "transcribed", False))
+    transcription = getattr(extracted, "transcription", "") or ("ocr" if transcribed else "")
     return {
         "text": text,
         "pages": list(extracted.pages),
@@ -677,7 +679,12 @@ def _try_pdf(source, *, mailto: str, cache_dir, state: dict):
         "file_path": str(cache_path),
         "acquired_doi": _common.normalize_doi(str(payload.get("doi") or doi)),
         "acquired_title": str(payload.get("display_name") or payload.get("title") or ""),
-        "origin": "openalex:oa_pdf",
+        # A transcribed acquisition says so in its origin, and never counts as
+        # `red_capable`: the engine may not accuse an author on OCR's reading.
+        "origin": ("ocr:openalex:oa_pdf:%s" % transcription) if transcribed
+                  else "openalex:oa_pdf",
+        "transcribed": transcribed,
+        "transcription": transcription,
         "acquisition_method": "oa-pdf",
         "evidence_method": extracted.method,
         "endpoint": url,
@@ -803,6 +810,14 @@ def _attach(source, candidate: dict, *, identity: str) -> None:
     source.evidence_availability = "full_text"
     source.evidence_strength = "primary"
     source.evidence_origin = candidate["origin"]
+    if candidate.get("transcribed"):
+        source.transcribed = True
+        source.transcription = candidate.get("transcription") or "ocr"
+        source.warnings.append(
+            "evidence for %s came from OCR (%s): a transcription, so a value that appears "
+            "to contradict the sentence is reported as unverifiable rather than as a finding"
+            % (source.source_id, source.transcription)
+        )
     source.acquisition_method = candidate["acquisition_method"]
     source.acquisition_endpoint = candidate["endpoint"][:MAX_ENDPOINT_CHARS]
     source.identity_check = identity

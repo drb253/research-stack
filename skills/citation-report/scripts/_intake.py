@@ -155,6 +155,12 @@ class Document:
     warnings: list = field(default_factory=list)
     title: str = ""
     method: str = "native"
+    #: True when the document's text was transcribed by OCR rather than read from a text
+    #: layer. A misread digit in the *sentence* would otherwise look like a contradiction
+    #: of a correctly read source, so the engine refuses to accuse on either side.
+    transcribed: bool = False
+    #: What produced the transcription, e.g. `tesseract:eng`. Empty when not transcribed.
+    transcription: str = ""
 
     @property
     def narrative_sentence_count(self) -> int:
@@ -188,6 +194,11 @@ class Document:
             "paragraphs": len(self.paragraphs),
             "sentences": len(self.sentences),
             "narrative_sentences": self.narrative_sentence_count,
+            # Whether the text a reader is about to see was written by the document's
+            # software or read off an image by OCR. `method` says `tesseract` too; the
+            # boolean is what a consumer can branch on without parsing a method name.
+            "transcribed": self.transcribed,
+            "transcription": self.transcription,
             "warnings": list(self.warnings),
         }
 
@@ -745,10 +756,15 @@ def _wrap_lines(block: str) -> list:
 PAGE_NUMBER_RE = re.compile(r"^\s*(?:page\s+)?[0-9]{1,4}\s*$", re.IGNORECASE)
 
 
-def _pdf_paragraphs(path: Path) -> tuple[list, list, str]:
+def _pdf_paragraphs(path: Path, *, ocr: bool = True, ocr_lang=None, ocr_max_pages=None):
     import _pdftext
 
-    extracted = _pdftext.extract_pdf(path)
+    options = {"ocr": ocr}
+    if ocr_lang:
+        options["ocr_lang"] = ocr_lang
+    if ocr_max_pages:
+        options["ocr_max_pages"] = int(ocr_max_pages)
+    extracted = _pdftext.extract_pdf(path, **options)
     if not extracted.available:
         # A file that was not read at all is an input condition with its own status and
         # exit code, not a finding about the document. `_pdftext` names the kind so the
@@ -786,7 +802,7 @@ def _pdf_paragraphs(path: Path) -> tuple[list, list, str]:
             kind = "heading" if _looks_like_heading(text) else "para"
             paragraphs.append(DocParagraph(index=index, kind=kind, text=text))
             index += 1
-    return paragraphs, warnings, extracted.method
+    return paragraphs, warnings, extracted.method, (getattr(extracted, "transcription", "") or "")
 
 
 def _looks_like_heading(text: str) -> bool:
@@ -929,8 +945,13 @@ def _assemble(
     )
 
 
-def read_document(path_value) -> Document:
-    """Read a supported document into the paragraph + sentence model."""
+def read_document(path_value, *, ocr: bool = True, ocr_lang=None, ocr_max_pages=None) -> Document:
+    """Read a supported document into the paragraph + sentence model.
+
+    ``ocr`` (default on) lets a scanned PDF be transcribed when tesseract is installed.
+    The returned document records that it was transcribed, and every consumer of its text
+    must carry that record: a contradiction may not rest on a machine's reading.
+    """
     path = Path(path_value)
     if not path.exists():
         raise IntakeError("document does not exist: %s" % path)
@@ -951,8 +972,19 @@ def read_document(path_value) -> Document:
         paragraphs, warnings = _tex_to_paragraphs(raw)
         return _assemble(path, "tex", paragraphs, warnings)
     if suffix == ".pdf":
-        paragraphs, warnings, method = _pdf_paragraphs(path)
-        return _assemble(path, "pdf", paragraphs, warnings, method=method)
+        paragraphs, warnings, method, transcription = _pdf_paragraphs(
+            path, ocr=ocr, ocr_lang=ocr_lang, ocr_max_pages=ocr_max_pages
+        )
+        document = _assemble(path, "pdf", paragraphs, warnings, method=method)
+        if transcription:
+            document.transcribed = True
+            document.transcription = transcription
+            document.warnings = list(document.warnings) + [
+                "the document text came from OCR (%s): a transcription, so a value that "
+                "appears to contradict a source is reported as unverifiable rather than "
+                "as a finding" % transcription
+            ]
+        return document
 
     raw = path.read_text(encoding="utf-8", errors="replace")
     warnings: list = []

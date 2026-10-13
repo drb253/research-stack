@@ -182,13 +182,35 @@ Run each of these and confirm a non-zero exit and a legible reason, not a confid
 * a `.pdf` document with `pdftotext` and `pypdf` both unavailable — a gap in the machine, so exit 4
   with `insufficient_input` and `input_gaps[].kind = no_pdf_extractor`, never exit 1;
 * a verdict whose evidence has no recorded origin (`EVIDENCE_WITHOUT_PROVENANCE`);
-* a scanned PDF with no text layer — exit 4, `input_gaps[].kind = no_text_layer`;
+* a scanned PDF with no text layer — read by OCR where the engine is installed, and otherwise exit 4
+  with `input_gaps[].kind = no_text_layer`; with `--no-ocr`, exit 4 and a reason that names the
+  switch (where tesseract is installed) or the install route (where it is not);
 * an unsupported extension;
 * a `verdicts.json` whose `state` does not match its `rule_id`;
 * a `coverage.json` with one state count incremented by hand.
 
 **Fails when:** any of these produces a report that looks clean. Silence in the failure path is the
 defect this repository exists to prevent.
+
+---
+
+## 10. Does a transcription stay a transcription?
+
+Build a one-page scan (an image PDF with no text layer) whose text contains a value that contradicts
+the source it cites — `(HR 0.50) [src:S001]` against a source recording `HR 0.80` — and check four
+things:
+
+* with OCR available, the run is **not** a conflict: the verdict is `unverifiable` under `D13`, the
+  note names `tesseract:<lang>` as what read it, and `transcription.sentences_resting_on_ocr` is at
+  least 1;
+* the **control** — the same sentence in a `.md` file — *is* a conflict (`D08`, exit 1), so the
+  provenance is what changed the outcome rather than the value;
+* a scanned **source** PDF behaves the same way, with `evidence_origin` beginning `ocr:`;
+* the count appears in the PDF, DOCX and HTML artifacts (in their Limits section), and a run with no
+  OCR shows no such line.
+
+**Fails when:** a transcribed value produces a red finding, when the artifact does not say the text
+was transcribed, or when a run that never used OCR claims it did.
 
 ---
 

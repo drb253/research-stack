@@ -469,6 +469,97 @@ it needs** (`requests`, `httpx`, `bs4`, `feedparser`, `pypdf`, `mcp.server.fastm
 a worklist rather than reporting a pass, so a future environment change cannot silently reduce ten
 tests to eight.
 
+### 9.4 The gate itself, reviewed
+
+The gate shipped in §9.3 was then read against its own claims, and four weaknesses were
+found and fixed. They are recorded because a checker that is trusted without being checked
+is the thing this repository exists to avoid.
+
+| Weakness | Why it mattered | Fixed |
+|---|---|---|
+| The byte-identity check globbed `replacements/*.py` instead of reading `apply_patches.py`'s registry | a *registered* source whose vendored file was deleted or renamed was skipped silently (`if candidates and ...`), so the invariant could not see the case it most needed to | the check is driven by the `COPIES`/`NEWFILES` registry: a missing vendored target is now a finding, and a source named but absent is too |
+| A file in `replacements/` that nothing applies was invisible | the directory is described as the single source of truth, so a maintainer could edit a dead file expecting an effect | unconsumed files are now a finding; the one legitimate case is an explicit `MIRRORS` entry with a written reason |
+| Nothing asserted the availability suite collected any tests | a suite that collects nothing exits 0, so every check above it was a pass with no tests behind it | the `Ran N tests` count is parsed and asserted against a floor of 10, for the clean copy **and** for the mutant (a crash on import also exits non-zero and would otherwise look like a working probe) |
+| `check(..., False)` for a missing mutation target raised outside the `try` | that path printed a traceback instead of the summary, and returned 1 without saying which check failed | wrapped, so it reports like every other finding |
+
+Running the fixed check immediately produced a real finding rather than a green tick: **seven
+files in `replacements/` were read by nothing** — `bookshelf_tool.py`, `ct_tool.py`,
+`ncbi_tools.py`, `registry_tools.py` and `server_new_tools_{a,b,c}.py`, 759 lines in total.
+Every top-level unit of all seven is byte-present in `replacements/server.py`, which *is*
+applied as a whole-file replacement, so they were superseded fragments from the v1.0.0
+injection mechanism (whose `INJECTS` registry is now empty). One of them,
+`ncbi_tools.py`, held the **pre-fix** `get_mesh_details` — the function the MeSH audit fix
+patches — so a reader could have taken it for the current implementation. They are deleted.
+The eighth unconsumed file, `chemrxiv.py`, is a live module that upstream already ships; it
+is kept byte-identical on purpose and is now a declared mirror with that reason written down.
+
+**What this review does not establish:** the self-test pins the *detections* (drift, a missing
+target, a dead file, a drifted mirror, the count parser, the registry being non-empty) against
+synthetic trees, not the real one; the real tree is checked by the gate's own step 1. And the
+`MIRRORS` allowlist is a judgement — one file is excused by a written reason, which a future
+maintainer could extend without justification.
+
+---
+
+## 10. Fifth round — the OCR tier, and the rule that keeps it honest
+
+The user asked for a working OCR tier and chose the safety rule: **a transcription may never create a
+conflict.** That is the whole design, because OCR's failure mode is not "no answer", it is "a confident
+wrong answer that the tool then attributes to the author".
+
+**What was built.** A scan (no text layer, or one below the per-page density threshold) is transcribed
+with tesseract when the engine and poppler's rasteriser are both present. On by default; `--no-ocr`
+refuses instead, `--ocr-lang` selects the language data, `--ocr-max-pages` bounds the work, and a scan
+over that bound is refused rather than partly read. Nothing is installed or imported by the tool: both
+binaries are probed with `shutil.which`, so the tier degrades to the old refusal.
+
+**How the rule is enforced.** A contradiction now has four bars, and `D13` is the new one:
+
+| Bar | Failure rule | State |
+|---|---|---|
+| the link is verified | D11 | unverifiable |
+| the evidence is machine-comparable | D12 | unverifiable |
+| a contradicting value exists | (the search) | — |
+| neither side was transcribed | **D13** | unverifiable |
+
+`Source.red_capable` is false for a transcribed source, so the D08 gate cannot be cleared by one; and
+the *document's* transcription is checked separately, because a misread sentence value against a
+correctly read source is just as false an accusation as the reverse. The note names the side that was
+transcribed and what would close the gap.
+
+**How it is labelled.** `transcribed`/`transcription` on the document and on each source, `ocr:` in a
+transcribed source's `evidence_origin`, `transcription.sentences_resting_on_ocr` in `verdicts.json`,
+and the same count printed in the Limits section of all three artifact formats. A run that used no OCR
+prints none of it.
+
+**What was measured, not assumed.**
+
+| Claim | Evidence |
+|---|---|
+| OCR reads a real scan | a one-page image PDF built with Pillow: 178 characters, `method=tesseract`, `transcribed=true` |
+| OCR misreads characters | tesseract read `95% CI` as `95% Cl` — an upper-case I as a lower-case l |
+| a transcribed contradiction is not an accusation | scanned manuscript (`HR 0.50`) vs a source recording `HR 0.80`: `unverifiable`/D13, exit 0 |
+| the *same words* read as text still are | the identical sentence as `.md`: `conflict`/D08, exit 1 |
+| a scanned source behaves the same way | `evidence_origin = ocr:S001.pdf:tesseract:eng`, D13, and `transcribed: true` in the verdict's source record |
+| the rule holds without an engine | `self_test.py` asserts a transcribed source is not `red_capable` at every red-capable strength, and that D13 is non-error — it runs on CI, which has no tesseract |
+
+**What this round does not establish.**
+
+- The engine's *accuracy* is not characterised. Two pages were transcribed and one character was
+  wrong; that is enough to justify the rule and nowhere near a measured error rate. No corpus of scans
+  was assembled, and no per-character or per-value error rate is claimed.
+- Language coverage is whatever the machine has installed. The fixtures use `eng`; a document in
+  another language needs its own data, and a missing pack is an input gap rather than a silent
+  fallback to English.
+- Only tesseract is supported. The design is engine-shaped (probe, rasterise, transcribe, mark), but
+  another engine is untested and would need its own provenance string.
+- The page cap means a very long scan is refused, not read. That is deliberate — a partial reading
+  presented as a whole document is the failure this repository exists to prevent — but it does mean a
+  200-page scanned thesis is not graded without `--ocr-max-pages`.
+- Transcription of the *document* means sentence boundaries and span offsets come from OCR text. The
+  report says so, and D13 covers accusations, but a misread word could still change which sentences
+  exist. Nothing here measures that.
+
 **What this round does not establish**, recorded so §9 is not read as a clean bill of health:
 
 - The vendored package is kept in the patched state, so the patch run against it is idempotent by

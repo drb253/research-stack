@@ -373,8 +373,8 @@ def test_evidence_vocabulary() -> int:
         "an input condition must not share an exit code with pass or fail",
     )
     checks += 3
-    # D11 and D12 are the downgrade rules and must land on a non-accusing state.
-    for rule_id in ("D11", "D12"):
+    # D11, D12 and D13 are the downgrade rules and must land on a non-accusing state.
+    for rule_id in ("D11", "D12", "D13"):
         _check(rule_id in verdicts.RULES, "rule %s is missing" % rule_id)
         _check(
             verdicts.RULES[rule_id][0] == "unverifiable",
@@ -385,6 +385,41 @@ def test_evidence_vocabulary() -> int:
             "rule %s must never be an error severity" % rule_id,
         )
         checks += 3
+    return checks
+
+
+def test_ocr_never_accuses() -> int:
+    """Transcribed evidence may never support an accusation, at any strength.
+
+    This is the safety-critical half of the OCR tier and it needs no engine: a `Source`
+    with `transcribed=True` must not be `red_capable`, so the D08 bar cannot be cleared.
+    The engine-dependent half -- that a real scan is transcribed and lands on D13 -- is a
+    fixture in selftest.sh, because it needs tesseract and poppler.
+    """
+    checks = 0
+    source = _bundle.Source(source_id="S001")
+    for strength in sorted(_common.RED_CAPABLE_STRENGTH):
+        source.evidence_strength = strength
+        source.transcribed = False
+        _check(source.red_capable, "%s evidence should be red-capable when it was read" % strength)
+        source.transcribed = True
+        source.transcription = "tesseract:eng"
+        _check(
+            not source.red_capable,
+            "%s evidence must not be red-capable once it was transcribed" % strength,
+        )
+        checks += 2
+    # And the flag must survive serialisation, or a consumer of the JSON cannot tell.
+    source.transcribed = True
+    source.transcription = "tesseract:eng"
+    payload = source.to_dict()
+    _check(payload.get("transcribed") is True, "transcribed must be serialised")
+    _check(payload.get("transcription") == "tesseract:eng", "transcription must be serialised")
+    _check(
+        verdicts.RULES["D13"][0] == "unverifiable" and verdicts.RULES["D13"][1] != "error",
+        "D13 must disclose a transcribed contradiction without asserting it",
+    )
+    checks += 3
     return checks
 
 
@@ -592,6 +627,7 @@ def main() -> int:
         ("coverage arithmetic", test_coverage_arithmetic),
         ("reference entry shapes", test_reference_entry_shapes),
         ("evidence vocabulary", test_evidence_vocabulary),
+        ("ocr never accuses", test_ocr_never_accuses),
         ("sufficiency policies", test_sufficiency_policies),
         ("intake preconditions", test_preconditions),
         ("worklist wording", test_worklist_wording),

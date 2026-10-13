@@ -127,9 +127,35 @@ A run that cannot read the document at all is `insufficient_input` and carries a
 ]
 ```
 
-`kind` is `no_text_layer` (an extractor ran and the file is a scan), `no_pdf_extractor` (nothing on
-the machine can read a PDF), or `unreadable_pdf` (an extractor is installed but could not decode the
-file). `how_to_close` is the action that removes the gap. The field exists so that "we could not read
+`kind` is one of:
+
+| `kind` | what happened | what closes it |
+|---|---|---|
+| `no_text_layer` | an extractor ran and the file is a scan | install tesseract and export the scan, or supply a text export |
+| `no_pdf_extractor` | nothing on the machine can read a PDF | install poppler or `pypdf`, or pass a `.txt` export |
+| `unreadable_pdf` | an extractor is installed but could not decode the file | supply a readable copy or a text export |
+| `no_pdf_rasterizer` | tesseract is installed but no page rasteriser is | install poppler, or supply a text export |
+| `ocr_failed` | OCR was attempted and the engine or the rasteriser failed | the detail names the failure |
+| `ocr_empty` | OCR read the pages and found no text | check the scan is legible and the language data matches |
+| `ocr_page_limit` | the scan is longer than `--ocr-max-pages` | raise the limit, or supply a text export |
+| `ocr_language_missing` | the requested language data is not installed | install it, or pass `--ocr-lang` with one that is |
+
+`how_to_close` is the action that removes the gap.
+
+A run that *did* read a scan carries a `transcription` block instead, and never blocks for it:
+
+```json
+"transcription": {
+  "document_transcribed": true,
+  "document_transcription": "tesseract:eng",
+  "sentences_resting_on_ocr": 2
+}
+```
+
+Each source record carries `transcribed` and `transcription`, and a transcribed source's
+`evidence_origin` begins `ocr:` rather than `file:` — so a reader can see which findings rest on a
+machine's reading without parsing a method name. A contradiction where either side was transcribed is
+`unverifiable` under rule D13, never `conflict`. The field exists so that "we could not read
 this" is never a shape a caller could mistake for a finding, and so a gap can be closed without
 parsing the prose.
 

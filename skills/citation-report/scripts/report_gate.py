@@ -371,9 +371,38 @@ def check_directory(out_dir, *, document=None, bundle=None) -> int:
                     )
                 )
 
-    # 3b. Evidence may never appear without provenance. A verdict whose evidence cannot
-    #     be traced to an acquisition record is a hallucination risk by construction.
+    # 3a-bis. A value contradiction may not rest on a transcription. The classifier
+    #     enforces this with D13, but a hand-edited verdicts.json could pair D08 with OCR
+    #     evidence, and the gate is the last place that can catch it. Only D08 is checked:
+    #     D03 is about the reference apparatus and D04 about a source's retraction status,
+    #     neither of which is read from transcribed text.
+    document_transcribed = bool((record.get("document") or {}).get("transcribed"))
     for verdict in graded:
+        if verdict.state != "conflict" or verdict.rule_id != "D08":
+            continue
+        transcribed_source = [
+            str(entry.get("source_id") or "?")
+            for entry in verdict.sources
+            if isinstance(entry, dict) and entry.get("transcribed")
+        ]
+        if document_transcribed or transcribed_source:
+            side = (
+                "the sentence's own text was transcribed by OCR"
+                if document_transcribed
+                else "the evidence held for %s was transcribed by OCR" % ", ".join(transcribed_source)
+            )
+            issues.append(
+                _common.issue(
+                    "error",
+                    "CONFLICT_TRANSCRIBED_EVIDENCE",
+                    item_id=verdict.sentence_id,
+                    detail="rule D08 produced a conflict, but %s; a transcription may not "
+                    "support an accusation, so this must be D13/unverifiable" % side,
+                )
+            )
+
+    # 3b. Evidence may never appear without provenance. A verdict whose evidence cannot
+    #     be traced to an acquisition record is a hallucination risk by construction.    for verdict in graded:
         if verdict.evidence_strength in ("none", "") and not verdict.evidence_origin:
             continue
         if verdict.evidence_strength not in ("none", "") and not verdict.evidence_origin:

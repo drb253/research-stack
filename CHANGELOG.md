@@ -6,7 +6,50 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-_Nothing yet._
+### Added
+- **A working OCR tier, and the rule that keeps it from accusing anyone.** A scanned PDF (no text
+  layer, or one too thin to grade) is now transcribed when `tesseract` and poppler's rasteriser are
+  installed — on by default, `--no-ocr` to refuse instead, `--ocr-lang` for the language data, and a
+  scan longer than `--ocr-max-pages` is refused rather than partly read. Every part of it is labelled:
+  the document carries `transcribed` and `transcription: tesseract:<lang>`, a transcribed source's
+  `evidence_origin` begins `ocr:`, `transcription.sentences_resting_on_ocr` counts the sentences that
+  rest on a transcription, and all three artifact formats print that count in their Limits section.
+  **A transcription can never convict.** A contradiction is an accusation, so it needs text that was
+  *read* on both sides; where the sentence or the source's evidence came from OCR, the new rule `D13`
+  reports the disagreement as `unverifiable` and names which side was transcribed and what would close
+  the gap. Measured on a real scan: tesseract read `95% CI` as `95% Cl`, one character away from a
+  false accusation. The control fixture — the same words with a text layer — is still a `conflict`
+  (`D08`, exit 1) while the scan is `unverifiable` (`D13`, exit 0), so provenance, not the value, is
+  what decides. New refusals, all input gaps: `ocr_failed`, `ocr_empty`, `ocr_page_limit`,
+  `ocr_language_missing`, `no_pdf_rasterizer`.
+- **The suite is now written for three PDF environments.** It asserted one machine's tooling and
+  failed on CI, so the fixtures branch on what is installed, and the README records all three:
+  137 checks with no extractor and no OCR (CI), 139 with an extractor but no OCR, 144 with OCR.
+  `CITATION_REPORT_PDF_EXTRACTOR=none` and `CITATION_REPORT_OCR=none` force the absent branches
+  anywhere. The rule half of the OCR tier — transcribed evidence is not `red_capable`, and `D13` lands
+  on `unverifiable` — is pinned in `self_test.py`, which needs no engine, so it holds on CI.
+
+### Fixed
+- **A one-page scan was reported as "over 2 page(s)".** `pdftotext` ends every page with a form feed,
+  and the split counted the trailing empty segment as a page; `page_of` could also fall back to that
+  phantom page number.
+- **A scan with OCR switched off claimed "this build does not transcribe scans".** False wherever
+  tesseract is installed. The refusal now names the switch (`--no-ocr`) when the engine is present and
+  the install route when it is not, so a reader is told what would actually change the outcome.
+- **Seven files in `replacements/` were read by nothing.** `bookshelf_tool.py`, `ct_tool.py`,
+  `ncbi_tools.py`, `registry_tools.py` and `server_new_tools_{a,b,c}.py` — 759 lines — were superseded
+  fragments of the v1.0.0 injection mechanism, every top-level unit of which is byte-present in
+  `replacements/server.py`, which *is* applied. One held the pre-fix `get_mesh_details`, so a reader
+  could have taken it for the current implementation. The patch gate now fails on any unconsumed file,
+  and the one legitimate case (`chemrxiv.py`, a live module upstream already ships) is a declared
+  mirror with its reason written down.
+- **The patch gate's byte-identity check globbed the directory instead of reading the registry.** A
+  registered source whose vendored file was deleted or renamed was skipped silently; a file read by
+  nothing was invisible; nothing asserted the availability suite had collected any tests (a suite that
+  collects none exits 0, so every check above it was a pass with no tests behind it); and a missing
+  mutation target raised outside the `try`, printing a traceback instead of the summary. All four are
+  fixed, the self-test pins each detection, and the gate now asserts `Ran N tests` for the clean copy
+  and for the mutant — so a crash on import cannot look like a working probe.
 
 ## [1.1.1] — 2026-10-13
 
