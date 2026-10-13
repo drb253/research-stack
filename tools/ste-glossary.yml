@@ -1,0 +1,33 @@
+# ste-glossary.yml -- the project's controlled vocabulary for skill prose.
+#
+# ASD-STE100 requires one word for one meaning. The standard's own dictionary is
+# copyrighted, so this file holds only the terms THIS project needs. Add a pair
+# only when the two words really are interchangeable: an enforced rule that fires
+# on a word with a distinct meaning is worse than no rule.
+#
+# Format (parsed by tools/ste_lint.py without a YAML library):
+#   avoid:   <term>: <the term to use instead>     -> using <term> is an error (R9)
+#   prefer:  <term>: <why it is the canonical term> -> documentation only
+
+avoid:
+  utilize: use
+  utilise: use
+  leverage: use
+  "in order to": to
+  "prior to": before
+  "subsequent to": after
+  ascertain: find
+  commence: start
+  approximately: about
+  "a number of": some
+  "in the event that": if
+  "for the purpose of": to
+
+prefer:
+  report: the artifact a run produces; "output" is the stream it prints
+  source: a work the tool reads; "reference" is an entry in a reference list
+  unavailable: the source could not be read; "empty" means it answered with no match
+  finding: a reported defect; "warning" is a non-blocking note
+  gate: a check that can fail a run
+  input gap: something the tool could not read, reported as a gap and not as a result
+  status: the machine-readable outcome of a run

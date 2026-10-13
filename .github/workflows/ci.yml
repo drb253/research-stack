@@ -80,6 +80,20 @@ jobs:
           python3 benchmarks/bench_verdicts.py
       - name: Installer dry-run (defaults + AIPOCH flag)
         run: bash install.sh --targets cline --dry-run --minimal --no-mcp --with-aipoch-skills >/dev/null
+      # The STE and honesty gates. The skills are being rewritten from the
+      # baseline in tools/ste-baseline.json (536 errors, 31 warnings on
+      # 2026-10-14); until that reaches zero these steps are report-only, and the
+      # commit that finishes the rewrite removes `continue-on-error` so a
+      # regression fails the push. The tools' own self-tests are gates already.
+      - name: STE + semantic-preservation + honesty gates (report-only until the rewrite lands)
+        continue-on-error: true
+        run: |
+          python3 tools/ste_lint.py --self-test
+          python3 tools/normative_tokens.py --self-test
+          python3 tools/normative_tokens.py --check tools/normative-baseline.json
+          python3 tools/claim_guard.py --self-test
+          python3 tools/ste_lint.py --quiet --summary skills/*/SKILL.md || true
+          python3 tools/claim_guard.py skills/*/SKILL.md || true
 
   r-tests:
     name: r-tests (engine + gates)

@@ -1,0 +1,3598 @@
+{
+ "files": {
+  "skills/citation-report/SKILL.md": {
+   "stats": {
+    "sentences": 113,
+    "words": 2257,
+    "lines": 281,
+    "diagnostics": {
+     "noun_cluster_max": 15
+    }
+   },
+   "errors": [
+    {
+     "rule": "R1",
+     "line": 22,
+     "severity": "error",
+     "message": "descriptive sentence has 30 words (limit 25): Answer one question per sentence: **is this sentence actually supporte..."
+    },
+    {
+     "rule": "R1",
+     "line": 27,
+     "severity": "error",
+     "message": "descriptive sentence has 31 words (limit 25): It reads a document, finds every citation marker, resolves each marker..."
+    },
+    {
+     "rule": "R6",
+     "line": 32,
+     "severity": "error",
+     "message": "possible passive voice 'is borrowed'"
+    },
+    {
+     "rule": "R1",
+     "line": 35,
+     "severity": "error",
+     "message": "descriptive sentence has 31 words (limit 25): **It does not guess.** A sentence is never painted red because a numbe..."
+    },
+    {
+     "rule": "R1",
+     "line": 35,
+     "severity": "error",
+     "message": "descriptive sentence has 27 words (limit 25): Red requires positive evidence: a citation that resolves to nothing, a..."
+    },
+    {
+     "rule": "R6",
+     "line": 45,
+     "severity": "error",
+     "message": "possible passive voice 'are usually conflated'"
+    },
+    {
+     "rule": "R1",
+     "line": 51,
+     "severity": "error",
+     "message": "descriptive sentence has 28 words (limit 25): **Channel A \u2014 advisory, opt-in.** A model's opinion about *semantic* s..."
+    },
+    {
+     "rule": "R3",
+     "line": 58,
+     "severity": "error",
+     "message": "paragraph has 10 sentences (limit 6)"
+    },
+    {
+     "rule": "R1",
+     "line": 58,
+     "severity": "error",
+     "message": "instruction sentence has 21 words (limit 20): | State | Colour | Meaning | Gate | |---|---|---|---| | code | dark gr..."
+    },
+    {
+     "rule": "R6",
+     "line": 67,
+     "severity": "error",
+     "message": "possible passive voice 'is modelled'"
+    },
+    {
+     "rule": "R6",
+     "line": 67,
+     "severity": "error",
+     "message": "possible passive voice 'is counted'"
+    },
+    {
+     "rule": "R6",
+     "line": 92,
+     "severity": "error",
+     "message": "possible passive voice 'are combined'"
+    },
+    {
+     "rule": "R1",
+     "line": 94,
+     "severity": "error",
+     "message": "descriptive sentence has 41 words (limit 25): DOIs are mined from page 1 when filenames are opaque | | code | A ledg..."
+    },
+    {
+     "rule": "R6",
+     "line": 94,
+     "severity": "error",
+     "message": "possible passive voice 'are mined'"
+    },
+    {
+     "rule": "R1",
+     "line": 107,
+     "severity": "error",
+     "message": "descriptive sentence has 53 words (limit 25): | Status | Exit | Meaning | |---|---|---| | code | 0 | adequate eviden..."
+    },
+    {
+     "rule": "R8",
+     "line": 107,
+     "severity": "error",
+     "message": "abbreviation 'OCR' is used 5 times and never defined"
+    },
+    {
+     "rule": "R1",
+     "line": 114,
+     "severity": "error",
+     "message": "descriptive sentence has 27 words (limit 25): A run that *did* read a scan is code (exit 3) by default, because a tr..."
+    },
+    {
+     "rule": "R1",
+     "line": 121,
+     "severity": "error",
+     "message": "descriptive sentence has 36 words (limit 25): A blocked run also carries a top-level code, one entry per gap with a ..."
+    },
+    {
+     "rule": "R3",
+     "line": 128,
+     "severity": "error",
+     "message": "paragraph has 16 sentences (limit 6)"
+    },
+    {
+     "rule": "R6",
+     "line": 128,
+     "severity": "error",
+     "message": "possible passive voice 'be bypassed'"
+    },
+    {
+     "rule": "R1",
+     "line": 141,
+     "severity": "error",
+     "message": "descriptive sentence has 40 words (limit 25): Source text is obtained in tiers \u2014 a supplied file, open-access full t..."
+    },
+    {
+     "rule": "R6",
+     "line": 141,
+     "severity": "error",
+     "message": "possible passive voice 'is obtained'"
+    },
+    {
+     "rule": "R6",
+     "line": 141,
+     "severity": "error",
+     "message": "possible passive voice 'is recorded'"
+    },
+    {
+     "rule": "R6",
+     "line": 141,
+     "severity": "error",
+     "message": "possible passive voice 'is confirmed'"
+    },
+    {
+     "rule": "R6",
+     "line": 141,
+     "severity": "error",
+     "message": "possible passive voice 'is discarded'"
+    },
+    {
+     "rule": "R1",
+     "line": 147,
+     "severity": "error",
+     "message": "descriptive sentence has 44 words (limit 25): A red finding additionally requires a **verified link** (a declared id..."
+    },
+    {
+     "rule": "R1",
+     "line": 147,
+     "severity": "error",
+     "message": "descriptive sentence has 39 words (limit 25): A prose summary may support a positive claim but may never convict, so..."
+    },
+    {
+     "rule": "R3",
+     "line": 155,
+     "severity": "error",
+     "message": "paragraph has 12 sentences (limit 6)"
+    },
+    {
+     "rule": "R1",
+     "line": 155,
+     "severity": "error",
+     "message": "descriptive sentence has 28 words (limit 25): **Never invent a source.** If an identifier cannot be resolved, the so..."
+    },
+    {
+     "rule": "R6",
+     "line": 155,
+     "severity": "error",
+     "message": "possible passive voice 'be resolved'"
+    },
+    {
+     "rule": "R6",
+     "line": 155,
+     "severity": "error",
+     "message": "possible passive voice 'is recorded'"
+    },
+    {
+     "rule": "R1",
+     "line": 155,
+     "severity": "error",
+     "message": "descriptive sentence has 31 words (limit 25): **Never resolve a reference by position.** A BibTeX file is commonly o..."
+    },
+    {
+     "rule": "R6",
+     "line": 155,
+     "severity": "error",
+     "message": "possible passive voice 'is commonly ordered'"
+    },
+    {
+     "rule": "R6",
+     "line": 155,
+     "severity": "error",
+     "message": "possible passive voice 'are matched'"
+    },
+    {
+     "rule": "R1",
+     "line": 155,
+     "severity": "error",
+     "message": "descriptive sentence has 40 words (limit 25): **Never report an input gap as a finding.** A missing source is code (..."
+    },
+    {
+     "rule": "R1",
+     "line": 155,
+     "severity": "error",
+     "message": "descriptive sentence has 28 words (limit 25): **Never assert an accusation on a guess.** A red needs a verified link..."
+    },
+    {
+     "rule": "R1",
+     "line": 155,
+     "severity": "error",
+     "message": "descriptive sentence has 35 words (limit 25): **Never present a coverage ratio without its denominator.** code, not ..."
+    },
+    {
+     "rule": "R1",
+     "line": 155,
+     "severity": "error",
+     "message": "descriptive sentence has 26 words (limit 25): **Never let the advisory channel touch a verdict.** With code, the det..."
+    },
+    {
+     "rule": "R6",
+     "line": 155,
+     "severity": "error",
+     "message": "possible passive voice 'is rendered'"
+    },
+    {
+     "rule": "R3",
+     "line": 180,
+     "severity": "error",
+     "message": "paragraph has 8 sentences (limit 6)"
+    },
+    {
+     "rule": "R6",
+     "line": 180,
+     "severity": "error",
+     "message": "possible passive voice 'are marked'"
+    },
+    {
+     "rule": "R1",
+     "line": 180,
+     "severity": "error",
+     "message": "instruction sentence has 27 words (limit 20): **Build the source registry** (code): link BibTeX, PDFs, the reference..."
+    },
+    {
+     "rule": "R2",
+     "line": 180,
+     "severity": "error",
+     "message": "two instructions in one sentence: **Build the source registry** (code): link BibTeX, PDFs, the reference"
+    },
+    {
+     "rule": "R6",
+     "line": 180,
+     "severity": "error",
+     "message": "possible passive voice 'are looked'"
+    },
+    {
+     "rule": "R1",
+     "line": 180,
+     "severity": "error",
+     "message": "instruction sentence has 34 words (limit 20): **Render** (code, code, code): painted highlights and printed margin  ..."
+    },
+    {
+     "rule": "R2",
+     "line": 180,
+     "severity": "error",
+     "message": "two instructions in one sentence: **Render** (code, code, code): painted highlights and printed margin  "
+    },
+    {
+     "rule": "R6",
+     "line": 196,
+     "severity": "error",
+     "message": "possible passive voice 'are shaded'"
+    },
+    {
+     "rule": "R3",
+     "line": 206,
+     "severity": "error",
+     "message": "paragraph has 23 sentences (limit 6)"
+    },
+    {
+     "rule": "R1",
+     "line": 206,
+     "severity": "error",
+     "message": "descriptive sentence has 36 words (limit 25): **A scan is transcribed when an OCR engine is available, and the trans..."
+    },
+    {
+     "rule": "R6",
+     "line": 206,
+     "severity": "error",
+     "message": "possible passive voice 'is transcribed'"
+    },
+    {
+     "rule": "R6",
+     "line": 206,
+     "severity": "error",
+     "message": "possible passive voice 'is labelled'"
+    },
+    {
+     "rule": "R1",
+     "line": 206,
+     "severity": "error",
+     "message": "descriptive sentence has 40 words (limit 25): On by default; code refuses instead,   code chooses the engine (code p..."
+    },
+    {
+     "rule": "R1",
+     "line": 206,
+     "severity": "error",
+     "message": "descriptive sentence has 37 words (limit 25): Everything   read that way is marked: the document carries code and `t..."
+    },
+    {
+     "rule": "R6",
+     "line": 206,
+     "severity": "error",
+     "message": "possible passive voice 'is marked'"
+    },
+    {
+     "rule": "R6",
+     "line": 206,
+     "severity": "error",
+     "message": "possible passive voice 'is refused'"
+    },
+    {
+     "rule": "R1",
+     "line": 206,
+     "severity": "error",
+     "message": "descriptive sentence has 57 words (limit 25): **A transcribed run is input-bound by default.** A transcription is a ..."
+    },
+    {
+     "rule": "R1",
+     "line": 206,
+     "severity": "error",
+     "message": "descriptive sentence has 30 words (limit 25): **A transcription may describe, but never convict.** A contradiction i..."
+    },
+    {
+     "rule": "R6",
+     "line": 206,
+     "severity": "error",
+     "message": "possible passive voice 'was transcribed'"
+    },
+    {
+     "rule": "R1",
+     "line": 206,
+     "severity": "error",
+     "message": "descriptive sentence has 43 words (limit 25): **Every unreadable PDF is an input gap, including the two that are not..."
+    },
+    {
+     "rule": "R1",
+     "line": 206,
+     "severity": "error",
+     "message": "descriptive sentence has 36 words (limit 25): All three routes exit 4 as code with a   distinct code, never 1: the r..."
+    },
+    {
+     "rule": "R6",
+     "line": 206,
+     "severity": "error",
+     "message": "possible passive voice 'be   forced'"
+    },
+    {
+     "rule": "R6",
+     "line": 206,
+     "severity": "error",
+     "message": "possible passive voice 'is tested'"
+    },
+    {
+     "rule": "R6",
+     "line": 206,
+     "severity": "error",
+     "message": "possible passive voice 'are reported'"
+    },
+    {
+     "rule": "R1",
+     "line": 206,
+     "severity": "error",
+     "message": "descriptive sentence has 33 words (limit 25): Insertions (code) *are* read and graded; deletions   (code) are not, s..."
+    },
+    {
+     "rule": "R6",
+     "line": 206,
+     "severity": "error",
+     "message": "possible passive voice 'is rendered'"
+    },
+    {
+     "rule": "R6",
+     "line": 206,
+     "severity": "error",
+     "message": "possible passive voice 'is transliterated'"
+    },
+    {
+     "rule": "R6",
+     "line": 206,
+     "severity": "error",
+     "message": "possible passive voice 'is reported'"
+    },
+    {
+     "rule": "R1",
+     "line": 256,
+     "severity": "error",
+     "message": "descriptive sentence has 191 words (limit 25): | Path | What it is | |---|---| | code | the CLI: report, sources, ver..."
+    },
+    {
+     "rule": "R6",
+     "line": 256,
+     "severity": "error",
+     "message": "possible passive voice 'are linked'"
+    }
+   ],
+   "warnings": [
+    {
+     "rule": "R10",
+     "line": 206,
+     "severity": "warning",
+     "message": "three or more instructions in one sentence; use a vertical list"
+    }
+   ]
+  },
+  "skills/citecheck/SKILL.md": {
+   "stats": {
+    "sentences": 56,
+    "words": 692,
+    "lines": 189,
+    "diagnostics": {
+     "noun_cluster_max": 10
+    }
+   },
+   "errors": [
+    {
+     "rule": "R6",
+     "line": 21,
+     "severity": "error",
+     "message": "possible passive voice 'is attributed'"
+    },
+    {
+     "rule": "R6",
+     "line": 30,
+     "severity": "error",
+     "message": "possible passive voice 'is borrowed'"
+    },
+    {
+     "rule": "R6",
+     "line": 35,
+     "severity": "error",
+     "message": "possible passive voice 'be resolved'"
+    },
+    {
+     "rule": "R3",
+     "line": 40,
+     "severity": "error",
+     "message": "paragraph has 14 sentences (limit 6)"
+    },
+    {
+     "rule": "R1",
+     "line": 40,
+     "severity": "error",
+     "message": "instruction sentence has 25 words (limit 20): Find every external    claim that lacks a citation, check the in-text/..."
+    },
+    {
+     "rule": "R2",
+     "line": 40,
+     "severity": "error",
+     "message": "two instructions in one sentence: Do not    rewrite the prose; fix the attribution."
+    },
+    {
+     "rule": "R6",
+     "line": 40,
+     "severity": "error",
+     "message": "possible passive voice 'were verified'"
+    },
+    {
+     "rule": "R1",
+     "line": 40,
+     "severity": "error",
+     "message": "instruction sentence has 27 words (limit 20): Pull every DOI (plus code and code ids) out    of the text in order, r..."
+    },
+    {
+     "rule": "R2",
+     "line": 70,
+     "severity": "error",
+     "message": "two instructions in one sentence: **Confirm title-resolved records.** Title search returns a candidate; "
+    },
+    {
+     "rule": "R1",
+     "line": 172,
+     "severity": "error",
+     "message": "descriptive sentence has 32 words (limit 25): DOI \u2192 metadata: code DOI batch \u2192 citations + retraction: code (code) r..."
+    },
+    {
+     "rule": "R1",
+     "line": 183,
+     "severity": "error",
+     "message": "descriptive sentence has 32 words (limit 25): **Batch-resolving a draft.** For a draft with many DOIs, do not resolv..."
+    }
+   ],
+   "warnings": [
+    {
+     "rule": "R10",
+     "line": 40,
+     "severity": "warning",
+     "message": "three or more instructions in one sentence; use a vertical list"
+    },
+    {
+     "rule": "R10",
+     "line": 40,
+     "severity": "warning",
+     "message": "three or more instructions in one sentence; use a vertical list"
+    },
+    {
+     "rule": "R10",
+     "line": 40,
+     "severity": "warning",
+     "message": "three or more instructions in one sentence; use a vertical list"
+    },
+    {
+     "rule": "R10",
+     "line": 40,
+     "severity": "warning",
+     "message": "three or more instructions in one sentence; use a vertical list"
+    },
+    {
+     "rule": "R10",
+     "line": 40,
+     "severity": "warning",
+     "message": "three or more instructions in one sentence; use a vertical list"
+    }
+   ]
+  },
+  "skills/environment-life-review-forge/SKILL.md": {
+   "stats": {
+    "sentences": 141,
+    "words": 2916,
+    "lines": 422,
+    "diagnostics": {
+     "noun_cluster_max": 20
+    }
+   },
+   "errors": [
+    {
+     "rule": "R1",
+     "line": 8,
+     "severity": "error",
+     "message": "instruction sentence has 23 words (limit 20): Use this skill for environmental, ecological, biomedical, and life-sci..."
+    },
+    {
+     "rule": "R1",
+     "line": 18,
+     "severity": "error",
+     "message": "descriptive sentence has 139 words (limit 25): domain: environment, ecology, toxicology, epidemiology, life science, ..."
+    },
+    {
+     "rule": "R8",
+     "line": 18,
+     "severity": "error",
+     "message": "abbreviation 'PECO' is used 3 times and never defined"
+    },
+    {
+     "rule": "R8",
+     "line": 18,
+     "severity": "error",
+     "message": "abbreviation 'PICO' is used 2 times and never defined"
+    },
+    {
+     "rule": "R3",
+     "line": 38,
+     "severity": "error",
+     "message": "paragraph has 18 sentences (limit 6)"
+    },
+    {
+     "rule": "R8",
+     "line": 38,
+     "severity": "error",
+     "message": "abbreviation 'NDVI' is used 2 times and never defined"
+    },
+    {
+     "rule": "R8",
+     "line": 38,
+     "severity": "error",
+     "message": "abbreviation 'PLS' is used 7 times and never defined"
+    },
+    {
+     "rule": "R8",
+     "line": 38,
+     "severity": "error",
+     "message": "abbreviation 'VIP' is used 10 times and never defined"
+    },
+    {
+     "rule": "R8",
+     "line": 38,
+     "severity": "error",
+     "message": "abbreviation 'GWR' is used 3 times and never defined"
+    },
+    {
+     "rule": "R8",
+     "line": 38,
+     "severity": "error",
+     "message": "abbreviation 'ML' is used 11 times and never defined"
+    },
+    {
+     "rule": "R8",
+     "line": 38,
+     "severity": "error",
+     "message": "abbreviation 'SIF' is used 5 times and never defined"
+    },
+    {
+     "rule": "R8",
+     "line": 38,
+     "severity": "error",
+     "message": "abbreviation 'SOC' is used 4 times and never defined"
+    },
+    {
+     "rule": "R8",
+     "line": 38,
+     "severity": "error",
+     "message": "abbreviation 'GAM' is used 3 times and never defined"
+    },
+    {
+     "rule": "R8",
+     "line": 38,
+     "severity": "error",
+     "message": "abbreviation 'NSGA' is used 2 times and never defined"
+    },
+    {
+     "rule": "R8",
+     "line": 38,
+     "severity": "error",
+     "message": "abbreviation 'II' is used 2 times and never defined"
+    },
+    {
+     "rule": "R1",
+     "line": 38,
+     "severity": "error",
+     "message": "descriptive sentence has 26 words (limit 25): code for environmental causal machine learning studies using DML, CATE..."
+    },
+    {
+     "rule": "R8",
+     "line": 38,
+     "severity": "error",
+     "message": "abbreviation 'DML' is used 6 times and never defined"
+    },
+    {
+     "rule": "R8",
+     "line": 38,
+     "severity": "error",
+     "message": "abbreviation 'CATE' is used 2 times and never defined"
+    },
+    {
+     "rule": "R8",
+     "line": 38,
+     "severity": "error",
+     "message": "abbreviation 'SHAP' is used 6 times and never defined"
+    },
+    {
+     "rule": "R8",
+     "line": 38,
+     "severity": "error",
+     "message": "abbreviation 'PDP' is used 5 times and never defined"
+    },
+    {
+     "rule": "R1",
+     "line": 38,
+     "severity": "error",
+     "message": "descriptive sentence has 34 words (limit 25): code when a paper uses one focal variable, such as nitrogen, carbon, w..."
+    },
+    {
+     "rule": "R3",
+     "line": 59,
+     "severity": "error",
+     "message": "paragraph has 9 sentences (limit 6)"
+    },
+    {
+     "rule": "R3",
+     "line": 69,
+     "severity": "error",
+     "message": "paragraph has 19 sentences (limit 6)"
+    },
+    {
+     "rule": "R1",
+     "line": 69,
+     "severity": "error",
+     "message": "instruction sentence has 34 words (limit 20): Use code, code, and code for ant, termite, earthworm, or other soil-fa..."
+    },
+    {
+     "rule": "R8",
+     "line": 69,
+     "severity": "error",
+     "message": "abbreviation 'PM' is used 2 times and never defined"
+    },
+    {
+     "rule": "R1",
+     "line": 69,
+     "severity": "error",
+     "message": "instruction sentence has 23 words (limit 20): Use code and code for papers that organize evidence around a system hu..."
+    },
+    {
+     "rule": "R1",
+     "line": 119,
+     "severity": "error",
+     "message": "instruction sentence has 31 words (limit 20): Use this mode when a study links NDVI, vegetation productivity, soil q..."
+    },
+    {
+     "rule": "R1",
+     "line": 123,
+     "severity": "error",
+     "message": "descriptive sentence has 74 words (limit 25): outcome indicator and unit; predictor families and expected ecological..."
+    },
+    {
+     "rule": "R6",
+     "line": 123,
+     "severity": "error",
+     "message": "possible passive voice 'is interpreted'"
+    },
+    {
+     "rule": "R1",
+     "line": 136,
+     "severity": "error",
+     "message": "instruction sentence has 36 words (limit 20): Use this mode when a study maps ecosystem services or ecosystem-servic..."
+    },
+    {
+     "rule": "R2",
+     "line": 136,
+     "severity": "error",
+     "message": "two instructions in one sentence: Use this mode when a study maps ecosystem services or ecosystem-servic"
+    },
+    {
+     "rule": "R8",
+     "line": 136,
+     "severity": "error",
+     "message": "abbreviation 'ALE' is used 3 times and never defined"
+    },
+    {
+     "rule": "R1",
+     "line": 140,
+     "severity": "error",
+     "message": "descriptive sentence has 103 words (limit 25): ecosystem services and pairwise ESR definitions; spatial unit, resolut..."
+    },
+    {
+     "rule": "R8",
+     "line": 140,
+     "severity": "error",
+     "message": "abbreviation 'ESR' is used 2 times and never defined"
+    },
+    {
+     "rule": "R1",
+     "line": 153,
+     "severity": "error",
+     "message": "instruction sentence has 31 words (limit 20): Use this mode when a study estimates how ozone, PM2.5, aerosol optical..."
+    },
+    {
+     "rule": "R2",
+     "line": 153,
+     "severity": "error",
+     "message": "two instructions in one sentence: Use this mode when a study estimates how ozone, PM2.5, aerosol optical"
+    },
+    {
+     "rule": "R1",
+     "line": 157,
+     "severity": "error",
+     "message": "descriptive sentence has 91 words (limit 25): crops, regions, years, and spatial unit; pollutant exposure metrics, s..."
+    },
+    {
+     "rule": "R1",
+     "line": 169,
+     "severity": "error",
+     "message": "instruction sentence has 31 words (limit 20): Use this mode when a study evaluates whether biodiversity, soil biodiv..."
+    },
+    {
+     "rule": "R1",
+     "line": 173,
+     "severity": "error",
+     "message": "descriptive sentence has 82 words (limit 25): biodiversity dimension and measurement platform; stability endpoint: t..."
+    },
+    {
+     "rule": "R1",
+     "line": 185,
+     "severity": "error",
+     "message": "instruction sentence has 26 words (limit 20): Use this mode when a study synthesizes how ants or other soil fauna af..."
+    },
+    {
+     "rule": "R1",
+     "line": 189,
+     "severity": "error",
+     "message": "descriptive sentence has 69 words (limit 25): focal fauna and functional traits; stock versus flux versus stability ..."
+    },
+    {
+     "rule": "R6",
+     "line": 189,
+     "severity": "error",
+     "message": "possible passive voice 'are organized'"
+    },
+    {
+     "rule": "R1",
+     "line": 200,
+     "severity": "error",
+     "message": "instruction sentence has 31 words (limit 20): Use this mode when a study estimates emissions from small wetlands, po..."
+    },
+    {
+     "rule": "R1",
+     "line": 204,
+     "severity": "error",
+     "message": "descriptive sentence has 43 words (limit 25): wetland or water-body size class; mapping resolution and minimum detec..."
+    },
+    {
+     "rule": "R1",
+     "line": 216,
+     "severity": "error",
+     "message": "instruction sentence has 29 words (limit 20): Use this mode when a study creates or reuses a spatial map product for..."
+    },
+    {
+     "rule": "R2",
+     "line": 216,
+     "severity": "error",
+     "message": "two instructions in one sentence: Use this mode when a study creates or reuses a spatial map product for"
+    },
+    {
+     "rule": "R1",
+     "line": 220,
+     "severity": "error",
+     "message": "descriptive sentence has 89 words (limit 25): target map variable and depth convention; spatial domain, permafrost m..."
+    },
+    {
+     "rule": "R1",
+     "line": 237,
+     "severity": "error",
+     "message": "descriptive sentence has 34 words (limit 25): intervention nutrient form and rate; comparator nutrient background; c..."
+    },
+    {
+     "rule": "R1",
+     "line": 255,
+     "severity": "error",
+     "message": "descriptive sentence has 45 words (limit 25): food-system scope and commodity groups; pressure domains: nutrients, w..."
+    },
+    {
+     "rule": "R1",
+     "line": 267,
+     "severity": "error",
+     "message": "instruction sentence has 36 words (limit 20): Use this mode when a paper treats nitrogen, carbon, water, phosphorus,..."
+    },
+    {
+     "rule": "R1",
+     "line": 271,
+     "severity": "error",
+     "message": "descriptive sentence has 61 words (limit 25): focal system variable and why it is treated as a hub; coupled outcome ..."
+    },
+    {
+     "rule": "R6",
+     "line": 271,
+     "severity": "error",
+     "message": "possible passive voice 'is treated'"
+    },
+    {
+     "rule": "R6",
+     "line": 271,
+     "severity": "error",
+     "message": "possible passive voice 'are measured'"
+    },
+    {
+     "rule": "R1",
+     "line": 287,
+     "severity": "error",
+     "message": "descriptive sentence has 53 words (limit 25): waste stream and supply-chain boundary; spatial unit and resolution; t..."
+    },
+    {
+     "rule": "R1",
+     "line": 303,
+     "severity": "error",
+     "message": "descriptive sentence has 48 words (limit 25): crop, region, years, sites, genotypes, and trial design; input data fa..."
+    },
+    {
+     "rule": "R1",
+     "line": 316,
+     "severity": "error",
+     "message": "instruction sentence has 29 words (limit 20): Use this mode when a study claims causal effects from high-dimensional..."
+    },
+    {
+     "rule": "R1",
+     "line": 320,
+     "severity": "error",
+     "message": "descriptive sentence has 52 words (limit 25): unit of observation and sampling frame; treatment/exposure definitions..."
+    },
+    {
+     "rule": "R1",
+     "line": 332,
+     "severity": "error",
+     "message": "descriptive sentence has 61 words (limit 25): treatment or exposure such as heatwave event, green space, impervious ..."
+    },
+    {
+     "rule": "R1",
+     "line": 340,
+     "severity": "error",
+     "message": "instruction sentence has 21 words (limit 20): Use this mode when a study combines field trials, statistical response..."
+    },
+    {
+     "rule": "R1",
+     "line": 344,
+     "severity": "error",
+     "message": "descriptive sentence has 63 words (limit 25): crop, region, irrigation method, salinity or nutrient treatments; resp..."
+    },
+    {
+     "rule": "R1",
+     "line": 358,
+     "severity": "error",
+     "message": "descriptive sentence has 27 words (limit 25): evidence database scope; target variable and units; model family and v..."
+    },
+    {
+     "rule": "R1",
+     "line": 373,
+     "severity": "error",
+     "message": "descriptive sentence has 36 words (limit 25): decision unit; land-use or management options; objectives and units; b..."
+    },
+    {
+     "rule": "R3",
+     "line": 386,
+     "severity": "error",
+     "message": "paragraph has 37 sentences (limit 6)"
+    },
+    {
+     "rule": "R1",
+     "line": 386,
+     "severity": "error",
+     "message": "instruction sentence has 26 words (limit 20): Do not treat PLS VIP rankings as causal drivers of an environmental ou..."
+    },
+    {
+     "rule": "R2",
+     "line": 386,
+     "severity": "error",
+     "message": "two instructions in one sentence: Do not treat PLS VIP rankings as causal drivers of an environmental ou"
+    },
+    {
+     "rule": "R1",
+     "line": 386,
+     "severity": "error",
+     "message": "instruction sentence has 24 words (limit 20): Do not treat ESR thresholds from PDP, SHAP, ALE, or response curves as..."
+    },
+    {
+     "rule": "R1",
+     "line": 386,
+     "severity": "error",
+     "message": "instruction sentence has 21 words (limit 20): Do not translate model-derived optimal intervals into zoning rules wit..."
+    },
+    {
+     "rule": "R1",
+     "line": 386,
+     "severity": "error",
+     "message": "instruction sentence has 22 words (limit 20): Do not treat air-quality food-security counterfactuals as realized pro..."
+    },
+    {
+     "rule": "R1",
+     "line": 386,
+     "severity": "error",
+     "message": "instruction sentence has 24 words (limit 20): Do not claim soil biodiversity stabilizes ecosystems under aridity wit..."
+    },
+    {
+     "rule": "R1",
+     "line": 386,
+     "severity": "error",
+     "message": "instruction sentence has 22 words (limit 20): Do not flatten soil-fauna effects into one \"carbon benefit\" or \"carbon..."
+    },
+    {
+     "rule": "R2",
+     "line": 386,
+     "severity": "error",
+     "message": "two instructions in one sentence: Do not treat coarse-resolution wetland products as scale neutral; audi"
+    },
+    {
+     "rule": "R6",
+     "line": 386,
+     "severity": "error",
+     "message": "possible passive voice 'are omitted'"
+    },
+    {
+     "rule": "R1",
+     "line": 386,
+     "severity": "error",
+     "message": "instruction sentence has 27 words (limit 20): Do not treat a geospatial environmental map as ground truth; audit obs..."
+    },
+    {
+     "rule": "R2",
+     "line": 386,
+     "severity": "error",
+     "message": "two instructions in one sentence: Do not treat a geospatial environmental map as ground truth; audit obs"
+    },
+    {
+     "rule": "R1",
+     "line": 386,
+     "severity": "error",
+     "message": "instruction sentence has 22 words (limit 20): Do not compare cryosphere maps across products or periods without chec..."
+    },
+    {
+     "rule": "R2",
+     "line": 386,
+     "severity": "error",
+     "message": "two instructions in one sentence: Do not compare methane budgets without checking double-counting betwee"
+    },
+    {
+     "rule": "R2",
+     "line": 386,
+     "severity": "error",
+     "message": "two instructions in one sentence: Do not treat spatial DML as solved by adding coordinates; audit spatia"
+    },
+    {
+     "rule": "R1",
+     "line": 386,
+     "severity": "error",
+     "message": "instruction sentence has 23 words (limit 20): Do not collapse fertilizer form, nutrient rate, baseline nutrient limi..."
+    },
+    {
+     "rule": "R1",
+     "line": 386,
+     "severity": "error",
+     "message": "instruction sentence has 21 words (limit 20): Do not describe food-system impacts in only one direction when the rev..."
+    },
+    {
+     "rule": "R2",
+     "line": 386,
+     "severity": "error",
+     "message": "two instructions in one sentence: Do not describe food-system impacts in only one direction when the rev"
+    },
+    {
+     "rule": "R1",
+     "line": 386,
+     "severity": "error",
+     "message": "instruction sentence has 22 words (limit 20): Do not treat county-level predicted food waste as directly collectible..."
+    },
+    {
+     "rule": "R1",
+     "line": 386,
+     "severity": "error",
+     "message": "instruction sentence has 21 words (limit 20): Do not interpret store counts, restaurant counts, population, income, ..."
+    },
+    {
+     "rule": "R1",
+     "line": 386,
+     "severity": "error",
+     "message": "instruction sentence has 29 words (limit 20): Do not treat random train/test performance in crop trials as proof of ..."
+    },
+    {
+     "rule": "R2",
+     "line": 386,
+     "severity": "error",
+     "message": "two instructions in one sentence: Do not treat random train/test performance in crop trials as proof of "
+    },
+    {
+     "rule": "R1",
+     "line": 386,
+     "severity": "error",
+     "message": "instruction sentence has 22 words (limit 20): Do not present a policy lever, such as recycling rate or intervention ..."
+    },
+    {
+     "rule": "R1",
+     "line": 386,
+     "severity": "error",
+     "message": "instruction sentence has 24 words (limit 20): Do not generalize an irrigation salinity decision range across regions..."
+    }
+   ],
+   "warnings": [
+    {
+     "rule": "R10",
+     "line": 386,
+     "severity": "warning",
+     "message": "three or more instructions in one sentence; use a vertical list"
+    },
+    {
+     "rule": "R10",
+     "line": 386,
+     "severity": "warning",
+     "message": "three or more instructions in one sentence; use a vertical list"
+    }
+   ]
+  },
+  "skills/evidence-synthesis-forge/SKILL.md": {
+   "stats": {
+    "sentences": 48,
+    "words": 509,
+    "lines": 127,
+    "diagnostics": {
+     "noun_cluster_max": 13
+    }
+   },
+   "errors": [
+    {
+     "rule": "R6",
+     "line": 14,
+     "severity": "error",
+     "message": "possible passive voice 'being synthesized'"
+    },
+    {
+     "rule": "R6",
+     "line": 14,
+     "severity": "error",
+     "message": "possible passive voice 'are included'"
+    },
+    {
+     "rule": "R6",
+     "line": 14,
+     "severity": "error",
+     "message": "possible passive voice 'are extracted'"
+    },
+    {
+     "rule": "R6",
+     "line": 14,
+     "severity": "error",
+     "message": "possible passive voice 'is narratively summarized'"
+    },
+    {
+     "rule": "R1",
+     "line": 27,
+     "severity": "error",
+     "message": "descriptive sentence has 50 words (limit 25): domain: environment, ecology, medicine, life science, economics, polic..."
+    },
+    {
+     "rule": "R3",
+     "line": 39,
+     "severity": "error",
+     "message": "paragraph has 9 sentences (limit 6)"
+    },
+    {
+     "rule": "R1",
+     "line": 39,
+     "severity": "error",
+     "message": "descriptive sentence has 26 words (limit 25): Align the protocol and report with the relevant guidance source: PRISM..."
+    },
+    {
+     "rule": "R8",
+     "line": 39,
+     "severity": "error",
+     "message": "abbreviation 'PRISMA' is used 8 times and never defined"
+    },
+    {
+     "rule": "R8",
+     "line": 39,
+     "severity": "error",
+     "message": "abbreviation 'JBI' is used 2 times and never defined"
+    },
+    {
+     "rule": "R8",
+     "line": 39,
+     "severity": "error",
+     "message": "abbreviation 'CEE' is used 2 times and never defined"
+    },
+    {
+     "rule": "R3",
+     "line": 51,
+     "severity": "error",
+     "message": "paragraph has 9 sentences (limit 6)"
+    },
+    {
+     "rule": "R6",
+     "line": 51,
+     "severity": "error",
+     "message": "possible passive voice 'be validated'"
+    },
+    {
+     "rule": "R3",
+     "line": 121,
+     "severity": "error",
+     "message": "paragraph has 7 sentences (limit 6)"
+    },
+    {
+     "rule": "R2",
+     "line": 121,
+     "severity": "error",
+     "message": "two instructions in one sentence: Do not present PRISMA counts as final unless they are traceable to sea"
+    }
+   ],
+   "warnings": [
+    {
+     "rule": "R10",
+     "line": 39,
+     "severity": "warning",
+     "message": "three or more instructions in one sentence; use a vertical list"
+    },
+    {
+     "rule": "R10",
+     "line": 39,
+     "severity": "warning",
+     "message": "three or more instructions in one sentence; use a vertical list"
+    },
+    {
+     "rule": "R10",
+     "line": 93,
+     "severity": "warning",
+     "message": "three or more instructions in one sentence; use a vertical list"
+    },
+    {
+     "rule": "R10",
+     "line": 121,
+     "severity": "warning",
+     "message": "three or more instructions in one sentence; use a vertical list"
+    }
+   ]
+  },
+  "skills/humanizerdrb/SKILL.md": {
+   "stats": {
+    "sentences": 92,
+    "words": 1369,
+    "lines": 176,
+    "diagnostics": {
+     "noun_cluster_max": 12
+    }
+   },
+   "errors": [
+    {
+     "rule": "R3",
+     "line": 43,
+     "severity": "error",
+     "message": "paragraph has 8 sentences (limit 6)"
+    },
+    {
+     "rule": "R1",
+     "line": 43,
+     "severity": "error",
+     "message": "instruction sentence has 27 words (limit 20): Make the minimum effective edit using the    patterns in code, run the..."
+    },
+    {
+     "rule": "R2",
+     "line": 43,
+     "severity": "error",
+     "message": "two instructions in one sentence: Make the minimum effective edit using the    patterns in code, run the"
+    },
+    {
+     "rule": "R3",
+     "line": 54,
+     "severity": "error",
+     "message": "paragraph has 9 sentences (limit 6)"
+    },
+    {
+     "rule": "R3",
+     "line": 68,
+     "severity": "error",
+     "message": "paragraph has 14 sentences (limit 6)"
+    },
+    {
+     "rule": "R4",
+     "line": 68,
+     "severity": "error",
+     "message": "contraction: **Open it up, don't dumb it down.** Keep the substance, nuan"
+    },
+    {
+     "rule": "R1",
+     "line": 68,
+     "severity": "error",
+     "message": "instruction sentence has 21 words (limit 20): **Use active voice.** \"The team shipped it Tuesday\" beats \"the decisio..."
+    },
+    {
+     "rule": "R1",
+     "line": 68,
+     "severity": "error",
+     "message": "instruction sentence has 31 words (limit 20): **Make every sentence earn its place.** Cut empty qualifiers and throa..."
+    },
+    {
+     "rule": "R4",
+     "line": 68,
+     "severity": "error",
+     "message": "contraction: **Show, don't tell the reader what to think.** Let facts, ac"
+    },
+    {
+     "rule": "R3",
+     "line": 88,
+     "severity": "error",
+     "message": "paragraph has 11 sentences (limit 6)"
+    },
+    {
+     "rule": "R2",
+     "line": 88,
+     "severity": "error",
+     "message": "two instructions in one sentence: Output the full edited draft, then a short **What changed** section na"
+    },
+    {
+     "rule": "R1",
+     "line": 103,
+     "severity": "error",
+     "message": "descriptive sentence has 34 words (limit 25): a specific, unusual detail (a real address, an odd quote); mixed feeli..."
+    },
+    {
+     "rule": "R1",
+     "line": 111,
+     "severity": "error",
+     "message": "descriptive sentence has 30 words (limit 25): When the user asks for a tone - or the register is obvious and no samp..."
+    },
+    {
+     "rule": "R1",
+     "line": 138,
+     "severity": "error",
+     "message": "descriptive sentence has 39 words (limit 25): It reports **H1** (a number in the rewrite that is not in the original..."
+    },
+    {
+     "rule": "R2",
+     "line": 138,
+     "severity": "error",
+     "message": "two instructions in one sentence: Run it as a first pass, then do the judgement checks by hand."
+    },
+    {
+     "rule": "R1",
+     "line": 143,
+     "severity": "error",
+     "message": "descriptive sentence has 27 words (limit 25): **What it cannot do:** it cannot judge meaning, voice, or whether a cl..."
+    },
+    {
+     "rule": "R1",
+     "line": 149,
+     "severity": "error",
+     "message": "descriptive sentence has 26 words (limit 25): It is organized strongest-first (a \u00a71-\u00a75 pattern justifies an edit on ..."
+    },
+    {
+     "rule": "R6",
+     "line": 149,
+     "severity": "error",
+     "message": "possible passive voice 'is organized'"
+    },
+    {
+     "rule": "R3",
+     "line": 153,
+     "severity": "error",
+     "message": "paragraph has 13 sentences (limit 6)"
+    },
+    {
+     "rule": "R4",
+     "line": 153,
+     "severity": "error",
+     "message": "contraction: **Binary contrasts / negative listing.** \"It's not X."
+    },
+    {
+     "rule": "R4",
+     "line": 153,
+     "severity": "error",
+     "message": "contraction: It's Y.\" / \"Not a X."
+    },
+    {
+     "rule": "R2",
+     "line": 153,
+     "severity": "error",
+     "message": "two instructions in one sentence: Delete it; do   not rewrite it into a better metaphor."
+    },
+    {
+     "rule": "R4",
+     "line": 153,
+     "severity": "error",
+     "message": "contraction: **Throat-clearing openers.** \"Here's the thing,\" \"Let me be "
+    },
+    {
+     "rule": "R4",
+     "line": 153,
+     "severity": "error",
+     "message": "contraction: That's the whole thing.\" **Forced triads & rule-rhythm.** Th"
+    },
+    {
+     "rule": "R1",
+     "line": 153,
+     "severity": "error",
+     "message": "descriptive sentence has 26 words (limit 25): **Importance puffery.** \"marks a pivotal moment,\" \"a testament to,\" \"p..."
+    }
+   ],
+   "warnings": [
+    {
+     "rule": "R10",
+     "line": 43,
+     "severity": "warning",
+     "message": "three or more instructions in one sentence; use a vertical list"
+    },
+    {
+     "rule": "R10",
+     "line": 43,
+     "severity": "warning",
+     "message": "three or more instructions in one sentence; use a vertical list"
+    },
+    {
+     "rule": "R10",
+     "line": 54,
+     "severity": "warning",
+     "message": "three or more instructions in one sentence; use a vertical list"
+    },
+    {
+     "rule": "R10",
+     "line": 54,
+     "severity": "warning",
+     "message": "three or more instructions in one sentence; use a vertical list"
+    },
+    {
+     "rule": "R10",
+     "line": 88,
+     "severity": "warning",
+     "message": "three or more instructions in one sentence; use a vertical list"
+    }
+   ]
+  },
+  "skills/medical-narrative-review/SKILL.md": {
+   "stats": {
+    "sentences": 140,
+    "words": 2928,
+    "lines": 451,
+    "diagnostics": {
+     "noun_cluster_max": 29
+    }
+   },
+   "errors": [
+    {
+     "rule": "R2",
+     "line": 18,
+     "severity": "error",
+     "message": "two instructions in one sentence: Produce a medical narrative review that is **complete, accurately cite"
+    },
+    {
+     "rule": "R8",
+     "line": 28,
+     "severity": "error",
+     "message": "abbreviation 'PRISMA' is used 9 times and never defined"
+    },
+    {
+     "rule": "R3",
+     "line": 51,
+     "severity": "error",
+     "message": "paragraph has 18 sentences (limit 6)"
+    },
+    {
+     "rule": "R1",
+     "line": 51,
+     "severity": "error",
+     "message": "descriptive sentence has 41 words (limit 25): **No reference exists until it is retrieved and identifier-verified.**..."
+    },
+    {
+     "rule": "R6",
+     "line": 51,
+     "severity": "error",
+     "message": "possible passive voice 'is retrieved'"
+    },
+    {
+     "rule": "R6",
+     "line": 51,
+     "severity": "error",
+     "message": "possible passive voice 'are copied'"
+    },
+    {
+     "rule": "R6",
+     "line": 51,
+     "severity": "error",
+     "message": "possible passive voice 'are listed'"
+    },
+    {
+     "rule": "R6",
+     "line": 51,
+     "severity": "error",
+     "message": "possible passive voice 'are copied'"
+    },
+    {
+     "rule": "R1",
+     "line": 51,
+     "severity": "error",
+     "message": "descriptive sentence has 46 words (limit 25): **Never upgrade evidence.** Association is not causation; non-signific..."
+    },
+    {
+     "rule": "R6",
+     "line": 51,
+     "severity": "error",
+     "message": "possible passive voice 'are labelled'"
+    },
+    {
+     "rule": "R6",
+     "line": 51,
+     "severity": "error",
+     "message": "possible passive voice 'are checked'"
+    },
+    {
+     "rule": "R8",
+     "line": 51,
+     "severity": "error",
+     "message": "abbreviation 'PHI' is used 3 times and never defined"
+    },
+    {
+     "rule": "R1",
+     "line": 51,
+     "severity": "error",
+     "message": "descriptive sentence has 27 words (limit 25): **AI is not an author.** The skill drafts; named human authors decide,..."
+    },
+    {
+     "rule": "R2",
+     "line": 84,
+     "severity": "error",
+     "message": "two instructions in one sentence: Ask only the questions needed to unblock the current phase (defaults i"
+    },
+    {
+     "rule": "R1",
+     "line": 90,
+     "severity": "error",
+     "message": "instruction sentence has 37 words (limit 20): Record: topic and exact **PICO or PEO** framing; target journal/venue ..."
+    },
+    {
+     "rule": "R2",
+     "line": 90,
+     "severity": "error",
+     "message": "two instructions in one sentence: Record: topic and exact **PICO or PEO** framing; target journal/venue "
+    },
+    {
+     "rule": "R8",
+     "line": 90,
+     "severity": "error",
+     "message": "abbreviation 'PICO' is used 2 times and never defined"
+    },
+    {
+     "rule": "R2",
+     "line": 106,
+     "severity": "error",
+     "message": "two instructions in one sentence: Run code first, then search at least three independent sources and kee"
+    },
+    {
+     "rule": "R1",
+     "line": 109,
+     "severity": "error",
+     "message": "descriptive sentence has 62 words (limit 25): | Need | Tool | |---|---| | Broad multi-source sweep, retraction scree..."
+    },
+    {
+     "rule": "R6",
+     "line": 109,
+     "severity": "error",
+     "message": "possible passive voice 'be labelled'"
+    },
+    {
+     "rule": "R1",
+     "line": 121,
+     "severity": "error",
+     "message": "descriptive sentence has 44 words (limit 25): Rules: run the same concept blocks across databases; record the **exac..."
+    },
+    {
+     "rule": "R1",
+     "line": 129,
+     "severity": "error",
+     "message": "descriptive sentence has 34 words (limit 25): Each record ends in one of four states: code (evidence base), code (ve..."
+    },
+    {
+     "rule": "R6",
+     "line": 129,
+     "severity": "error",
+     "message": "possible passive voice 'be verified'"
+    },
+    {
+     "rule": "R1",
+     "line": 167,
+     "severity": "error",
+     "message": "descriptive sentence has 26 words (limit 25): Markers are checked per paragraph: a paragraph that contains a number,..."
+    },
+    {
+     "rule": "R6",
+     "line": 167,
+     "severity": "error",
+     "message": "possible passive voice 'are checked'"
+    },
+    {
+     "rule": "R1",
+     "line": 167,
+     "severity": "error",
+     "message": "descriptive sentence has 30 words (limit 25): Prose may be wrapped normally \u2014 one sentence per line is still the cle..."
+    },
+    {
+     "rule": "R6",
+     "line": 167,
+     "severity": "error",
+     "message": "possible passive voice 'be wrapped'"
+    },
+    {
+     "rule": "R8",
+     "line": 182,
+     "severity": "error",
+     "message": "abbreviation 'SVG' is used 6 times and never defined"
+    },
+    {
+     "rule": "R1",
+     "line": 196,
+     "severity": "error",
+     "message": "descriptive sentence has 29 words (limit 25): code renumbers citations in first-appearance order, writes code and co..."
+    },
+    {
+     "rule": "R6",
+     "line": 196,
+     "severity": "error",
+     "message": "possible passive voice 'is unverified'"
+    },
+    {
+     "rule": "R1",
+     "line": 214,
+     "severity": "error",
+     "message": "instruction sentence has 85 words (limit 20): | Output | What it contains | |---|---| | code | Word styles (Title, H..."
+    },
+    {
+     "rule": "R8",
+     "line": 214,
+     "severity": "error",
+     "message": "abbreviation 'PNG' is used 3 times and never defined"
+    },
+    {
+     "rule": "R6",
+     "line": 228,
+     "severity": "error",
+     "message": "possible passive voice 'is   delivered'"
+    },
+    {
+     "rule": "R6",
+     "line": 228,
+     "severity": "error",
+     "message": "possible passive voice 'are regenerated'"
+    },
+    {
+     "rule": "R6",
+     "line": 228,
+     "severity": "error",
+     "message": "possible passive voice 'are derived'"
+    },
+    {
+     "rule": "R3",
+     "line": 240,
+     "severity": "error",
+     "message": "paragraph has 7 sentences (limit 6)"
+    },
+    {
+     "rule": "R2",
+     "line": 240,
+     "severity": "error",
+     "message": "two instructions in one sentence: Confirm publication type and peer-review status; flag preprints, edito"
+    },
+    {
+     "rule": "R1",
+     "line": 240,
+     "severity": "error",
+     "message": "descriptive sentence has 26 words (limit 25): Where access is available, open the source and confirm it supports the..."
+    },
+    {
+     "rule": "R6",
+     "line": 256,
+     "severity": "error",
+     "message": "possible passive voice 'were confirmed'"
+    },
+    {
+     "rule": "R3",
+     "line": 258,
+     "severity": "error",
+     "message": "paragraph has 10 sentences (limit 6)"
+    },
+    {
+     "rule": "R1",
+     "line": 258,
+     "severity": "error",
+     "message": "descriptive sentence has 27 words (limit 25): **An unknown DOI returns an empty object code with no error flag.** An..."
+    },
+    {
+     "rule": "R1",
+     "line": 258,
+     "severity": "error",
+     "message": "instruction sentence has 21 words (limit 20): **Compare the record, not your memory.** A DOI and a title can both lo..."
+    },
+    {
+     "rule": "R1",
+     "line": 258,
+     "severity": "error",
+     "message": "descriptive sentence has 27 words (limit 25): **code returns loosely matched notices.** The code list includes items..."
+    },
+    {
+     "rule": "R6",
+     "line": 258,
+     "severity": "error",
+     "message": "possible passive voice 'is retracted'"
+    },
+    {
+     "rule": "R1",
+     "line": 258,
+     "severity": "error",
+     "message": "descriptive sentence has 31 words (limit 25): **Author name formats differ by source.** Crossref returns full given ..."
+    },
+    {
+     "rule": "R6",
+     "line": 258,
+     "severity": "error",
+     "message": "possible passive voice 'be converted'"
+    },
+    {
+     "rule": "R1",
+     "line": 300,
+     "severity": "error",
+     "message": "descriptive sentence has 41 words (limit 25): The audit joins them: a claim marker whose sources are unverified is a..."
+    },
+    {
+     "rule": "R6",
+     "line": 300,
+     "severity": "error",
+     "message": "possible passive voice 'are unverified'"
+    },
+    {
+     "rule": "R1",
+     "line": 306,
+     "severity": "error",
+     "message": "descriptive sentence has 30 words (limit 25): It is **advisory only and can never change a gate verdict**: its findi..."
+    },
+    {
+     "rule": "R1",
+     "line": 312,
+     "severity": "error",
+     "message": "descriptive sentence has 53 words (limit 25): In short \u2014 verification, retraction, inclusion, numbers, references, P..."
+    },
+    {
+     "rule": "R6",
+     "line": 312,
+     "severity": "error",
+     "message": "possible passive voice 'is offered'"
+    },
+    {
+     "rule": "R1",
+     "line": 318,
+     "severity": "error",
+     "message": "descriptive sentence has 60 words (limit 25): Measured so far on this machine: the causality axis **missed** the wor..."
+    },
+    {
+     "rule": "R1",
+     "line": 328,
+     "severity": "error",
+     "message": "instruction sentence has 25 words (limit 20): Declare in Methods which standard was followed and report **SANRA** it..."
+    },
+    {
+     "rule": "R2",
+     "line": 328,
+     "severity": "error",
+     "message": "two instructions in one sentence: Declare in Methods which standard was followed and report **SANRA** it"
+    },
+    {
+     "rule": "R6",
+     "line": 328,
+     "severity": "error",
+     "message": "possible passive voice 'was followed'"
+    },
+    {
+     "rule": "R8",
+     "line": 328,
+     "severity": "error",
+     "message": "abbreviation 'SANRA' is used 3 times and never defined"
+    },
+    {
+     "rule": "R8",
+     "line": 328,
+     "severity": "error",
+     "message": "abbreviation 'GRADE' is used 2 times and never defined"
+    },
+    {
+     "rule": "R8",
+     "line": 328,
+     "severity": "error",
+     "message": "abbreviation 'MOOSE' is used 2 times and never defined"
+    },
+    {
+     "rule": "R3",
+     "line": 338,
+     "severity": "error",
+     "message": "paragraph has 8 sentences (limit 6)"
+    },
+    {
+     "rule": "R6",
+     "line": 338,
+     "severity": "error",
+     "message": "possible passive voice 'was associated'"
+    },
+    {
+     "rule": "R1",
+     "line": 353,
+     "severity": "error",
+     "message": "descriptive sentence has 232 words (limit 25): | File | Use | |---|---| | code | narrative vs systematic vs scoping; ..."
+    },
+    {
+     "rule": "R1",
+     "line": 401,
+     "severity": "error",
+     "message": "descriptive sentence has 32 words (limit 25): The exit code is code when any code-severity issue is present, and **c..."
+    },
+    {
+     "rule": "R1",
+     "line": 401,
+     "severity": "error",
+     "message": "descriptive sentence has 33 words (limit 25): That third code is code with a worklist in code, never an code entry, ..."
+    },
+    {
+     "rule": "R1",
+     "line": 412,
+     "severity": "error",
+     "message": "descriptive sentence has 191 words (limit 25): | Failure | Prevented by | |---|---| | Fabricated or wrong reference |..."
+    },
+    {
+     "rule": "R6",
+     "line": 412,
+     "severity": "error",
+     "message": "possible passive voice 'are produced'"
+    },
+    {
+     "rule": "R3",
+     "line": 429,
+     "severity": "error",
+     "message": "paragraph has 7 sentences (limit 6)"
+    },
+    {
+     "rule": "R1",
+     "line": 429,
+     "severity": "error",
+     "message": "descriptive sentence has 30 words (limit 25): If the user asks for a citation they \"know exists\" but it cannot be ve..."
+    },
+    {
+     "rule": "R6",
+     "line": 429,
+     "severity": "error",
+     "message": "possible passive voice 'be verified'"
+    },
+    {
+     "rule": "R1",
+     "line": 429,
+     "severity": "error",
+     "message": "descriptive sentence has 30 words (limit 25): If the user asks to remove a placeholder, weaken the gate, or skip ver..."
+    },
+    {
+     "rule": "R1",
+     "line": 441,
+     "severity": "error",
+     "message": "descriptive sentence has 37 words (limit 25): It runs every bundled CLI against fixtures and asserts **both** the PA..."
+    }
+   ],
+   "warnings": [
+    {
+     "rule": "R10",
+     "line": 34,
+     "severity": "warning",
+     "message": "three or more instructions in one sentence; use a vertical list"
+    },
+    {
+     "rule": "R10",
+     "line": 258,
+     "severity": "warning",
+     "message": "three or more instructions in one sentence; use a vertical list"
+    }
+   ]
+  },
+  "skills/meta-analysis-forge/SKILL.md": {
+   "stats": {
+    "sentences": 64,
+    "words": 741,
+    "lines": 188,
+    "diagnostics": {
+     "noun_cluster_max": 12
+    }
+   },
+   "errors": [
+    {
+     "rule": "R6",
+     "line": 12,
+     "severity": "error",
+     "message": "possible passive voice 'being combined'"
+    },
+    {
+     "rule": "R1",
+     "line": 28,
+     "severity": "error",
+     "message": "descriptive sentence has 27 words (limit 25): outcome construct; effect-size metric; standard error, confidence inte..."
+    },
+    {
+     "rule": "R3",
+     "line": 41,
+     "severity": "error",
+     "message": "paragraph has 15 sentences (limit 6)"
+    },
+    {
+     "rule": "R8",
+     "line": 41,
+     "severity": "error",
+     "message": "abbreviation 'PLS' is used 5 times and never defined"
+    },
+    {
+     "rule": "R8",
+     "line": 41,
+     "severity": "error",
+     "message": "abbreviation 'PM' is used 4 times and never defined"
+    },
+    {
+     "rule": "R8",
+     "line": 41,
+     "severity": "error",
+     "message": "abbreviation 'SEM' is used 4 times and never defined"
+    },
+    {
+     "rule": "R1",
+     "line": 41,
+     "severity": "error",
+     "message": "descriptive sentence has 26 words (limit 25): code when a strong published meta-analysis should become a reusable te..."
+    },
+    {
+     "rule": "R1",
+     "line": 41,
+     "severity": "error",
+     "message": "descriptive sentence has 27 words (limit 25): code when deciding whether studies are poolable at all and choosing fi..."
+    },
+    {
+     "rule": "R8",
+     "line": 41,
+     "severity": "error",
+     "message": "abbreviation 'ML' is used 2 times and never defined"
+    },
+    {
+     "rule": "R6",
+     "line": 41,
+     "severity": "error",
+     "message": "possible passive voice 'been checked'"
+    },
+    {
+     "rule": "R3",
+     "line": 59,
+     "severity": "error",
+     "message": "paragraph has 10 sentences (limit 6)"
+    },
+    {
+     "rule": "R8",
+     "line": 70,
+     "severity": "error",
+     "message": "abbreviation 'IPD' is used 2 times and never defined"
+    },
+    {
+     "rule": "R2",
+     "line": 110,
+     "severity": "error",
+     "message": "two instructions in one sentence: Use code to check required fields, numeric estimates, positive standar"
+    },
+    {
+     "rule": "R8",
+     "line": 112,
+     "severity": "error",
+     "message": "abbreviation 'SE' is used 2 times and never defined"
+    },
+    {
+     "rule": "R1",
+     "line": 126,
+     "severity": "error",
+     "message": "descriptive sentence has 28 words (limit 25): incompatible outcomes; mixed effect metrics without conversion; missin..."
+    },
+    {
+     "rule": "R1",
+     "line": 150,
+     "severity": "error",
+     "message": "instruction sentence has 22 words (limit 20): Use code when the user wants to learn from a strong article, especiall..."
+    },
+    {
+     "rule": "R1",
+     "line": 154,
+     "severity": "error",
+     "message": "descriptive sentence has 38 words (limit 25): file and repository inventory; data table structure; effect-size and u..."
+    },
+    {
+     "rule": "R3",
+     "line": 178,
+     "severity": "error",
+     "message": "paragraph has 11 sentences (limit 6)"
+    },
+    {
+     "rule": "R1",
+     "line": 178,
+     "severity": "error",
+     "message": "instruction sentence has 22 words (limit 20): Do not treat the minimal R script as a full meta-analysis pipeline; it..."
+    },
+    {
+     "rule": "R1",
+     "line": 178,
+     "severity": "error",
+     "message": "instruction sentence has 23 words (limit 20): Do not call a project a mega-analysis unless raw, participant-level, s..."
+    },
+    {
+     "rule": "R2",
+     "line": 178,
+     "severity": "error",
+     "message": "two instructions in one sentence: Do not call a project a mega-analysis unless raw, participant-level, s"
+    },
+    {
+     "rule": "R6",
+     "line": 178,
+     "severity": "error",
+     "message": "possible passive voice 'are reprocessed'"
+    },
+    {
+     "rule": "R1",
+     "line": 178,
+     "severity": "error",
+     "message": "instruction sentence has 22 words (limit 20): Do not call a high-value paper reproducible until its public code/data..."
+    },
+    {
+     "rule": "R6",
+     "line": 178,
+     "severity": "error",
+     "message": "possible passive voice 'been inspected'"
+    }
+   ],
+   "warnings": []
+  },
+  "skills/meta-analysis/SKILL.md": {
+   "stats": {
+    "sentences": 76,
+    "words": 927,
+    "lines": 158,
+    "diagnostics": {
+     "noun_cluster_max": 9
+    }
+   },
+   "errors": [
+    {
+     "rule": "R6",
+     "line": 13,
+     "severity": "error",
+     "message": "possible passive voice 'be pooled'"
+    },
+    {
+     "rule": "R1",
+     "line": 19,
+     "severity": "error",
+     "message": "descriptive sentence has 29 words (limit 25): \"meta-analysis\", \"pool the studies\", \"combine effect sizes\", \"forest p..."
+    },
+    {
+     "rule": "R1",
+     "line": 25,
+     "severity": "error",
+     "message": "descriptive sentence has 27 words (limit 25): But when you need to locate studies *for* a pooling question, or to ch..."
+    },
+    {
+     "rule": "R3",
+     "line": 29,
+     "severity": "error",
+     "message": "paragraph has 9 sentences (limit 6)"
+    },
+    {
+     "rule": "R1",
+     "line": 29,
+     "severity": "error",
+     "message": "descriptive sentence has 31 words (limit 25): These are not   optional for a meta-analysis: a registered trial that ..."
+    },
+    {
+     "rule": "R2",
+     "line": 41,
+     "severity": "error",
+     "message": "two instructions in one sentence: Record every source searched and its hit count (code); code fails a se"
+    },
+    {
+     "rule": "R3",
+     "line": 50,
+     "severity": "error",
+     "message": "paragraph has 8 sentences (limit 6)"
+    },
+    {
+     "rule": "R1",
+     "line": 64,
+     "severity": "error",
+     "message": "descriptive sentence has 71 words (limit 25): | Step | What | Owner | |---|---|---| | 1 | Effect-size family + conve..."
+    },
+    {
+     "rule": "R8",
+     "line": 64,
+     "severity": "error",
+     "message": "abbreviation 'ROBINS' is used 2 times and never defined"
+    },
+    {
+     "rule": "R8",
+     "line": 64,
+     "severity": "error",
+     "message": "abbreviation 'GRADE' is used 2 times and never defined"
+    },
+    {
+     "rule": "R3",
+     "line": 77,
+     "severity": "error",
+     "message": "paragraph has 9 sentences (limit 6)"
+    },
+    {
+     "rule": "R1",
+     "line": 77,
+     "severity": "error",
+     "message": "descriptive sentence has 33 words (limit 25): **Never choose the model by \"is I\u00b2 significant\".** Model choice follow..."
+    },
+    {
+     "rule": "R8",
+     "line": 77,
+     "severity": "error",
+     "message": "abbreviation 'CI' is used 2 times and never defined"
+    },
+    {
+     "rule": "R8",
+     "line": 77,
+     "severity": "error",
+     "message": "abbreviation 'REML' is used 2 times and never defined"
+    },
+    {
+     "rule": "R3",
+     "line": 99,
+     "severity": "error",
+     "message": "paragraph has 9 sentences (limit 6)"
+    },
+    {
+     "rule": "R8",
+     "line": 99,
+     "severity": "error",
+     "message": "abbreviation 'ML' is used 2 times and never defined"
+    },
+    {
+     "rule": "R3",
+     "line": 116,
+     "severity": "error",
+     "message": "paragraph has 14 sentences (limit 6)"
+    },
+    {
+     "rule": "R8",
+     "line": 116,
+     "severity": "error",
+     "message": "abbreviation 'CR2' is used here but defined on line 117"
+    },
+    {
+     "rule": "R6",
+     "line": 116,
+     "severity": "error",
+     "message": "possible passive voice 'is computed'"
+    },
+    {
+     "rule": "R6",
+     "line": 116,
+     "severity": "error",
+     "message": "possible passive voice 'is typed'"
+    },
+    {
+     "rule": "R1",
+     "line": 116,
+     "severity": "error",
+     "message": "descriptive sentence has 33 words (limit 25): code \u2014 **the proof of accuracy.** Reproduces   metafor's canonical dat..."
+    },
+    {
+     "rule": "R6",
+     "line": 139,
+     "severity": "error",
+     "message": "possible passive voice 'is reported'"
+    },
+    {
+     "rule": "R2",
+     "line": 147,
+     "severity": "error",
+     "message": "two instructions in one sentence: Do not pool incompatible outcomes/estimands; do not silently convert a"
+    },
+    {
+     "rule": "R9",
+     "line": 147,
+     "severity": "error",
+     "message": "use 'about' instead of 'approximately'"
+    },
+    {
+     "rule": "R6",
+     "line": 147,
+     "severity": "error",
+     "message": "possible passive voice 'be presented'"
+    },
+    {
+     "rule": "R8",
+     "line": 156,
+     "severity": "error",
+     "message": "abbreviation 'MIT' is used here but defined on line 158"
+    }
+   ],
+   "warnings": [
+    {
+     "rule": "R10",
+     "line": 147,
+     "severity": "warning",
+     "message": "three or more instructions in one sentence; use a vertical list"
+    }
+   ]
+  },
+  "skills/meta-ml-screener/SKILL.md": {
+   "stats": {
+    "sentences": 28,
+    "words": 234,
+    "lines": 90,
+    "diagnostics": {
+     "noun_cluster_max": 18
+    }
+   },
+   "errors": [
+    {
+     "rule": "R8",
+     "line": 12,
+     "severity": "error",
+     "message": "abbreviation 'ML' is used 7 times and never defined"
+    },
+    {
+     "rule": "R3",
+     "line": 41,
+     "severity": "error",
+     "message": "paragraph has 9 sentences (limit 6)"
+    },
+    {
+     "rule": "R6",
+     "line": 85,
+     "severity": "error",
+     "message": "possible passive voice 'is validated'"
+    },
+    {
+     "rule": "R6",
+     "line": 85,
+     "severity": "error",
+     "message": "possible passive voice 'are recorded'"
+    }
+   ],
+   "warnings": []
+  },
+  "skills/originality-check/SKILL.md": {
+   "stats": {
+    "sentences": 53,
+    "words": 989,
+    "lines": 174,
+    "diagnostics": {
+     "noun_cluster_max": 10
+    }
+   },
+   "errors": [
+    {
+     "rule": "R3",
+     "line": 18,
+     "severity": "error",
+     "message": "paragraph has 7 sentences (limit 6)"
+    },
+    {
+     "rule": "R1",
+     "line": 18,
+     "severity": "error",
+     "message": "instruction sentence has 21 words (limit 20): Pass code to cover the sources you actually have: that closes the gap ..."
+    },
+    {
+     "rule": "R1",
+     "line": 37,
+     "severity": "error",
+     "message": "descriptive sentence has 141 words (limit 25): | ORI guideline | Status here | |---|---| | G2 \u2014 verbatim text must be..."
+    },
+    {
+     "rule": "R1",
+     "line": 48,
+     "severity": "error",
+     "message": "descriptive sentence has 31 words (limit 25): **G4 (structure) is a known limitation.** Swapping every content word ..."
+    },
+    {
+     "rule": "R1",
+     "line": 48,
+     "severity": "error",
+     "message": "descriptive sentence has 37 words (limit 25): Two stdlib-only frame measures were tried and neither separates that c..."
+    },
+    {
+     "rule": "R6",
+     "line": 48,
+     "severity": "error",
+     "message": "possible passive voice 'were tried'"
+    },
+    {
+     "rule": "R6",
+     "line": 48,
+     "severity": "error",
+     "message": "possible passive voice 'is reported'"
+    },
+    {
+     "rule": "R1",
+     "line": 68,
+     "severity": "error",
+     "message": "descriptive sentence has 51 words (limit 25): | Module | Purpose | |---|---| | code | the checker (accepts code, cod..."
+    },
+    {
+     "rule": "R1",
+     "line": 88,
+     "severity": "error",
+     "message": "descriptive sentence has 31 words (limit 25): If **no** document in the corpus could be read, the report prints **no..."
+    },
+    {
+     "rule": "R6",
+     "line": 88,
+     "severity": "error",
+     "message": "possible passive voice 'be determined'"
+    },
+    {
+     "rule": "R1",
+     "line": 88,
+     "severity": "error",
+     "message": "descriptive sentence has 37 words (limit 25): code exits code while still recording the gap, and code re-reads only ..."
+    },
+    {
+     "rule": "R1",
+     "line": 95,
+     "severity": "error",
+     "message": "descriptive sentence has 35 words (limit 25): The same rule applies to the API sources: code reports code / code / c..."
+    },
+    {
+     "rule": "R3",
+     "line": 128,
+     "severity": "error",
+     "message": "paragraph has 8 sentences (limit 6)"
+    },
+    {
+     "rule": "R6",
+     "line": 128,
+     "severity": "error",
+     "message": "possible passive voice 'is warranted'"
+    },
+    {
+     "rule": "R6",
+     "line": 128,
+     "severity": "error",
+     "message": "possible passive voice 'are suppressed'"
+    },
+    {
+     "rule": "R6",
+     "line": 128,
+     "severity": "error",
+     "message": "possible passive voice 'is unrelated'"
+    },
+    {
+     "rule": "R6",
+     "line": 146,
+     "severity": "error",
+     "message": "possible passive voice 'is often'"
+    },
+    {
+     "rule": "R3",
+     "line": 156,
+     "severity": "error",
+     "message": "paragraph has 7 sentences (limit 6)"
+    },
+    {
+     "rule": "R6",
+     "line": 156,
+     "severity": "error",
+     "message": "possible passive voice 'is installed'"
+    },
+    {
+     "rule": "R6",
+     "line": 156,
+     "severity": "error",
+     "message": "possible passive voice 'is added'"
+    },
+    {
+     "rule": "R6",
+     "line": 156,
+     "severity": "error",
+     "message": "possible passive voice 'is reported'"
+    },
+    {
+     "rule": "R1",
+     "line": 156,
+     "severity": "error",
+     "message": "instruction sentence has 24 words (limit 20): Report the corpus size alongside any result: \"no overlap against N sup..."
+    }
+   ],
+   "warnings": [
+    {
+     "rule": "R10",
+     "line": 65,
+     "severity": "warning",
+     "message": "three or more instructions in one sentence; use a vertical list"
+    }
+   ]
+  },
+  "skills/paper-search/SKILL.md": {
+   "stats": {
+    "sentences": 188,
+    "words": 4491,
+    "lines": 501,
+    "diagnostics": {
+     "noun_cluster_max": 30
+    }
+   },
+   "errors": [
+    {
+     "rule": "R1",
+     "line": 14,
+     "severity": "error",
+     "message": "instruction sentence has 32 words (limit 20): Search and retrieve academic literature with a **free-first** policy: ..."
+    },
+    {
+     "rule": "R3",
+     "line": 20,
+     "severity": "error",
+     "message": "paragraph has 40 sentences (limit 6)"
+    },
+    {
+     "rule": "R1",
+     "line": 20,
+     "severity": "error",
+     "message": "descriptive sentence has 309 words (limit 25): **MCP server code** (preferred inside Cline) \u2014 87 tools exposed direct..."
+    },
+    {
+     "rule": "R6",
+     "line": 20,
+     "severity": "error",
+     "message": "possible passive voice 'are filtered'"
+    },
+    {
+     "rule": "R6",
+     "line": 20,
+     "severity": "error",
+     "message": "possible passive voice 'be resolved'"
+    },
+    {
+     "rule": "R6",
+     "line": 20,
+     "severity": "error",
+     "message": "possible passive voice 'are reported'"
+    },
+    {
+     "rule": "R8",
+     "line": 20,
+     "severity": "error",
+     "message": "abbreviation 'NCBI' is used 17 times and never defined"
+    },
+    {
+     "rule": "R8",
+     "line": 20,
+     "severity": "error",
+     "message": "abbreviation 'WHO' is used here but defined on line 411"
+    },
+    {
+     "rule": "R8",
+     "line": 20,
+     "severity": "error",
+     "message": "abbreviation 'JATS' is used 8 times and never defined"
+    },
+    {
+     "rule": "R8",
+     "line": 20,
+     "severity": "error",
+     "message": "abbreviation 'OA' is used 7 times and never defined"
+    },
+    {
+     "rule": "R1",
+     "line": 20,
+     "severity": "error",
+     "message": "descriptive sentence has 29 words (limit 25): 12 tools, all PubMed/NCBI:    code, code, code, **code**    (NCBI elin..."
+    },
+    {
+     "rule": "R1",
+     "line": 20,
+     "severity": "error",
+     "message": "descriptive sentence has 31 words (limit 25): **Prefer our code tools for**: everything else \u2014 its output is the raw..."
+    },
+    {
+     "rule": "R1",
+     "line": 20,
+     "severity": "error",
+     "message": "descriptive sentence has 26 words (limit 25): One tool: **code** over **220M peer-reviewed papers**    (semantic sea..."
+    },
+    {
+     "rule": "R1",
+     "line": 20,
+     "severity": "error",
+     "message": "descriptive sentence has 31 words (limit 25): **Prefer it for**: \"what does the literature conclude\" questions, evid..."
+    },
+    {
+     "rule": "R6",
+     "line": 20,
+     "severity": "error",
+     "message": "possible passive voice 'are then'"
+    },
+    {
+     "rule": "R8",
+     "line": 20,
+     "severity": "error",
+     "message": "abbreviation 'MIT' is used here but defined on line 103"
+    },
+    {
+     "rule": "R1",
+     "line": 20,
+     "severity": "error",
+     "message": "descriptive sentence has 44 words (limit 25): code walks the Semantic Scholar      citation graph step by step with ..."
+    },
+    {
+     "rule": "R1",
+     "line": 20,
+     "severity": "error",
+     "message": "descriptive sentence has 31 words (limit 25): **Coverage added: none.** Its four providers \u2014 Semantic Scholar, Cross..."
+    },
+    {
+     "rule": "R1",
+     "line": 20,
+     "severity": "error",
+     "message": "descriptive sentence has 32 words (limit 25): Measured consequences: OpenAlex code on all 3      retries, Semantic S..."
+    },
+    {
+     "rule": "R1",
+     "line": 20,
+     "severity": "error",
+     "message": "descriptive sentence has 36 words (limit 25): **2 tools**: code \u2014 Google Scholar search with Scholar's own      oper..."
+    },
+    {
+     "rule": "R1",
+     "line": 20,
+     "severity": "error",
+     "message": "descriptive sentence has 34 words (limit 25): Direct Google      Scholar scraping is still blocked here (403/no-prox..."
+    },
+    {
+     "rule": "R1",
+     "line": 20,
+     "severity": "error",
+     "message": "descriptive sentence has 31 words (limit 25): Coverage it adds over the 28 sources: theses, books, conference      s..."
+    },
+    {
+     "rule": "R6",
+     "line": 20,
+     "severity": "error",
+     "message": "possible passive voice 'is unauthenticated'"
+    },
+    {
+     "rule": "R1",
+     "line": 20,
+     "severity": "error",
+     "message": "descriptive sentence has 30 words (limit 25): **Accuracy caveat**: Scholar is *broader*, not *more precise* \u2014 it exp..."
+    },
+    {
+     "rule": "R6",
+     "line": 20,
+     "severity": "error",
+     "message": "possible passive voice 'are inflated'"
+    },
+    {
+     "rule": "R2",
+     "line": 20,
+     "severity": "error",
+     "message": "two instructions in one sentence: Use it for recall and cited-by discovery; keep trusting the Tier-2 lad"
+    },
+    {
+     "rule": "R1",
+     "line": 145,
+     "severity": "error",
+     "message": "descriptive sentence has 26 words (limit 25): | Need | Use | |---|---| | Physics / math / CS preprints | code | | Bi..."
+    },
+    {
+     "rule": "R1",
+     "line": 145,
+     "severity": "error",
+     "message": "descriptive sentence has 151 words (limit 25): ISRCTN, ChiCTR, CTRI, JPRN), **code** (EU, mandatory since 2022) | | *..."
+    },
+    {
+     "rule": "R6",
+     "line": 145,
+     "severity": "error",
+     "message": "possible passive voice 'are retired'"
+    },
+    {
+     "rule": "R6",
+     "line": 145,
+     "severity": "error",
+     "message": "possible passive voice 'is retired'"
+    },
+    {
+     "rule": "R8",
+     "line": 145,
+     "severity": "error",
+     "message": "abbreviation 'ISRCTN' is used 3 times and never defined"
+    },
+    {
+     "rule": "R8",
+     "line": 145,
+     "severity": "error",
+     "message": "abbreviation 'CTRI' is used 2 times and never defined"
+    },
+    {
+     "rule": "R8",
+     "line": 145,
+     "severity": "error",
+     "message": "abbreviation 'JPRN' is used 2 times and never defined"
+    },
+    {
+     "rule": "R8",
+     "line": 145,
+     "severity": "error",
+     "message": "abbreviation 'EU' is used here but defined on line 411"
+    },
+    {
+     "rule": "R8",
+     "line": 145,
+     "severity": "error",
+     "message": "abbreviation 'NCI' is used 2 times and never defined"
+    },
+    {
+     "rule": "R8",
+     "line": 145,
+     "severity": "error",
+     "message": "abbreviation 'PDQ' is used 2 times and never defined"
+    },
+    {
+     "rule": "R3",
+     "line": 168,
+     "severity": "error",
+     "message": "paragraph has 14 sentences (limit 6)"
+    },
+    {
+     "rule": "R2",
+     "line": 168,
+     "severity": "error",
+     "message": "two instructions in one sentence: **Plan, then search.** For anything beyond a quick lookup, call code f"
+    },
+    {
+     "rule": "R1",
+     "line": 168,
+     "severity": "error",
+     "message": "instruction sentence has 27 words (limit 20): **Read code before concluding anything.** code = answered with hits, c..."
+    },
+    {
+     "rule": "R6",
+     "line": 168,
+     "severity": "error",
+     "message": "possible passive voice 'be reached'"
+    },
+    {
+     "rule": "R4",
+     "line": 168,
+     "severity": "error",
+     "message": "contraction: **Rank, don't just list.** Hits carry code, code    (high/me"
+    },
+    {
+     "rule": "R1",
+     "line": 189,
+     "severity": "error",
+     "message": "descriptive sentence has 30 words (limit 25): > **Behaviour:** the tiers below describe the full request lifecycle \u2014..."
+    },
+    {
+     "rule": "R3",
+     "line": 193,
+     "severity": "error",
+     "message": "paragraph has 12 sentences (limit 6)"
+    },
+    {
+     "rule": "R6",
+     "line": 193,
+     "severity": "error",
+     "message": "possible passive voice 'is honoured'"
+    },
+    {
+     "rule": "R1",
+     "line": 193,
+     "severity": "error",
+     "message": "descriptive sentence has 38 words (limit 25): **Tier 2 \u2014 field-scoped query ladders.** Each search runs most-precise..."
+    },
+    {
+     "rule": "R1",
+     "line": 193,
+     "severity": "error",
+     "message": "descriptive sentence has 32 words (limit 25): Measured effect: OpenAlex loose   search matched 196,342 works with a ..."
+    },
+    {
+     "rule": "R1",
+     "line": 193,
+     "severity": "error",
+     "message": "descriptive sentence has 31 words (limit 25): **Tier 3 \u2014 relevance ranking.** Every merged hit is scored against the..."
+    },
+    {
+     "rule": "R6",
+     "line": 193,
+     "severity": "error",
+     "message": "possible passive voice 'is scored'"
+    },
+    {
+     "rule": "R1",
+     "line": 193,
+     "severity": "error",
+     "message": "descriptive sentence has 28 words (limit 25): **Tier 4 \u2014 query planning.** code returns a phrase \u2192 all-terms \u2192   mor..."
+    },
+    {
+     "rule": "R1",
+     "line": 193,
+     "severity": "error",
+     "message": "descriptive sentence has 29 words (limit 25): Routing   re-orders effort and **never drops a source** \u2014 the tail mat..."
+    },
+    {
+     "rule": "R3",
+     "line": 224,
+     "severity": "error",
+     "message": "paragraph has 10 sentences (limit 6)"
+    },
+    {
+     "rule": "R6",
+     "line": 224,
+     "severity": "error",
+     "message": "possible passive voice 'is skipped'"
+    },
+    {
+     "rule": "R1",
+     "line": 224,
+     "severity": "error",
+     "message": "descriptive sentence has 28 words (limit 25): **IEEE/ACM keys do nothing today.** Both connectors (code,   code) are..."
+    },
+    {
+     "rule": "R3",
+     "line": 242,
+     "severity": "error",
+     "message": "paragraph has 7 sentences (limit 6)"
+    },
+    {
+     "rule": "R6",
+     "line": 242,
+     "severity": "error",
+     "message": "possible passive voice 'is attempted'"
+    },
+    {
+     "rule": "R1",
+     "line": 242,
+     "severity": "error",
+     "message": "descriptive sentence has 28 words (limit 25): (The per-source code tools never do this.) Sci-Hub is currently   unre..."
+    },
+    {
+     "rule": "R6",
+     "line": 242,
+     "severity": "error",
+     "message": "possible passive voice 'are untrusted'"
+    },
+    {
+     "rule": "R3",
+     "line": 254,
+     "severity": "error",
+     "message": "paragraph has 16 sentences (limit 6)"
+    },
+    {
+     "rule": "R1",
+     "line": 254,
+     "severity": "error",
+     "message": "descriptive sentence has 43 words (limit 25): **Tier 7 \u2014 \"HTTP 200, but not an answer\".** The worst failure class is..."
+    },
+    {
+     "rule": "R6",
+     "line": 254,
+     "severity": "error",
+     "message": "possible passive voice 'is reported'"
+    },
+    {
+     "rule": "R1",
+     "line": 254,
+     "severity": "error",
+     "message": "descriptive sentence has 32 words (limit 25): Now detected and raised:   bot-wall/challenge pages (any code / \"check..."
+    },
+    {
+     "rule": "R1",
+     "line": 254,
+     "severity": "error",
+     "message": "descriptive sentence has 32 words (limit 25): Measured examples: Bookshelf's code answers 200 with   \"<title>Checkin..."
+    },
+    {
+     "rule": "R1",
+     "line": 254,
+     "severity": "error",
+     "message": "descriptive sentence has 35 words (limit 25): **Fan-out is bounded.** Every source runs under a per-source wall-cloc..."
+    },
+    {
+     "rule": "R6",
+     "line": 254,
+     "severity": "error",
+     "message": "possible passive voice 'is bounded'"
+    },
+    {
+     "rule": "R1",
+     "line": 254,
+     "severity": "error",
+     "message": "descriptive sentence has 26 words (limit 25): **code is never proof of absence.** Timed-out and failed sources appea..."
+    },
+    {
+     "rule": "R1",
+     "line": 254,
+     "severity": "error",
+     "message": "descriptive sentence has 48 words (limit 25): **Preprint full text comes from JATS XML, not the PDF.** code /   code..."
+    },
+    {
+     "rule": "R6",
+     "line": 254,
+     "severity": "error",
+     "message": "possible passive voice 'is stripped'"
+    },
+    {
+     "rule": "R1",
+     "line": 254,
+     "severity": "error",
+     "message": "descriptive sentence has 41 words (limit 25): **Tier 8 \u2014 DOI-verified citation export with retraction flags.** code ..."
+    },
+    {
+     "rule": "R6",
+     "line": 254,
+     "severity": "error",
+     "message": "possible passive voice 'is checked'"
+    },
+    {
+     "rule": "R6",
+     "line": 254,
+     "severity": "error",
+     "message": "possible passive voice 'is marked'"
+    },
+    {
+     "rule": "R1",
+     "line": 254,
+     "severity": "error",
+     "message": "descriptive sentence has 30 words (limit 25): Unresolved DOIs appear in code \u2014 verified: a bogus DOI is reported as ..."
+    },
+    {
+     "rule": "R6",
+     "line": 254,
+     "severity": "error",
+     "message": "possible passive voice 'is reported'"
+    },
+    {
+     "rule": "R1",
+     "line": 254,
+     "severity": "error",
+     "message": "descriptive sentence has 44 words (limit 25): **Tier 9 \u2014 DOI-shaped queries are resolved, not fuzzy-matched.** When ..."
+    },
+    {
+     "rule": "R6",
+     "line": 254,
+     "severity": "error",
+     "message": "possible passive voice 'are resolved'"
+    },
+    {
+     "rule": "R1",
+     "line": 299,
+     "severity": "error",
+     "message": "instruction sentence has 30 words (limit 20): **Restart the MCP client after re-applying.** A long-lived server proc..."
+    },
+    {
+     "rule": "R3",
+     "line": 302,
+     "severity": "error",
+     "message": "paragraph has 34 sentences (limit 6)"
+    },
+    {
+     "rule": "R2",
+     "line": 302,
+     "severity": "error",
+     "message": "two instructions in one sentence: Call code first (25   bioRxiv / 51 medRxiv values; case and code/code "
+    },
+    {
+     "rule": "R6",
+     "line": 302,
+     "severity": "error",
+     "message": "possible passive voice 'are tolerated'"
+    },
+    {
+     "rule": "R1",
+     "line": 302,
+     "severity": "error",
+     "message": "descriptive sentence has 40 words (limit 25): The filter is   applied by the listing API and then **verified against..."
+    },
+    {
+     "rule": "R6",
+     "line": 302,
+     "severity": "error",
+     "message": "possible passive voice 'is   applied'"
+    },
+    {
+     "rule": "R1",
+     "line": 302,
+     "severity": "error",
+     "message": "descriptive sentence has 53 words (limit 25): **code / code now prefer JATS XML, not the PDF.** The listing   API ex..."
+    },
+    {
+     "rule": "R6",
+     "line": 302,
+     "severity": "error",
+     "message": "possible passive voice 'is stripped'"
+    },
+    {
+     "rule": "R1",
+     "line": 302,
+     "severity": "error",
+     "message": "descriptive sentence has 38 words (limit 25): **code PDFs cannot be downloaded** (medrxiv.org answers every content/..."
+    },
+    {
+     "rule": "R6",
+     "line": 302,
+     "severity": "error",
+     "message": "possible passive voice 'be downloaded'"
+    },
+    {
+     "rule": "R1",
+     "line": 302,
+     "severity": "error",
+     "message": "descriptive sentence has 26 words (limit 25): **NCBI Bookshelf full text is bot-walled, intermittently.** code frequ..."
+    },
+    {
+     "rule": "R1",
+     "line": 302,
+     "severity": "error",
+     "message": "descriptive sentence has 43 words (limit 25): To cite one specific table \u2014 e.g. the repeat-size thresholds in a   Ge..."
+    },
+    {
+     "rule": "R1",
+     "line": 302,
+     "severity": "error",
+     "message": "descriptive sentence has 38 words (limit 25): **Springer Nature (code) \u2014 added as source #28.** Two official APIs, a..."
+    },
+    {
+     "rule": "R1",
+     "line": 302,
+     "severity": "error",
+     "message": "descriptive sentence has 29 words (limit 25): Both free-plan limits are enforced inside the connector \u2014 **500 hits/d..."
+    },
+    {
+     "rule": "R6",
+     "line": 302,
+     "severity": "error",
+     "message": "possible passive voice 'are enforced'"
+    },
+    {
+     "rule": "R1",
+     "line": 302,
+     "severity": "error",
+     "message": "descriptive sentence has 55 words (limit 25): **Elsevier (code) \u2014 added as source #29.** A free key covers the Scopu..."
+    },
+    {
+     "rule": "R1",
+     "line": 302,
+     "severity": "error",
+     "message": "descriptive sentence has 39 words (limit 25): **Both are registered only when their key is present.** With no key th..."
+    },
+    {
+     "rule": "R6",
+     "line": 302,
+     "severity": "error",
+     "message": "possible passive voice 'are registered'"
+    },
+    {
+     "rule": "R8",
+     "line": 302,
+     "severity": "error",
+     "message": "abbreviation 'UA' is used 2 times and never defined"
+    },
+    {
+     "rule": "R8",
+     "line": 302,
+     "severity": "error",
+     "message": "abbreviation 'SSRN' is used 3 times and never defined"
+    },
+    {
+     "rule": "R1",
+     "line": 366,
+     "severity": "error",
+     "message": "descriptive sentence has 32 words (limit 25): code (API v2, free, no key) is a **trial registry**, not a bibliograph..."
+    },
+    {
+     "rule": "R6",
+     "line": 366,
+     "severity": "error",
+     "message": "possible passive voice 'been posted'"
+    },
+    {
+     "rule": "R1",
+     "line": 376,
+     "severity": "error",
+     "message": "descriptive sentence has 37 words (limit 25): **No client-side term filter** \u2014 the registry search is AND-based and ..."
+    },
+    {
+     "rule": "R1",
+     "line": 386,
+     "severity": "error",
+     "message": "descriptive sentence has 40 words (limit 25): **Citation and vocabulary tools** (both use your NCBI key): code walks..."
+    },
+    {
+     "rule": "R1",
+     "line": 404,
+     "severity": "error",
+     "message": "descriptive sentence has 46 words (limit 25): Two caveats, stated plainly: in-book **tables and figures are filtered..."
+    },
+    {
+     "rule": "R6",
+     "line": 404,
+     "severity": "error",
+     "message": "possible passive voice 'are filtered'"
+    },
+    {
+     "rule": "R6",
+     "line": 404,
+     "severity": "error",
+     "message": "possible passive voice 'is preserved'"
+    },
+    {
+     "rule": "R1",
+     "line": 413,
+     "severity": "error",
+     "message": "descriptive sentence has 38 words (limit 25): They are now working sources \u2014 the unlock was driving a **real browser..."
+    },
+    {
+     "rule": "R1",
+     "line": 418,
+     "severity": "error",
+     "message": "descriptive sentence has 72 words (limit 25): | Source | What it adds | Verified | |---|---|---| | **code** (#26) | ..."
+    },
+    {
+     "rule": "R8",
+     "line": 418,
+     "severity": "error",
+     "message": "abbreviation 'DRKS' is used 2 times and never defined"
+    },
+    {
+     "rule": "R8",
+     "line": 418,
+     "severity": "error",
+     "message": "abbreviation 'ANZCTR' is used 2 times and never defined"
+    },
+    {
+     "rule": "R6",
+     "line": 423,
+     "severity": "error",
+     "message": "possible passive voice 'was unlocked'"
+    },
+    {
+     "rule": "R3",
+     "line": 425,
+     "severity": "error",
+     "message": "paragraph has 9 sentences (limit 6)"
+    },
+    {
+     "rule": "R8",
+     "line": 425,
+     "severity": "error",
+     "message": "abbreviation 'ICTRP' is used 3 times and never defined"
+    },
+    {
+     "rule": "R1",
+     "line": 425,
+     "severity": "error",
+     "message": "descriptive sentence has 62 words (limit 25): Three traps, all measured: (1) the visible search box is   code, **not..."
+    },
+    {
+     "rule": "R1",
+     "line": 425,
+     "severity": "error",
+     "message": "descriptive sentence has 42 words (limit 25): Results are now parsed   only from a page that announces code, and the..."
+    },
+    {
+     "rule": "R1",
+     "line": 425,
+     "severity": "error",
+     "message": "descriptive sentence has 30 words (limit 25): **The trap was code, which is 1-BASED** \u2014 with code the endpoint answe..."
+    },
+    {
+     "rule": "R1",
+     "line": 451,
+     "severity": "error",
+     "message": "descriptive sentence has 163 words (limit 25): | Source | Search (real / garbage) | PDF download | Notes | |---|---|-..."
+    },
+    {
+     "rule": "R8",
+     "line": 451,
+     "severity": "error",
+     "message": "abbreviation 'SHARE' is used 2 times and never defined"
+    },
+    {
+     "rule": "R6",
+     "line": 462,
+     "severity": "error",
+     "message": "possible passive voice 'are followed'"
+    },
+    {
+     "rule": "R1",
+     "line": 466,
+     "severity": "error",
+     "message": "descriptive sentence has 36 words (limit 25): Rejected after testing (do not add): code (its code is ignored \u2014 retur..."
+    },
+    {
+     "rule": "R6",
+     "line": 466,
+     "severity": "error",
+     "message": "possible passive voice 'is ignored'"
+    },
+    {
+     "rule": "R1",
+     "line": 472,
+     "severity": "error",
+     "message": "descriptive sentence has 28 words (limit 25): code, code, code and code are **removed** from both the CLI source lis..."
+    },
+    {
+     "rule": "R6",
+     "line": 472,
+     "severity": "error",
+     "message": "possible passive voice 'are broken'"
+    },
+    {
+     "rule": "R1",
+     "line": 475,
+     "severity": "error",
+     "message": "descriptive sentence has 38 words (limit 25): | Source | Why retired | |---|---| | code | Service retired \u2014 the host..."
+    },
+    {
+     "rule": "R1",
+     "line": 482,
+     "severity": "error",
+     "message": "descriptive sentence has 38 words (limit 25): Consequences: code and code both resolve to the **same 28** active sou..."
+    },
+    {
+     "rule": "R6",
+     "line": 482,
+     "severity": "error",
+     "message": "possible passive voice 'is skipped'"
+    },
+    {
+     "rule": "R6",
+     "line": 482,
+     "severity": "error",
+     "message": "possible passive voice 'being searched'"
+    },
+    {
+     "rule": "R1",
+     "line": 489,
+     "severity": "error",
+     "message": "descriptive sentence has 56 words (limit 25): Two long-standing fan-out defects were also fixed here: code had accum..."
+    },
+    {
+     "rule": "R6",
+     "line": 489,
+     "severity": "error",
+     "message": "possible passive voice 'were queried'"
+    },
+    {
+     "rule": "R1",
+     "line": 489,
+     "severity": "error",
+     "message": "descriptive sentence has 28 words (limit 25): code was wired into the server but missing from the CLI registry, so t..."
+    },
+    {
+     "rule": "R6",
+     "line": 489,
+     "severity": "error",
+     "message": "possible passive voice 'was wired'"
+    }
+   ],
+   "warnings": [
+    {
+     "rule": "R10",
+     "line": 20,
+     "severity": "warning",
+     "message": "three or more instructions in one sentence; use a vertical list"
+    },
+    {
+     "rule": "R10",
+     "line": 242,
+     "severity": "warning",
+     "message": "three or more instructions in one sentence; use a vertical list"
+    },
+    {
+     "rule": "R10",
+     "line": 299,
+     "severity": "warning",
+     "message": "three or more instructions in one sentence; use a vertical list"
+    }
+   ]
+  },
+  "skills/sysreview/SKILL.md": {
+   "stats": {
+    "sentences": 96,
+    "words": 1730,
+    "lines": 248,
+    "diagnostics": {
+     "noun_cluster_max": 13
+    }
+   },
+   "errors": [
+    {
+     "rule": "R1",
+     "line": 13,
+     "severity": "error",
+     "message": "descriptive sentence has 29 words (limit 25): It does not reimplement review methodology; it **sequences** the insta..."
+    },
+    {
+     "rule": "R1",
+     "line": 20,
+     "severity": "error",
+     "message": "descriptive sentence has 27 words (limit 25): \"systematic review\", \"SLR\", \"PRISMA\", \"PRISMA 2020\", \"scoping review\",..."
+    },
+    {
+     "rule": "R8",
+     "line": 20,
+     "severity": "error",
+     "message": "abbreviation 'PRISMA' is used 20 times and never defined"
+    },
+    {
+     "rule": "R1",
+     "line": 28,
+     "severity": "error",
+     "message": "descriptive sentence has 31 words (limit 25): | Mode | How a gate is approved | Use for | |---|---|---| | **AUTONOMO..."
+    },
+    {
+     "rule": "R6",
+     "line": 28,
+     "severity": "error",
+     "message": "possible passive voice 'is approved'"
+    },
+    {
+     "rule": "R6",
+     "line": 28,
+     "severity": "error",
+     "message": "possible passive voice 'be reported'"
+    },
+    {
+     "rule": "R1",
+     "line": 33,
+     "severity": "error",
+     "message": "instruction sentence has 24 words (limit 20): Ask which mode is wanted at Stage 0, but **do not block on the answer*..."
+    },
+    {
+     "rule": "R6",
+     "line": 33,
+     "severity": "error",
+     "message": "possible passive voice 'is wanted'"
+    },
+    {
+     "rule": "R1",
+     "line": 38,
+     "severity": "error",
+     "message": "descriptive sentence has 27 words (limit 25): MECIR's mandatory items require independent **human** screening, extra..."
+    },
+    {
+     "rule": "R8",
+     "line": 38,
+     "severity": "error",
+     "message": "abbreviation 'MECIR' is used 8 times and never defined"
+    },
+    {
+     "rule": "R6",
+     "line": 38,
+     "severity": "error",
+     "message": "possible passive voice 'be reported'"
+    },
+    {
+     "rule": "R1",
+     "line": 62,
+     "severity": "error",
+     "message": "descriptive sentence has 34 words (limit 25): These still fail loud and cannot be waived by the mode: citation resol..."
+    },
+    {
+     "rule": "R6",
+     "line": 62,
+     "severity": "error",
+     "message": "possible passive voice 'be waived'"
+    },
+    {
+     "rule": "R1",
+     "line": 70,
+     "severity": "error",
+     "message": "descriptive sentence has 38 words (limit 25): Borrowed in spirit from the code discipline: **never write a number, d..."
+    },
+    {
+     "rule": "R6",
+     "line": 70,
+     "severity": "error",
+     "message": "possible passive voice 'be checked'"
+    },
+    {
+     "rule": "R3",
+     "line": 74,
+     "severity": "error",
+     "message": "paragraph has 13 sentences (limit 6)"
+    },
+    {
+     "rule": "R1",
+     "line": 74,
+     "severity": "error",
+     "message": "descriptive sentence has 47 words (limit 25): This is enforced, not just asked for: when any logged source's    stat..."
+    },
+    {
+     "rule": "R6",
+     "line": 74,
+     "severity": "error",
+     "message": "possible passive voice 'is enforced'"
+    },
+    {
+     "rule": "R6",
+     "line": 74,
+     "severity": "error",
+     "message": "possible passive voice 'is then'"
+    },
+    {
+     "rule": "R1",
+     "line": 74,
+     "severity": "error",
+     "message": "descriptive sentence has 31 words (limit 25): Cross-artifact integrity is enforced by code     (code): reference-lis..."
+    },
+    {
+     "rule": "R6",
+     "line": 74,
+     "severity": "error",
+     "message": "possible passive voice 'is enforced'"
+    },
+    {
+     "rule": "R1",
+     "line": 99,
+     "severity": "error",
+     "message": "descriptive sentence has 141 words (limit 25): | # | Stage | Owner skill / tool | Gate (auto-resolved in autonomous m..."
+    },
+    {
+     "rule": "R8",
+     "line": 99,
+     "severity": "error",
+     "message": "abbreviation 'GRADE' is used 2 times and never defined"
+    },
+    {
+     "rule": "R3",
+     "line": 115,
+     "severity": "error",
+     "message": "paragraph has 12 sentences (limit 6)"
+    },
+    {
+     "rule": "R1",
+     "line": 115,
+     "severity": "error",
+     "message": "descriptive sentence has 36 words (limit 25): **A PubMed-only search is a single-source search, and the completeness..."
+    },
+    {
+     "rule": "R6",
+     "line": 115,
+     "severity": "error",
+     "message": "possible passive voice 'were registered'"
+    },
+    {
+     "rule": "R6",
+     "line": 115,
+     "severity": "error",
+     "message": "possible passive voice 'were   terminated'"
+    },
+    {
+     "rule": "R1",
+     "line": 115,
+     "severity": "error",
+     "message": "descriptive sentence has 31 words (limit 25): For the ventilatory-pneumonia question, the registry   search returned..."
+    },
+    {
+     "rule": "R6",
+     "line": 152,
+     "severity": "error",
+     "message": "possible passive voice 'is reported'"
+    },
+    {
+     "rule": "R3",
+     "line": 160,
+     "severity": "error",
+     "message": "paragraph has 9 sentences (limit 6)"
+    },
+    {
+     "rule": "R3",
+     "line": 184,
+     "severity": "error",
+     "message": "paragraph has 15 sentences (limit 6)"
+    },
+    {
+     "rule": "R6",
+     "line": 184,
+     "severity": "error",
+     "message": "possible passive voice 'be satisfied'"
+    },
+    {
+     "rule": "R6",
+     "line": 206,
+     "severity": "error",
+     "message": "possible passive voice 'be skipped'"
+    },
+    {
+     "rule": "R3",
+     "line": 208,
+     "severity": "error",
+     "message": "paragraph has 8 sentences (limit 6)"
+    },
+    {
+     "rule": "R1",
+     "line": 208,
+     "severity": "error",
+     "message": "descriptive sentence has 146 words (limit 25): | Gate | Script | Fails when | |---|---|---| | Toolchain | code | a co..."
+    },
+    {
+     "rule": "R6",
+     "line": 208,
+     "severity": "error",
+     "message": "possible passive voice 'is unresolved'"
+    },
+    {
+     "rule": "R1",
+     "line": 208,
+     "severity": "error",
+     "message": "descriptive sentence has 54 words (limit 25): Codes: R/C/C2/D/M/E/X/T/W/P | | Ledger completeness | code | the scree..."
+    },
+    {
+     "rule": "R6",
+     "line": 208,
+     "severity": "error",
+     "message": "possible passive voice 'was screened'"
+    },
+    {
+     "rule": "R1",
+     "line": 208,
+     "severity": "error",
+     "message": "descriptive sentence has 43 words (limit 25): **This is the gate that stops an incomplete review from passing on a p..."
+    },
+    {
+     "rule": "R6",
+     "line": 208,
+     "severity": "error",
+     "message": "possible passive voice 'is described'"
+    },
+    {
+     "rule": "R1",
+     "line": 208,
+     "severity": "error",
+     "message": "descriptive sentence has 65 words (limit 25): | | **Gate coverage** | code | any gate is exercised on only one path ..."
+    },
+    {
+     "rule": "R6",
+     "line": 208,
+     "severity": "error",
+     "message": "possible passive voice 'is exercised'"
+    },
+    {
+     "rule": "R1",
+     "line": 208,
+     "severity": "error",
+     "message": "descriptive sentence has 46 words (limit 25): | | Appraisal honesty | code | the Methods name a risk-of-bias tool bu..."
+    },
+    {
+     "rule": "R1",
+     "line": 226,
+     "severity": "error",
+     "message": "instruction sentence has 29 words (limit 20): Run the whole suite with code (16 sections; every gate is checked on b..."
+    },
+    {
+     "rule": "R2",
+     "line": 226,
+     "severity": "error",
+     "message": "two instructions in one sentence: Run the whole suite with code (16 sections; every gate is checked on b"
+    },
+    {
+     "rule": "R6",
+     "line": 226,
+     "severity": "error",
+     "message": "possible passive voice 'is checked'"
+    },
+    {
+     "rule": "R3",
+     "line": 231,
+     "severity": "error",
+     "message": "paragraph has 7 sentences (limit 6)"
+    },
+    {
+     "rule": "R1",
+     "line": 231,
+     "severity": "error",
+     "message": "instruction sentence has 21 words (limit 20): Emit the code block (above) on every autonomous output, and never labe..."
+    },
+    {
+     "rule": "R2",
+     "line": 231,
+     "severity": "error",
+     "message": "two instructions in one sentence: Do not let a classifier/LLM replace the authoritative screen; it is a "
+    },
+    {
+     "rule": "R1",
+     "line": 231,
+     "severity": "error",
+     "message": "instruction sentence has 47 words (limit 20): Do not claim \"identical results on re-run\" for AI-assisted steps; clai..."
+    },
+    {
+     "rule": "R2",
+     "line": 231,
+     "severity": "error",
+     "message": "two instructions in one sentence: Do not claim \"identical results on re-run\" for AI-assisted steps; clai"
+    },
+    {
+     "rule": "R6",
+     "line": 231,
+     "severity": "error",
+     "message": "possible passive voice 'is documented'"
+    },
+    {
+     "rule": "R8",
+     "line": 245,
+     "severity": "error",
+     "message": "abbreviation 'MIT' is used 4 times and never defined"
+    }
+   ],
+   "warnings": [
+    {
+     "rule": "R10",
+     "line": 33,
+     "severity": "warning",
+     "message": "three or more instructions in one sentence; use a vertical list"
+    },
+    {
+     "rule": "R10",
+     "line": 231,
+     "severity": "warning",
+     "message": "three or more instructions in one sentence; use a vertical list"
+    },
+    {
+     "rule": "R10",
+     "line": 231,
+     "severity": "warning",
+     "message": "three or more instructions in one sentence; use a vertical list"
+    }
+   ]
+  },
+  "skills/umbrella-review-skeptic/SKILL.md": {
+   "stats": {
+    "sentences": 34,
+    "words": 355,
+    "lines": 103,
+    "diagnostics": {
+     "noun_cluster_max": 6
+    }
+   },
+   "errors": [
+    {
+     "rule": "R1",
+     "line": 18,
+     "severity": "error",
+     "message": "descriptive sentence has 29 words (limit 25): included reviews/meta-analyses; review questions; search dates; primar..."
+    },
+    {
+     "rule": "R6",
+     "line": 18,
+     "severity": "error",
+     "message": "possible passive voice 'is planned'"
+    },
+    {
+     "rule": "R3",
+     "line": 35,
+     "severity": "error",
+     "message": "paragraph has 10 sentences (limit 6)"
+    },
+    {
+     "rule": "R3",
+     "line": 96,
+     "severity": "error",
+     "message": "paragraph has 8 sentences (limit 6)"
+    },
+    {
+     "rule": "R6",
+     "line": 96,
+     "severity": "error",
+     "message": "possible passive voice 'being superseded'"
+    },
+    {
+     "rule": "R1",
+     "line": 96,
+     "severity": "error",
+     "message": "instruction sentence has 21 words (limit 20): Do not collapse yield, profitability, biodiversity, soil quality, and ..."
+    }
+   ],
+   "warnings": [
+    {
+     "rule": "R10",
+     "line": 35,
+     "severity": "warning",
+     "message": "three or more instructions in one sentence; use a vertical list"
+    },
+    {
+     "rule": "R10",
+     "line": 96,
+     "severity": "warning",
+     "message": "three or more instructions in one sentence; use a vertical list"
+    },
+    {
+     "rule": "R10",
+     "line": 96,
+     "severity": "warning",
+     "message": "three or more instructions in one sentence; use a vertical list"
+    },
+    {
+     "rule": "R10",
+     "line": 96,
+     "severity": "warning",
+     "message": "three or more instructions in one sentence; use a vertical list"
+    }
+   ]
+  }
+ },
+ "errors": 536,
+ "warnings": 31,
+ "by_rule": {
+  "R1": 226,
+  "R6": 150,
+  "R3": 51,
+  "R8": 66,
+  "R2": 35,
+  "R10": 31,
+  "R4": 7,
+  "R9": 1
+ }
+}

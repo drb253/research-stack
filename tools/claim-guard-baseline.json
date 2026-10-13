@@ -1,0 +1,25 @@
+{
+ "findings": [
+  {
+   "kind": "FORBIDDEN",
+   "rule": "plagiari[sz]m[\\s-]?free",
+   "line": 3,
+   "message": "'plagiarism-free' -- plagiarism-free is a universal negative; say what was checked",
+   "where": "skills/citecheck/SKILL.md"
+  },
+  {
+   "kind": "FORBIDDEN",
+   "rule": "plagiari[sz]m[\\s-]?free",
+   "line": 22,
+   "message": "'plagiarism-free' -- plagiarism-free is a universal negative; say what was checked",
+   "where": "skills/citecheck/SKILL.md"
+  },
+  {
+   "kind": "FORBIDDEN",
+   "rule": "\\bguarantee[ds]?\\b",
+   "line": 31,
+   "message": "'guarantee' -- a guarantee needs a bound and a population",
+   "where": "skills/humanizerdrb/SKILL.md"
+  }
+ ]
+}

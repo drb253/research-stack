@@ -1,0 +1,14 @@
+# ste-allowlist.yml -- rules that do not apply to a specific file.
+#
+# Use this file only when the rule cannot be fixed in the text, and always give a
+# reason. An entry with no reason is a defect: it hides a real violation.
+#
+# Inline markers are preferred for one-off cases:
+#   <!-- ste-allow R6: "is required" is a state, not an action -->
+#
+# Format (parsed by tools/ste_lint.py without a YAML library):
+#   <path substring>:
+#     R1: reason
+#     R6: reason
+
+# (no entries yet)
