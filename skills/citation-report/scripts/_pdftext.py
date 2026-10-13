@@ -15,7 +15,10 @@ problem into an accusation against the writer. The caller receives
 ``method="unavailable"`` and must disclose it.
 
 No OCR. A scanned PDF has no text layer; inventing one is out of scope and would
-be a different, much weaker kind of evidence.
+be a different, much weaker kind of evidence. The refusal for that case is its own
+message -- it says the file is a scan, not that an extractor is missing -- and it
+probes for `tesseract` only to tell the reader what to install, so the reason is
+accurate on a machine where OCR happens to be absent or present.
 """
 
 from __future__ import annotations
@@ -37,6 +40,29 @@ REFUSAL = (
     "and pass that instead. Refusing to grade against unreadable evidence."
 )
 
+#: Refusal for a file that *has* no text layer. This is a property of the document, not
+#: of the tooling, so it must never be reported with `REFUSAL`'s words: an extractor ran
+#: and read everything there was, and there was nothing. The OCR clause is filled in
+#: from a `shutil.which` probe so the message is true on the machine that reads it.
+NO_TEXT_LAYER = (
+    "cannot read the text layer of {name}: the file has no text layer over {pages} "
+    "page(s), so it is a scan. {ocr}. Refusing to grade against unreadable evidence."
+)
+OCR_ABSENT = (
+    "OCR is not installed; install tesseract (`brew install tesseract` / "
+    "`apt install tesseract-ocr`) and export the scan to text, or supply a text export"
+)
+OCR_PRESENT = (
+    "tesseract is installed, but this build does not transcribe scans: OCR output is a "
+    "transcription, and a misread digit or citation marker would be reported as a "
+    "finding about the document rather than about the scan"
+)
+
+#: The OCR binary, probed with `shutil.which` and never imported or installed. It is
+#: named only so the scan refusal can tell the reader the right thing to install.
+OCR_BINARY = "tesseract"
+
+
 PAGE_SEPARATOR = "\f"
 
 
@@ -47,6 +73,10 @@ class PdfText:
     method: str = "unavailable"
     warnings: list = field(default_factory=list)
     error: str = ""
+    #: True when an extractor ran and the file yielded no text at all: a scan. The
+    #: caller uses this to refuse the document as an input condition rather than as a
+    #: finding, and to keep it out of `REFUSAL`'s "no extractor" wording.
+    no_text_layer: bool = False
 
     @property
     def available(self) -> bool:
@@ -126,6 +156,26 @@ def _via_pypdf(path, first_page_only: bool = False) -> PdfText | None:
     )
 
 
+def _no_text_layer(result: PdfText, warnings: list, path) -> PdfText:
+    """The refusal for a file an extractor read but found no characters in: a scan.
+
+    The OCR clause comes from a `shutil.which` probe so the refusal names what to
+    install exactly when it is absent, and stays truthful when it is present.
+    """
+    pages = max(1, len(result.pages))
+    ocr = OCR_PRESENT if shutil.which(OCR_BINARY) else OCR_ABSENT
+    return PdfText(
+        method="unavailable",
+        text=result.text,
+        pages=result.pages,
+        error=NO_TEXT_LAYER.format(
+            name=getattr(path, "name", path), pages=pages, ocr=ocr
+        ),
+        warnings=warnings + ["no text layer found; the file is a scan"],
+        no_text_layer=True,
+    )
+
+
 def extract_pdf(path, first_page_only: bool = False) -> PdfText:
     """Extract text from `path`, declaring the method used or refusing legibly.
 
@@ -147,6 +197,11 @@ def extract_pdf(path, first_page_only: bool = False) -> PdfText:
             fallback.warnings.extend(warnings)
             result = fallback
     if not result.available:
+        # An extractor ran and produced nothing: the document itself has no text layer.
+        # That is a scan, not a missing tool, and the two must not share one message --
+        # only one of them is something the reader can install their way out of.
+        if result.method != "unavailable" and not result.text.strip():
+            return _no_text_layer(result, warnings, path)
         return PdfText(
             method="unavailable",
             error=result.error or REFUSAL.format(name=getattr(path, "name", path)),

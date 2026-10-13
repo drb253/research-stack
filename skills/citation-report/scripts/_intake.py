@@ -5,7 +5,7 @@ Supported inputs and what each can do:
 | Suffix | Reader | Notes |
 |---|---|---|
 | `.md` `.markdown` `.txt` `.rst` | native | headings, lists, quotes, fenced code and tables recognised |
-| `.docx` | stdlib `zipfile` + `ElementTree` | paragraphs and tables; textboxes, footnotes, endnotes and tracked changes are out of scope and disclosed |
+| `.docx` | stdlib `zipfile` + `ElementTree` | paragraphs, tables, text boxes (once), footnotes and endnotes; comments and tracked changes are out of scope and disclosed |
 | `.tex` | native | preamble removed, `\\section` hierarchy, `\\parencite`/`\\cite` become citation markers |
 | `.pdf` | `_pdftext` cascade | needs poppler or `pypdf`; refuses legibly rather than grading against unreadable evidence |
 
@@ -74,6 +74,18 @@ SUPPORTED_SUFFIXES = TEXT_SUFFIXES + (".docx", ".tex", ".pdf")
 
 class IntakeError(ValueError):
     """Raised when a document cannot be read well enough to grade."""
+
+
+class UnreadableDocument(IntakeError):
+    """Raised when a document could not be read *at all*, so nothing can be graded.
+
+    This is deliberately distinct from a generic :class:`IntakeError`: a malformed input
+    is an input condition rather than a finding, and the caller must report it as
+    ``insufficient_input`` (exit 4) rather than in the finding channel
+    (``INVALID_INPUT``, exit 1). The one condition that raises it today is a PDF with no
+    text layer -- a scan -- where the honest answer is "we could not read this", never a
+    document that graded to zero sentences.
+    """
 
 
 @dataclass
@@ -381,21 +393,81 @@ def _paragraph_style(paragraph) -> str:
     return ""
 
 
+def _iter_runs(paragraph):
+    """Runs of one `w:p` whose text belongs to it, each yielded exactly once.
+
+    ``paragraph.iter(W + "r")`` descends into a `w:txbxContent` (a text box) and yields
+    both the run that *holds* the drawing and the runs *inside* the box. The holding
+    run's own `_run_text` walks into the same box, so every text-box sentence was
+    collected twice and graded twice. Nested runs are skipped here, so the box's text
+    survives once, from the run that holds it.
+    """
+    def walk(node, nested: bool = False):
+        for child in node:
+            child_nested = nested or child.tag in (W + "r", W + "txbxContent")
+            if child.tag == W + "r" and not nested:
+                yield child
+            yield from walk(child, child_nested)
+
+    return walk(paragraph)
+
+
+def _paragraph_text(paragraph) -> str:
+    """Whitespace-collapsed text of one paragraph, with each run counted once."""
+    text = "".join(_run_text(run) for run in _iter_runs(paragraph))
+    return re.sub(r"[ \t]{2,}", " ", text).strip()
+
+
+def _note_paragraphs(payload: bytes, tag: str, start_index: int) -> tuple:
+    """Paragraphs from a `word/footnotes.xml` or `word/endnotes.xml` part.
+
+    Word writes its own `separator` and `continuationSeparator` entries into those
+    parts; they are rule marks rather than prose and are skipped by `w:type`. Every
+    remaining `w:footnote`/`w:endnote` contributes its `w:p` text, read with the same
+    run walker and whitespace collapse the body uses.
+
+    Footnotes carry graded prose: a sentence that lives only in a footnote is still a
+    claim, and not reading it made a document the tool could not read look like a
+    document with nothing to check.
+    """
+    try:
+        root = ElementTree.fromstring(payload)
+    except ElementTree.ParseError as exc:
+        raise IntakeError("docx %s part is not well-formed XML" % tag) from exc
+
+    paragraphs: list = []
+    index = start_index
+    for note in root.findall(W + tag):
+        if (note.get(W + "type") or "") in ("separator", "continuationSeparator"):
+            continue
+        for para in note.iter(W + "p"):
+            text = _paragraph_text(para)
+            if not text:
+                continue
+            paragraphs.append(DocParagraph(index=index, kind="para", text=text))
+            index += 1
+    return paragraphs, index
+
+
 def _docx_paragraphs(path: Path) -> tuple[list, list]:
     warnings: list = []
+    note_parts: list = []
     try:
         with zipfile.ZipFile(path) as archive:
             names = set(archive.namelist())
             if "word/document.xml" not in names:
                 raise IntakeError("docx has no word/document.xml part")
             payload = archive.read("word/document.xml")
+            # Footnotes and endnotes hold graded prose, so the parts are read rather than
+            # merely disclosed. Comments are still not read, and are still warned about.
             for extra, label in (
-                ("word/footnotes.xml", "footnotes"),
-                ("word/endnotes.xml", "endnotes"),
-                ("word/comments.xml", "comments"),
+                ("word/footnotes.xml", "footnote"),
+                ("word/endnotes.xml", "endnote"),
             ):
                 if extra in names:
-                    warnings.append("%s are not read; their text is not graded" % label)
+                    note_parts.append((label, archive.read(extra)))
+            if "word/comments.xml" in names:
+                warnings.append("comments are not read; their text is not graded")
     except zipfile.BadZipFile as exc:
         raise IntakeError("docx is not a readable zip container") from exc
 
@@ -411,7 +483,7 @@ def _docx_paragraphs(path: Path) -> tuple[list, list]:
         body = root
     for child in body:
         if child.tag == W + "p":
-            text = "".join(_run_text(run) for run in child.iter(W + "r"))
+            text = "".join(_run_text(run) for run in _iter_runs(child))
             text = re.sub(r"[ \t]{2,}", " ", text).strip()
             if not text:
                 continue
@@ -438,7 +510,7 @@ def _docx_paragraphs(path: Path) -> tuple[list, list]:
                 cells = []
                 for cell in row.findall(W + "tc"):
                     cell_text = " ".join(
-                        "".join(_run_text(run) for run in para.iter(W + "r")).strip()
+                        "".join(_run_text(run) for run in _iter_runs(para)).strip()
                         for para in cell.findall(W + "p")
                     )
                     cells.append(re.sub(r"\s{2,}", " ", cell_text).strip())
@@ -448,6 +520,11 @@ def _docx_paragraphs(path: Path) -> tuple[list, list]:
                         DocParagraph(index=index, kind="table", text=line)
                     )
                     index += 1
+    # Body first, then footnotes, then endnotes: a note is read after the text it
+    # annotates, so the paragraph order stays stable and the offsets re-locate.
+    for label, part_payload in note_parts:
+        notes, index = _note_paragraphs(part_payload, label, index)
+        paragraphs.extend(notes)
     if not paragraphs:
         raise IntakeError("docx contains no readable paragraphs")
     return paragraphs, warnings
@@ -662,6 +739,10 @@ def _pdf_paragraphs(path: Path) -> tuple[list, list, str]:
 
     extracted = _pdftext.extract_pdf(path)
     if not extracted.available:
+        # A file with no text layer was not read at all: that is an input condition with
+        # its own status and exit code, not a finding about the document.
+        if getattr(extracted, "no_text_layer", False):
+            raise UnreadableDocument(extracted.error or "PDF has no text layer")
         raise IntakeError(extracted.error or "PDF text layer is not readable")
 
     warnings = list(extracted.warnings)

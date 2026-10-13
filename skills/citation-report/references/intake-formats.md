@@ -13,7 +13,7 @@ caught rather than silently mis-highlighting a sentence.
 |---|---|---|---|
 | `.md` `.markdown` | native | ATX and setext headings, lists, block quotes, fenced code, tables | HTML inside Markdown |
 | `.txt` `.text` `.rst` | native | paragraphs split on blank lines | reStructuredText directives |
-| `.docx` | `zipfile` + `ElementTree` | headings by style, lists, captions, tables | textboxes, footnotes, endnotes, comments, tracked changes |
+| `.docx` | `zipfile` + `ElementTree` | headings by style, lists, captions, tables, text boxes (once), footnotes, endnotes | comments, tracked changes |
 | `.tex` | native | `\part`…`\subsubsection` hierarchy, `\parencite`/`\cite` → markers | mathematics, macros defined in the preamble |
 | `.pdf` | `pdftotext` → `pypdf` → refuse | paragraphs reassembled from hard-wrapped lines, headings guessed | scanned pages with no text layer |
 
@@ -95,10 +95,20 @@ Adversarial cases live in `self_test.py::test_sentence_splitting` and run in CI.
 Paragraph kind comes from `w:pPr/w:pStyle`: `Heading1`–`Heading9`, `Title`, `Subtitle`, anything
 containing `List` (→ list item), and anything containing `Caption`.
 
-**Not read, and disclosed as warnings when the parts are present:** footnotes, endnotes, comments, and
-textboxes. Text in those parts is not graded, and the report says so rather than implying the whole
-document was covered. Tracked changes are likewise not applied: a deleted sentence may still be read
-from the XML if it survives in a `w:del` run, which is a known limitation.
+**Read and graded:** body paragraphs and tables, plus `word/footnotes.xml` and
+`word/endnotes.xml`. Every `w:footnote`/`w:endnote` whose `w:type` is `separator` or
+`continuationSeparator` is Word's own rule mark and is skipped; every other one contributes
+its `w:p` text as a graded paragraph, in the order body → footnotes → endnotes. A sentence
+that lives only in a footnote is still a claim, so it is graded rather than disclosed as
+unread.
+
+Text boxes (`w:txbxContent`) are read **once**. The run that holds a text box is reached by
+the paragraph walk and its own text walk descends into the box; the runs *inside* the box are
+therefore skipped, so the box's sentence is not counted twice.
+
+**Not read, and disclosed as a warning when the part is present:** comments
+(`word/comments.xml`). **Not read and not applied:** tracked changes — a deleted sentence may
+still be read from the XML if it survives in a `w:del` run, which is a known limitation.
 
 ### Why the DOCX output is a derived document
 
@@ -144,7 +154,12 @@ Headings are guessed from short lines that look like headings. The heuristic del
 them as headings, because losing the section boundary matters less than mislabelling body text.
 
 Below 50 characters per page, extraction is treated as failed and the file is reported as
-`unavailable` with the reason. There is no OCR.
+`unavailable` with the reason. A file with **no** text layer at all — a scan — gets its own
+reason: it says the document has no text layer rather than blaming a missing extractor, and it
+reaches `insufficient_input` (exit 4), because a document the tool could not read is an input
+condition, never a document that graded to zero sentences. There is no OCR: the refusal probes
+for `tesseract` with `shutil.which` only to name the install route, and OCR text is never
+graded, because a transcription error would become a finding about the document.
 
 ---
 

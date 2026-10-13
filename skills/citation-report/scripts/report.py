@@ -764,9 +764,38 @@ COMMANDS = {
 }
 
 
+def _unreadable_document(exc: Exception) -> int:
+    """Report a document that could not be read at all as an input condition.
+
+    ``insufficient_input`` (exit 4) is the status this skill promises for "the document
+    itself could not be read well enough to make findings". Reporting it as an
+    ``INVALID_INPUT`` error (exit 1) put a statement about our inputs in the finding
+    channel, where a reader would take it for a result about the document.
+    """
+    return _common.emit_report(
+        "citation-report",
+        [
+            _common.issue(
+                "error",
+                "INSUFFICIENT_INPUT",
+                location="intake",
+                detail=str(exc)[:400],
+            )
+        ],
+        status_override="insufficient_input",
+    )
+
+
 def main() -> int:
     arguments = build_parser().parse_args()
-    return _common.main_guard("citation-report", lambda: COMMANDS[arguments.mode](arguments))
+
+    def run_mode() -> int:
+        try:
+            return COMMANDS[arguments.mode](arguments)
+        except _intake.UnreadableDocument as exc:
+            return _unreadable_document(exc)
+
+    return _common.main_guard("citation-report", run_mode)
 
 
 if __name__ == "__main__":

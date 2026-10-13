@@ -90,7 +90,8 @@ between a sentence and its citation, not about the quality of the literature.
 
 | Limit | Why, and what to do |
 |---|---|
-| DOCX textboxes, footnotes, endnotes and comments are not read | Reported as warnings. Export the content to body text, or accept that it is not covered |
+| DOCX comments are not read, and deleted text is not | Comments are reported as a warning when present. Insertions (`w:ins`) **are** read and graded; deletions (`w:delText`) are not, so a sentence removed by a tracked change is silently absent. Footnotes, endnotes and text boxes *are* read and graded |
+| A PDF with no text layer is refused, not graded | A scan is `insufficient_input` (exit 4) with a scan-specific reason. No OCR is applied: OCR text is a transcription, and a misread value would become a finding about the document |
 | Tracked changes are not applied | A deleted sentence may still be read. Accept all changes before reporting |
 | DOCX output is a derived document | Patching the original risks corrupting a user's file. The report is rendered from the parsed model |
 | Mathematics is not parsed | A `.tex` file with display math may lose sentence boundaries. Not the right tool for a mathematics paper |

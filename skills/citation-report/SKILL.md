@@ -198,8 +198,15 @@ verbatim into a ledger). A prose summary may support a positive claim but may ne
   sentence is `unverifiable`, which looks weak — and is correct. Supply the PDFs, or allow DOI
   resolution to fetch abstracts, to do better.
 - **An abstract is weaker evidence than full text**, and every note that relies on one says so.
-- **Scanned PDFs have no text layer.** They are reported as `unavailable`; there is no OCR.
-- **DOCX textboxes, footnotes, endnotes, and tracked changes are not read.** Reported as warnings.
+- **Scanned PDFs have no text layer.** They are refused as `insufficient_input` (exit 4) with a
+  reason that says the document has no text layer — a scan — not that an extractor is missing.
+  There is no OCR: the refusal names the `tesseract` install route, but OCR text is never graded,
+  because a transcription error would be reported as a finding about the document.
+- **DOCX footnotes and endnotes are read and graded, and text boxes are read once. Comments are
+  not read, and deleted text is not.** Comments are reported as a warning when
+  `word/comments.xml` is present. Insertions (`w:ins`) *are* read and graded; deletions
+  (`w:delText`) are not, so a sentence removed by a tracked change is silently absent from the
+  grade — check the document without tracked changes if that matters.
 - **A number absent from the evidence is not a contradiction.** It is `unverifiable` with the missing
   values listed, so you can check by hand.
 - **`.docx` output is a derived report document**, not a patched copy of your file. Patching the

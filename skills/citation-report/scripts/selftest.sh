@@ -449,7 +449,25 @@ expect_exit 1 "unsupported extension refused" "${RUN[@]}" audit --document "$WS/
 expect_json_in "with a legible reason" "$TMP/ext.json" "str(d['issue'] if 'issue' in d else d['issues'])" "unsupported document extension"
 
 printf '%%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 595 842]>>endobj\ntrailer<</Root 1 0 R>>\n%%%%EOF\n' >"$WS/blank.pdf"
-expect_exit 1 "a PDF with no text layer is refused" "${RUN[@]}" report --document "$WS/blank.pdf" --offline --out-dir "$TMP/blankout"
+# A file with no text layer is a scan: an input condition, not a finding. It used to be
+# refused as "no PDF text extractor is available" with the finding exit code (1) -- wrong
+# twice over, because an extractor HAD run and the reader cannot install their way out of
+# a scan. It must reach `insufficient_input` (exit 4) with a scan-specific reason.
+expect_exit 4 "a PDF with no text layer is refused as an input gap" "${RUN[@]}" report --document "$WS/blank.pdf" --offline --out-dir "$TMP/blankout"
+"${RUN[@]}" report --document "$WS/blank.pdf" --offline --out-dir "$TMP/blankout" >"$TMP/blank.json" 2>&1
+expect_json "the status names the input gap, not a verdict" "$TMP/blank.json" "d['status']" "insufficient_input"
+expect_json_in "the reason names the missing text layer" "$TMP/blank.json" "str(d['issues'])" "no text layer"
+expect_json_in "and calls the file a scan" "$TMP/blank.json" "str(d['issues'])" "scan"
+if grep -q "no PDF text extractor is available" "$TMP/blank.json"; then
+  no "the refusal must not blame a missing extractor"
+else
+  ok "the refusal does not blame a missing extractor"
+fi
+if command -v tesseract >/dev/null 2>&1; then
+  ok "tesseract is installed here, so the absent-OCR refusal is not exercised"
+else
+  expect_json_in "the absent-OCR refusal names the install route" "$TMP/blank.json" "str(d['issues'])" "install tesseract"
+fi
 
 if python3 - "$TMP/adv_on/verdicts.json" <<'PY'
 import json, sys
@@ -681,6 +699,98 @@ en_control_exit=$?
 expect_json "the English control still passes the language check" "$TMP/en_control.json" \
   "[r['status'] for r in d['preconditions'] if r['code'] == 'TRIGGER_LANGUAGE_UNSUPPORTED'][0]" "passed"
 if [ "$en_control_exit" -eq 0 ]; then ok "and still exits 0"; else no "and still exits 0 (want 0, got $en_control_exit)"; fi
+
+echo
+echo "== 16e. DOCX footnotes, endnotes and text boxes are read, each exactly once =="
+# A footnote is prose: a sentence that lives only there is still a claim. Reading only
+# word/document.xml made a footnote-only document look like a document with nothing to
+# check (`narrative_sentences 0`, status pass), which is the input gap wearing the
+# finding's clothes. The fixture also carries Word's own `separator` entries, which must
+# not become graded paragraphs, and a text box, which must be counted once and not twice.
+python3 - "$WS" <<'PY'
+import sys, zipfile
+W = "http://schemas.openxmlformats.org/wordprocessingml/2006/main"
+CT = ('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+ '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">'
+ '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>'
+ '<Default Extension="xml" ContentType="application/xml"/>'
+ '<Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>')
+RELS = ('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+ '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'
+ '<Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>')
+def para(text, style=None):
+    pr = '<w:pPr><w:pStyle w:val="%s"/></w:pPr>' % style if style else ''
+    return '<w:p>%s<w:r><w:t xml:space="preserve">%s</w:t></w:r></w:p>' % (pr, text)
+def note(text, note_id=1, tag="footnote", ntype=None):
+    attr = ' w:type="%s"' % ntype if ntype else ''
+    return ('<w:%s w:id="%d"%s><w:p><w:r><w:t xml:space="preserve">%s</w:t></w:r></w:p></w:%s>'
+            % (tag, note_id, attr, text, tag))
+def textbox(inner):
+    return ('<w:r><w:drawing><wp:inline xmlns:wp="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing">'
+            '<a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">'
+            '<a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/wordprocessingShape">'
+            '<wps:wsp xmlns:wps="http://schemas.microsoft.com/office/word/2010/wordprocessingShape">'
+            '<wps:txbx><w:txbxContent><w:p><w:r><w:t xml:space="preserve">%s</w:t></w:r></w:p></w:txbxContent></wps:txbx>'
+            '</wps:wsp></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>') % inner
+def build(name, body, footnotes=None, endnotes=None):
+    document = ('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+                '<w:document xmlns:w="%s"><w:body>%s</w:body></w:document>') % (W, body)
+    parts = {'[Content_Types].xml': CT, '_rels/.rels': RELS, 'word/document.xml': document}
+    if footnotes is not None:
+        parts['word/footnotes.xml'] = ('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            '<w:footnotes xmlns:w="%s">%s</w:footnotes>') % (W, footnotes)
+    if endnotes is not None:
+        parts['word/endnotes.xml'] = ('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            '<w:endnotes xmlns:w="%s">%s</w:endnotes>') % (W, endnotes)
+    with zipfile.ZipFile(sys.argv[1] + "/" + name, 'w') as archive:
+        for part, payload in parts.items():
+            archive.writestr(part, payload)
+build("footnote_only.docx", para('Review', 'Heading1'),
+      footnotes=note('Statin therapy reduced major adverse cardiovascular events (HR 0.80) [src:S001].'))
+build("notes.docx", para('Review', 'Heading1'),
+      footnotes=note('SEPARATOR RULE MARK', note_id=0, ntype='separator')
+                + note('Statin therapy reduced events [src:S001].'),
+      endnotes=note('SEPARATOR RULE MARK', note_id=0, tag='endnote', ntype='separator')
+               + note('An endnote sentence about statins [src:S001].', tag='endnote'))
+build("textbox.docx", para('Review', 'Heading1')
+      + '<w:p><w:r><w:t xml:space="preserve">A body sentence. </w:t></w:r>'
+      + textbox('A text box sentence about statins [src:S001].') + '</w:p>')
+PY
+python3 - "$HERE" "$WS" "$TMP" <<'PY'
+import json, sys
+sys.path.insert(0, sys.argv[1])
+import _intake
+def dump(name, path):
+    doc = _intake.read_document(path)
+    json.dump({
+        "narrative": doc.narrative_sentence_count,
+        "paragraphs": [p.text for p in doc.paragraphs],
+        "warnings": list(doc.warnings),
+        "box_hits": sum(p.text.count("A text box sentence") for p in doc.paragraphs),
+    }, open(sys.argv[3] + "/" + name, "w"))
+dump("fn_intake.json", sys.argv[2] + "/footnote_only.docx")
+dump("notes_intake.json", sys.argv[2] + "/notes.docx")
+dump("box_intake.json", sys.argv[2] + "/textbox.docx")
+PY
+expect_json "a footnote-only DOCX is no longer read as empty" "$TMP/fn_intake.json" "d['narrative']" "1"
+expect_json "the footnote sentence is the graded paragraph" "$TMP/fn_intake.json" \
+  "[t for t in d['paragraphs'] if 'HR 0.80' in t]" \
+  "['Statin therapy reduced major adverse cardiovascular events (HR 0.80) [src:S001].']"
+expect_json "the warning no longer claims footnotes are unread" "$TMP/fn_intake.json" \
+  "[w for w in d['warnings'] if 'footnote' in w.lower()]" "[]"
+expect_json "footnotes and endnotes are read, body first, separators skipped" "$TMP/notes_intake.json" \
+  "d['paragraphs']" \
+  "['Review', 'Statin therapy reduced events [src:S001].', 'An endnote sentence about statins [src:S001].']"
+expect_json "so both note sentences are narrative" "$TMP/notes_intake.json" "d['narrative']" "2"
+expect_json "a text-box sentence appears exactly once" "$TMP/box_intake.json" "d['box_hits']" "1"
+expect_json "and the paragraph text is not duplicated" "$TMP/box_intake.json" "d['paragraphs']" \
+  "['Review', 'A body sentence. A text box sentence about statins [src:S001].']"
+"${RUN[@]}" audit --document "$WS/footnote_only.docx" --sources "$ASSETS/sample-sources.csv" \
+  --offline >"$TMP/fn_audit.json" 2>&1
+fn_exit=$?
+expect_json "the footnote sentence is graded, not merely read" "$TMP/fn_audit.json" \
+  "d['coverage']['states']['attributed']" "1"
+if [ "$fn_exit" -eq 0 ]; then ok "a footnote-only document is graded (exit 0)"; else no "a footnote-only document is graded (want 0, got $fn_exit)"; fi
 
 echo
 echo "== 17. the report never modifies the document it grades =="
