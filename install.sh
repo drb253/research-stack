@@ -52,6 +52,29 @@ die()  { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 run()  { if [ "$DRY_RUN" = 1 ]; then printf '  [dry-run] %s\n' "$*"; else eval "$@"; fi; }
 have() { command -v "$1" >/dev/null 2>&1; }
 
+# Install one skill into a target directory without ever destroying something a
+# user put there. The target is only rewritten when it is a symlink (ours, or a
+# leftover): a real file or directory is moved aside to <name>.bak-<timestamp>
+# first, the same way the MCP config writers back up a config they rewrite. A
+# link that already points at this source is left alone, so re-running install.sh
+# neither churns the tree nor accumulates backups.
+install_skill() {
+  src="$1"; sdir="$2"; name="$3"; dest="$sdir/$name"
+  if [ -L "$dest" ]; then
+    if [ "$(readlink "$dest")" = "$src" ]; then return 0; fi
+    run "rm -f '$dest'"
+  elif [ -e "$dest" ]; then
+    bak="$dest.bak-$(date +%Y%m%d%H%M%S)"
+    warn "  $dest is not a symlink -> kept as $(basename "$bak")"
+    run "mv '$dest' '$bak'"
+  fi
+  if [ "$COPY_SKILLS" = 1 ]; then
+    run "cp -R '$src' '$dest'"
+  else
+    run "ln -s '$src' '$dest'"
+  fi
+}
+
 usage() {
   cat <<'EOF'
 research-stack installer -- review MCPs + skills for Cline / Claude / OpenCode / DeepSeek Harness.
@@ -292,11 +315,7 @@ if [ "$DO_SKILLS" = 1 ]; then
       # the loop would run once and create a symlink literally named "*".
       [ -d "$d" ] || continue
       name="$(basename "$d")"
-      if [ "$COPY_SKILLS" = 1 ]; then
-        run "rm -rf '$sdir/$name' && cp -R '$d' '$sdir/$name'"
-      else
-        run "rm -rf '$sdir/$name' && ln -s '$d' '$sdir/$name'"
-      fi
+      install_skill "$d" "$sdir" "$name"
     done
     # link upstream skills too, when fetched
     if [ "$WITH_UPSTREAM" = 1 ] && [ -d "$HOME/.local/share/scientific-agent-skills/skills" ]; then
