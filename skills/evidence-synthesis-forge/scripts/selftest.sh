@@ -146,6 +146,23 @@ printf 'The pooled RR was 0.49 (0.34 to 0.70).\n' > "$TMP/d_ok.md"
 expect_exit 0 "traceable numbers pass" python3 "$ESF/numbers_provenance.py" --draft "$TMP/d_ok.md" --artifacts "$TMP/art.json"
 printf 'The pooled RR was 0.49 but also 0.77.\n' > "$TMP/d_bad.md"
 expect_exit 2 "untraceable number FAILS" python3 "$ESF/numbers_provenance.py" --draft "$TMP/d_bad.md" --artifacts "$TMP/art.json"
+# The coding sheet's own vocabulary used to put an unreadable sheet in the finding channel.
+# golden_tests.R is R-only and cannot cover this Python pre-gate, so it is pinned here.
+printf 'study_id,effect_id,effect_metric,estimate,se\nS1,E1,MD,0.50,0.10\nS2,E2,MD,0.60,0.12\n' > "$TMP/cs_ok.csv"
+printf 'study_id,effect_id,effect_metric,estimate,se\nS1,E1,MD,0.50,0.10\nS2,E2,MD,,0.12\n' > "$TMP/cs_blank.csv"
+printf 'study_id,effect_id,effect_metric,estimate,se\nS1,E1,MD,0.50,0.10\nS2,E2,MD,,0.12\nS3,E3,MD,0.40,0.11\nS4,E4,MD,0.55,0.10\n' > "$TMP/cs_blank_engine.csv"
+printf 'study_id,effect_id,effect_metric,estimate,se\nS1,E1,MD,0.50,0.10\nS2,E2,MD,0.60,0.00\n' > "$TMP/cs_se0.csv"
+expect_exit 0 "a valid coding sheet passes" python3 "$MAF/validate_coding_sheet.py" --input "$TMP/cs_ok.csv"
+expect_exit 3 "a blank effect size is an INPUT CONDITION (exit 3)" python3 "$MAF/validate_coding_sheet.py" --input "$TMP/cs_blank.csv"
+expect_exit 3 "se <= 0 is an INPUT CONDITION (exit 3)" python3 "$MAF/validate_coding_sheet.py" --input "$TMP/cs_se0.csv"
+expect_exit 4 "an unreadable coding sheet is insufficient_input (exit 4)" python3 "$MAF/validate_coding_sheet.py" --input "$TMP/no-such-sheet.csv"
+# ...and the same condition in the engine: a pooled estimate must not be written over a subset.
+expect_exit 3 "the engine refuses a partly unusable sheet (exit 3)" Rscript "$MAF/cochrane_meta.R" --input "$TMP/cs_blank_engine.csv" --outdir "$TMP/ma_blank"
+if [ ! -f "$TMP/ma_blank/results.json" ]; then
+  ok "no pooled estimate is written when rows were dropped"
+else
+  no "the engine wrote a pooled estimate over a subset of the supplied rows"
+fi
 # A supplied artifact that could not be read is an input gap, not a clean check. This used to
 # print "WARNING: artifact not found (skipped)" and then "OK: every checked number is
 # traceable" with exit 0 -- a partial comparison presented as a complete one.
