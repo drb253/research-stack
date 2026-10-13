@@ -343,6 +343,39 @@ def emit_input_error(tool: str, exc: Exception) -> int:
     )
 
 
+def emit_unreadable_document(tool: str, exc: Exception) -> int:
+    """Report a document that could not be read *at all* as an input condition.
+
+    ``insufficient_input`` (exit 4) is the status this skill promises for "the document
+    itself could not be read well enough to make findings". Reporting it as an
+    ``INVALID_INPUT`` error (exit 1) puts a statement about our inputs in the finding
+    channel, where a reader takes it for a result about the document.
+
+    The condition is repeated in ``input_gaps[]`` with its kind and the worklist that would
+    close it, so a caller can act on the gap without parsing the sentence, and so an absent
+    extractor and an unreadable file are distinguishable without prose. Both entry points --
+    the report CLI and the gate -- route through here so they cannot drift apart.
+    """
+    kind = getattr(exc, "kind", "") or "unreadable_document"
+    how_to_close = getattr(exc, "how_to_close", "")
+    gap = {"kind": kind, "detail": str(exc)[:400]}
+    if how_to_close:
+        gap["how_to_close"] = how_to_close
+    return emit_report(
+        tool,
+        [
+            issue(
+                "error",
+                "INSUFFICIENT_INPUT",
+                location="intake",
+                detail=str(exc)[:400],
+            )
+        ],
+        status_override="insufficient_input",
+        extra={"input_gaps": [gap]},
+    )
+
+
 def require_object(value: Any, label: str = "root") -> dict:
     if not isinstance(value, dict):
         raise InputError(label + " must be a JSON object")

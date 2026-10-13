@@ -117,6 +117,28 @@ Recorded so the audit is not read as complete:
   ships a test asserting both the pass and the fail path, which is the strongest evidence this
   repository can produce about itself; it is not third-party validation.
 
+### The scope was too narrow: a gap can be a missing *tool*
+
+The first three rounds asked only about the inputs a user supplies. Two violations survived them, and
+both were of one kind: **a resource that was missing on the machine, reported in the finding channel.**
+
+- `citation-report` reported "no PDF extractor is installed" as `INVALID_INPUT`, exit 1 — the finding
+  code — for a document nothing had read. A *scan* was already `insufficient_input`; the neighbouring
+  condition was not, and it is the same rule.
+- `paper-search`'s `audit_fix_check.py` reported "no package to patch" as a failed check, exit 1, in
+  the same shape as "the fix is missing from the file".
+
+The rule as written covers both: the gap is in *our* ability to read, not in the artefact. What the
+audit had missed was that a toolchain gap is an input gap, and it belongs in `input_gaps[]` with a
+`how_to_close` line naming the install. Both are fixed; both fixes carry a fixture asserting exit 4.
+
+The way they were found is itself the lesson. The citation-report suite asserted the *scan* wording
+unconditionally, so it passed on a machine with poppler and failed on CI, which has none. **A suite
+that passes on the machine that wrote it can still be asserting an environment that machine happens
+to have.** The fix is not just the branch: `CITATION_REPORT_PDF_EXTRACTOR=none` forces the
+absent-extractor route, so each machine exercises both. The paper-search gate now takes the same
+shape — a mutation probe asserts its checks can still fail.
+
 ## What this rule does not claim
 
 It does not make a report *accurate*; it makes a report **honest about its own basis**. A run that

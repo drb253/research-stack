@@ -12,7 +12,7 @@ Built for one promise: **no false citations, no hallucinated numbers, no silent 
 [![platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-lightgrey.svg)](#requirements)
 [![MCP servers](https://img.shields.io/badge/MCP%20servers-5-2f6feb.svg)](#the-mcp-layer)
 [![skills](https://img.shields.io/badge/skills-13-8957e5.svg)](#the-skills-layer)
-[![tests](https://img.shields.io/badge/checks-272%20passing-2ea043.svg)](#verification--testing)
+[![tests](https://img.shields.io/badge/checks-280%20passing-2ea043.svg)](#verification--testing)
 [![ci](https://github.com/drb253/research-stack/actions/workflows/ci.yml/badge.svg)](https://github.com/drb253/research-stack/actions/workflows/ci.yml)
 [![install](https://img.shields.io/badge/install-one--command-brightgreen.svg)](#install)
 
@@ -439,6 +439,14 @@ worklist naming exactly which files to supply. A document it could not parse is 
 (exit 4). Both block by default. The rule, and why it exists, is
 [`docs/EVIDENCE-INVARIANT.md`](docs/EVIDENCE-INVARIANT.md); it applies to every gate in this repo.
 
+That rule has now been applied to the *tool* gaps as well as the document gaps. A PDF that cannot be
+read reaches exit 4 with an `input_gaps[]` entry naming which of the three conditions it is — a scan,
+no extractor installed, or a file an extractor cannot decode — and the line that closes it. The
+"no extractor installed" route used to exit 1, the finding code, which meant a machine with no
+`poppler` reported *"here is what is wrong with your document"* about a document nothing had read.
+It was found by CI, which has no PDF extractor at all, failing a suite that passed on a developer
+machine that had one.
+
 The point is the last two lines: a review is finished **only** when the gate
 passes, and the gate is a set of scripts that can each fail.
 
@@ -507,7 +515,7 @@ flowchart LR
 
 <div align="center"><img src="assets/coverage.svg" width="620" alt="automated checks by suite"></div>
 
-**272 automated checks, all passing.** Run them after any change:
+**280 automated checks, all passing.** Run them after any change:
 
 ```bash
 S=~/.research-stack/skills
@@ -515,14 +523,34 @@ bash  $S/evidence-synthesis-forge/scripts/doctor.sh              # toolchain rep
 bash  $S/evidence-synthesis-forge/scripts/selftest.sh            # 78 — every gate, pass+fail
 Rscript $S/meta-analysis-forge/scripts/golden_tests.R           # 22 — engine vs metafor
 bash  $S/medical-narrative-review/scripts/selftest.sh           # 30 — narrative-review chain
-bash  $S/citation-report/scripts/selftest.sh                    # 125 — citation report, pass+fail
+bash  $S/citation-report/scripts/selftest.sh                    # 133 — citation report, pass+fail
 python3 $S/evidence-synthesis-forge/scripts/acceptance_test.py  # 17 — live adversarial
 ./verify.sh --targets cline,claude,opencode                      # install acceptance
 ```
 
+The citation-report suite covers both PDF environments deliberately: CI has neither `poppler` nor
+`pypdf`, so an unreadable PDF takes the "no extractor" route there and the "no text layer" route on a
+machine that has one. `CITATION_REPORT_PDF_EXTRACTOR=none` forces the first route, so either machine
+exercises both, and both are asserted to exit 4 rather than 1.
+
 `verify.sh` reports the **gated core strictly** (pass/fail on the 13 skills) and
 lists any installed **third-party packs** (K-Dense / AIPOCH, with AIPOCH broken
 down by category) as *informational* — they never change the verdict.
+
+The vendored MCP servers have their own gate, run by CI on every push:
+
+```bash
+python3 mcp/paper-search-patches/ci_patch_check.py   # patch system + availability invariant
+python3 mcp/paper-search-patches/ci_patch_check.py --self-test
+```
+
+It copies the vendored package into a temporary directory, runs the real patch pipeline against that
+copy, checks the fixes are present, then **mutates** the copy to reintroduce the defect the
+availability layer exists to prevent and asserts the suite still rejects it. It needs `requests`; if
+that is missing it exits 4 with a worklist rather than reporting success. What it does not do is
+reconstruct the fixed files from pristine upstream `0.1.4` — the vendored copy is already in the
+patched state, so the patch run is idempotent by construction. It catches drift, breakage and a
+toothless suite; it does not re-derive the patch.
 
 The engine is checked against `metafor`'s canonical datasets (`dat.bcg`,
 `dat.normand1999`) plus closed-form maths, so a pooled estimate, τ², I² and Q are
@@ -1079,7 +1107,7 @@ PRs are welcome. Ground rules:
 
 ## Roadmap
 
-- [x] GitHub Actions CI running the 272 checks on every push
+- [x] GitHub Actions CI running the 280 checks on every push
 - [ ] Codex (TOML) MCP config support
 - [ ] A terminal demo / screen recording in the README
 - [ ] Auto re-vendor script (fetch a new upstream tag, re-apply patches)

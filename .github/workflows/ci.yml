@@ -58,12 +58,17 @@ jobs:
           # meta-ml-screener: this script was run nowhere at all, and a log with no data rows
           # reported through the finding channel until it gained this suite.
           python3 skills/meta-ml-screener/scripts/validate_screening_log.py --self-test
+          # paper-search patch system: pins this checker's own drift and mutation detection.
+          # The full check needs `requests` and runs in the mcp-tests job below.
+          python3 mcp/paper-search-patches/ci_patch_check.py --self-test
       - name: medical-narrative-review selftest (30 checks)
         run: bash skills/medical-narrative-review/scripts/selftest.sh
-      # citation-report writes its own PDF and DOCX, and verifies both by re-opening
-      # them, so this passes with no poppler and no pypdf: the PDF text-layer check
-      # degrades to a reported skip rather than a failure.
-      - name: citation-report selftest (125 checks)
+      # citation-report writes its own PDF and DOCX and verifies both by re-opening them.
+      # CI has neither poppler nor pypdf, so an unreadable PDF takes the "no extractor"
+      # route here and the "no text layer" route on a developer machine; the suite asserts
+      # both, and the absent-extractor route is forced with CITATION_REPORT_PDF_EXTRACTOR
+      # so each machine covers both. Both routes must exit 4 as input gaps, never 1.
+      - name: citation-report selftest (133 checks)
         run: bash skills/citation-report/scripts/selftest.sh
       # The offline benchmarks measure the claims in the README (arithmetic gate,
       # overlap detector vs the ORI guide's expert labels). They need no network,
@@ -113,28 +118,16 @@ jobs:
         run: |
           python3 -m pip install --quiet fastmcp numpy pandas requests
           cd mcp/academic-search-mcp && python3 -m unittest discover -s tests
-      # The paper-search patch system was shipped but never exercised on a push, so nothing
-      # would have caught a patch that stopped applying or a replacement that drifted from
-      # the vendored file it mirrors.
+      # The paper-search patch system edits a package that lives outside this repository,
+      # so nothing on a push would have caught a patch that stopped applying or a
+      # replacement that drifted from the vendored file it mirrors. ci_patch_check.py
+      # supplies the missing target: a throwaway copy of the vendored package, patched for
+      # real, checked for the fixes, and then mutated to prove the availability suite still
+      # rejects the defect. `requests` is what that suite stubs.
       - name: paper-search patch system + availability invariant (offline, gated)
         run: |
           python3 -m pip install --quiet requests
-          PYTHONPATH=mcp/paper-search-mcp python3 mcp/paper-search-patches/audit_fix_check.py
-          PYTHONPATH=mcp/paper-search-mcp python3 mcp/paper-search-patches/test_availability_invariant.py
-          # Every whole-file replacement must stay byte-identical to the vendored file it
-          # mirrors, or a reinstall silently reverts the fix it encodes.
-          python3 - <<'PY'
-          import pathlib, sys
-          rep = pathlib.Path("mcp/paper-search-patches/replacements")
-          vend = pathlib.Path("mcp/paper-search-mcp/paper_search_mcp")
-          bad = []
-          for f in sorted(rep.glob("*.py")):
-              cands = list(vend.rglob(f.name))
-              if cands and not any(c.read_bytes() == f.read_bytes() for c in cands):
-                  bad.append(f.name)
-          print("replacements checked;", "drifted:", bad if bad else "none")
-          sys.exit(1 if bad else 0)
-          PY
+          python3 mcp/paper-search-patches/ci_patch_check.py
       # verify_fixes.py also performs LIVE searches; it is informational here so a network
       # hiccup cannot fail a push, but its offline check 10 runs above as a gate.
       - name: paper-search live checks (informational)

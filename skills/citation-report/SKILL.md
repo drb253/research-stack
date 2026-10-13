@@ -115,6 +115,11 @@ status:
 JSON. A blocked run still writes every artifact and a worklist; the artifacts carry an
 `INPUT-BOUND — NOT A FINDING` banner, in its own colour, distinct from the gate banner.
 
+A blocked run also carries a top-level `input_gaps[]`, one entry per gap with a machine-readable
+`kind` (`no_text_layer`, `no_pdf_extractor`, `unreadable_pdf`, …) and a `how_to_close` line, so a
+caller can act on the gap without parsing the prose reason. "Nothing could be read" and "here is what
+is wrong with the document" never share a status, an exit code, or a field.
+
 ## Modes
 
 1. **report** (default). Grade and render. Writes `verdicts.json`, `coverage.json`,
@@ -202,6 +207,13 @@ verbatim into a ledger). A prose summary may support a positive claim but may ne
   reason that says the document has no text layer — a scan — not that an extractor is missing.
   There is no OCR: the refusal names the `tesseract` install route, but OCR text is never graded,
   because a transcription error would be reported as a finding about the document.
+- **Every unreadable PDF is an input gap, including the two that are not scans.** A machine with
+  neither `pdftotext` nor `pypdf` cannot read any PDF at all, and a file an extractor refuses to
+  decode is not a file with nothing in it. All three routes exit 4 as `insufficient_input` with a
+  distinct `input_gaps[].kind`, never 1: the reader is told what to install or supply, and the run is
+  never mistaken for a document that graded to zero sentences. The absent-extractor route can be
+  forced on any machine with `CITATION_REPORT_PDF_EXTRACTOR=none`, which is how it is tested where
+  an extractor *is* installed.
 - **DOCX footnotes and endnotes are read and graded, and text boxes are read once. Comments are
   not read, and deleted text is not.** Comments are reported as a warning when
   `word/comments.xml` is present. Insertions (`w:ins`) *are* read and graded; deletions

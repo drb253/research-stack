@@ -23,6 +23,7 @@ accurate on a machine where OCR happens to be absent or present.
 
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 from dataclasses import dataclass, field
@@ -62,6 +63,36 @@ OCR_PRESENT = (
 #: named only so the scan refusal can tell the reader the right thing to install.
 OCR_BINARY = "tesseract"
 
+#: Machine-readable names for the ways a PDF can be unreadable. They travel with the
+#: refusal so the caller can put them in a structured `input_gaps[]` worklist instead of
+#: leaving the reader to parse an English sentence.
+GAP_NO_EXTRACTOR = "no_pdf_extractor"
+GAP_NO_TEXT_LAYER = "no_text_layer"
+GAP_UNREADABLE_PDF = "unreadable_pdf"
+
+#: What the reader would have to change to close each gap. One string per gap kind, kept
+#: next to the refusal text it belongs to so the message and the worklist cannot drift.
+WORKLIST_NO_EXTRACTOR = (
+    "install poppler (`brew install poppler` / `apt install poppler-utils`) or the "
+    "optional Python package (`pip install pypdf`); or export the document to .txt and "
+    "pass that instead"
+)
+WORKLIST_NO_TEXT_LAYER = (
+    "install tesseract (`brew install tesseract` / `apt install tesseract-ocr`) and "
+    "export the scan to text, or supply a text export"
+)
+WORKLIST_UNREADABLE_PDF = (
+    "supply a text export or a readable copy of the file: an extractor is installed, so "
+    "the file itself is what could not be read"
+)
+
+#: Force the absent-extractor refusal even where poppler or pypdf is installed. Set to
+#: `none`/`absent`/`off`. This exists because the branch that says "install an extractor"
+#: can otherwise never be exercised on a machine that has one -- which is exactly how a
+#: broken refusal message reaches a CI box that has none.
+EXTRACTOR_ENV = "CITATION_REPORT_PDF_EXTRACTOR"
+_FORCE_ABSENT = ("none", "absent", "off", "0", "false")
+
 
 PAGE_SEPARATOR = "\f"
 
@@ -77,6 +108,11 @@ class PdfText:
     #: caller uses this to refuse the document as an input condition rather than as a
     #: finding, and to keep it out of `REFUSAL`'s "no extractor" wording.
     no_text_layer: bool = False
+    #: Which input condition made the file unreadable (`GAP_*` above), and what would
+    #: close it. Empty on a successful read. Both travel to the caller so the refusal can
+    #: be reported as a gap with a worklist rather than only as prose.
+    gap_kind: str = ""
+    gap_worklist: str = ""
 
     @property
     def available(self) -> bool:
@@ -173,6 +209,49 @@ def _no_text_layer(result: PdfText, warnings: list, path) -> PdfText:
         ),
         warnings=warnings + ["no text layer found; the file is a scan"],
         no_text_layer=True,
+        gap_kind=GAP_NO_TEXT_LAYER,
+        gap_worklist=WORKLIST_NO_TEXT_LAYER,
+    )
+
+
+def _pypdf_importable() -> bool:
+    """Whether the optional `pypdf` extractor could be used, without importing it."""
+    try:
+        import importlib.util
+
+        return importlib.util.find_spec("pypdf") is not None
+    except Exception:  # noqa: BLE001 - a broken install must not mask the refusal
+        return False
+
+
+def _extractor_present() -> bool:
+    """Whether *any* extractor is available on this machine."""
+    return bool(shutil.which("pdftotext")) or _pypdf_importable()
+
+
+def _refusal(path, *, extractor_present: bool, detail: str = "") -> PdfText:
+    """The refusal for a file nothing could read.
+
+    The distinction matters to the reader and to the exit-status contract: with no
+    extractor installed the gap is closed by installing one, and without poppler/pypdf
+    alive nothing at all could be read. `detail` carries an extractor's own failure for a
+    file that *is* readable in principle, so a corrupt file is not blamed on missing
+    tooling.
+    """
+    name = getattr(path, "name", path)
+    if extractor_present:
+        return PdfText(
+            method="unavailable",
+            error=detail or ("cannot read the text layer of %s; the file could not be "
+                             "decoded" % name),
+            gap_kind=GAP_UNREADABLE_PDF,
+            gap_worklist=WORKLIST_UNREADABLE_PDF,
+        )
+    return PdfText(
+        method="unavailable",
+        error=REFUSAL.format(name=name),
+        gap_kind=GAP_NO_EXTRACTOR,
+        gap_worklist=WORKLIST_NO_EXTRACTOR,
     )
 
 
@@ -182,14 +261,21 @@ def extract_pdf(path, first_page_only: bool = False) -> PdfText:
     ``first_page_only`` is for cheap DOI mining across a folder of sources whose
     filenames are opaque; it is not used for evidence, which always reads the whole
     document so that a page number is meaningful.
+
+    Every unreadable outcome returns a `PdfText` carrying a `gap_kind` and a
+    `gap_worklist`, because "we could not read this" is a statement about our inputs and
+    must never reach the caller in the same shape as a finding about the document.
     """
     warnings: list = []
+    forced = os.environ.get(EXTRACTOR_ENV, "").strip().lower()
+    if forced in _FORCE_ABSENT:
+        return _refusal(path, extractor_present=False)
     result = _via_pdftotext(path, first_page_only)
     if result is None:
         warnings.append("pdftotext not found on PATH; fell back to pypdf")
         result = _via_pypdf(path, first_page_only)
     if result is None:
-        return PdfText(method="unavailable", error=REFUSAL.format(name=getattr(path, "name", path)))
+        return _refusal(path, extractor_present=False)
     if result.method == "unavailable":
         fallback = _via_pypdf(path, first_page_only)
         if fallback is not None and fallback.available:
@@ -202,11 +288,13 @@ def extract_pdf(path, first_page_only: bool = False) -> PdfText:
         # only one of them is something the reader can install their way out of.
         if result.method != "unavailable" and not result.text.strip():
             return _no_text_layer(result, warnings, path)
-        return PdfText(
-            method="unavailable",
-            error=result.error or REFUSAL.format(name=getattr(path, "name", path)),
-            warnings=warnings,
+        refused = _refusal(
+            path,
+            extractor_present=_extractor_present(),
+            detail=result.error,
         )
+        refused.warnings.extend(warnings)
+        return refused
 
     page_count = max(1, len(result.pages))
     per_page = len(result.text) / page_count
@@ -221,6 +309,9 @@ def extract_pdf(path, first_page_only: bool = False) -> PdfText:
                 % (per_page, page_count, MIN_CHARS_PER_PAGE)
             ),
             warnings=warnings + ["extraction below the per-page threshold"],
+            no_text_layer=True,
+            gap_kind=GAP_NO_TEXT_LAYER,
+            gap_worklist=WORKLIST_NO_TEXT_LAYER,
         )
     result.warnings.extend(warnings)
     return result

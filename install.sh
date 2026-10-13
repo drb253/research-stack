@@ -220,7 +220,18 @@ if [ "$DO_MCP" = 1 ]; then
     PY="$HOME/.local/share/uv/tools/paper-search-mcp/bin/python"
     [ -x "$PY" ] && "$PY" -c "import paper_search_mcp; print('paper_search_mcp import OK')" || true
     AUD="$ROOT/mcp/paper-search-patches/audit_fix_check.py"
-    [ -f "$AUD" ] && { python3 "$AUD" || warn "mesh audit-fix self-check FAILED"; }
+    if [ -f "$AUD" ]; then
+      # Exit 4 means "there was no package to check", which is not a failed check: saying
+      # FAILED there would report an environment gap as a defect in the fix.
+      if python3 "$AUD"; then :; else
+        rc=$?
+        if [ "$rc" -eq 4 ]; then
+          info "mesh audit-fix self-check: skipped (no paper_search_mcp package to check)"
+        else
+          warn "mesh audit-fix self-check FAILED (exit $rc)"
+        fi
+      fi
+    fi
   fi
 
   step "1b. optional MCP servers (ncbi, academic-search)"

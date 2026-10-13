@@ -179,9 +179,10 @@ document the longest is inevitably about half the text.
 
 Run each of these and confirm a non-zero exit and a legible reason, not a confident empty report:
 
-* a `.pdf` document with `pdftotext` and `pypdf` both unavailable;
+* a `.pdf` document with `pdftotext` and `pypdf` both unavailable — a gap in the machine, so exit 4
+  with `insufficient_input` and `input_gaps[].kind = no_pdf_extractor`, never exit 1;
 * a verdict whose evidence has no recorded origin (`EVIDENCE_WITHOUT_PROVENANCE`);
-* a scanned PDF with no text layer;
+* a scanned PDF with no text layer — exit 4, `input_gaps[].kind = no_text_layer`;
 * an unsupported extension;
 * a `verdicts.json` whose `state` does not match its `rule_id`;
 * a `coverage.json` with one state count incremented by hand.

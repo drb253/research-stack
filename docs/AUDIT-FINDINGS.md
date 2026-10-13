@@ -399,3 +399,78 @@ test. Both are fixed.
   0.510 to 0.871 — but it remains author-written, so it shows the rules do what they were designed to
   do, not that they generalise.
 
+
+---
+
+## 9. Fourth round — two violations that CI found, and the gate that should have
+
+Round three asked each gate the invariant question and fixed what it found. It missed two things, and
+the way they surfaced is the finding: **a suite that passes on the machine that wrote it can still be
+asserting an environment that machine happens to have.**
+
+### 9.1 `citation-report`: "no PDF extractor" was reported as a finding (exit 1)
+
+The round-three fix taught the report CLI that a *scan* — a PDF an extractor read and found no text in
+— is `insufficient_input` (exit 4). It left the neighbouring condition in the finding channel: a
+machine with neither `pdftotext` nor `pypdf` cannot read any PDF, and that refusal was emitted as
+`INVALID_INPUT` with exit 1, the same status and code as a verdict about the document. Nothing had
+been read; the reader was told, in the finding channel, about a document the tool had not opened.
+
+The selftest asserted the scan wording unconditionally. On the developer machine (poppler installed)
+it passed; on CI, which has no PDF extractor at all, the fixture took the other branch and six
+assertions failed — which is how the violation was found, and why the fix is in this round rather
+than a footnote.
+
+Fixed:
+
+- every unreadable-PDF outcome now carries a machine-readable `gap_kind` and `gap_worklist` from
+  `_pdftext.py`, and all three routes — `no_text_layer` (scan), `no_pdf_extractor`, `unreadable_pdf`
+  — raise `UnreadableDocument` and exit 4;
+- the envelope gained a top-level `input_gaps[]` (`kind`, `detail`, `how_to_close`), emitted from one
+  shared helper in `_common.py` so the report CLI and `report_gate.py` cannot drift apart. The gate
+  had the same defect and is fixed with it;
+- `CITATION_REPORT_PDF_EXTRACTOR=none` forces the absent-extractor route, so a machine that *can*
+  read PDFs still exercises the message a machine that cannot will print.
+
+Verified: 133 checks pass with poppler present, and **131 pass with `pdftotext` off `PATH` and `pypdf`
+shadowed** — the suite is environment-independent, and both branches are asserted in both
+environments.
+
+### 9.2 `paper-search`: "no package to patch" was reported as a failed check (exit 1)
+
+`audit_fix_check.py` is a post-install checker: it looks in the uv-tool directory and, finding
+nothing, printed `paper-search package not found -- install the uv tool first.` and exited 1. CI has
+no uv install, so the new CI step failed on its first line for two commits. Two problems, one of them
+the same rule: "there is nothing here to check" is an input gap, and it shared an exit code with
+"the fix is missing from a file that is there".
+
+Fixed: `apply_patches.py` and `audit_fix_check.py` both take `--package <path>` / `$PAPER_SEARCH_MCP_PATH`,
+and both report a missing package as `insufficient_input` (exit 4) with a worklist naming what to
+install and every path searched. An explicit override that does not resolve is an error rather than a
+licence to patch a different install. The live-behaviour tier is `SKIP`ped — never failed — when the
+uv interpreter is absent or when the tree under test is not the one that interpreter imports.
+
+### 9.3 The gate that was missing, and the probe that proves it can fail
+
+The patch system had never been exercised on a push at all, because the package it edits lives
+outside this repository. `mcp/paper-search-patches/ci_patch_check.py` supplies the missing target: it
+copies the vendored package to a temporary directory, runs the real patch pipeline against it, checks
+the fixes are present, runs the availability invariant suite, and then **mutates** the copy —
+renaming `SOURCE_UNAVAILABLE` to `"empty"`, which is exactly the defect the layer exists to prevent —
+and asserts the suite still rejects it. A checker whose fail path is never run is an assertion, not a
+gate; this one is run against its own mutant on every push.
+
+**What this round does not establish**, recorded so §9 is not read as a clean bill of health:
+
+- The vendored package is kept in the patched state, so the patch run against it is idempotent by
+  construction. The gate catches drift, breakage and a toothless suite; it does **not** reconstruct
+  the fixed files from pristine upstream `0.1.4`, which would need those upstream files.
+- `report_gate.py` and `report.py` now share one gap emitter, but the other intake failures (an
+  unsupported extension, a malformed JSON sidecar) are still `INVALID_INPUT`, exit 1, by design: they
+  are usage errors about the request rather than a resource that could not be read. That distinction
+  is a judgement, not a measurement.
+- The mutation probe proves the availability suite detects one reintroduced defect. It does not
+  establish that the suite covers every way the invariant could break.
+- Both CI-discovered violations were environment-dependent, which means other gates could still be
+  asserting an environment. Round three asked each gate a code question; nobody has yet run the whole
+  suite on a machine stripped of optional tooling, which is what actually found these two.

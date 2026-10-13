@@ -767,23 +767,10 @@ COMMANDS = {
 def _unreadable_document(exc: Exception) -> int:
     """Report a document that could not be read at all as an input condition.
 
-    ``insufficient_input`` (exit 4) is the status this skill promises for "the document
-    itself could not be read well enough to make findings". Reporting it as an
-    ``INVALID_INPUT`` error (exit 1) put a statement about our inputs in the finding
-    channel, where a reader would take it for a result about the document.
+    The envelope lives in `_common` so the gate emits exactly the same one; see
+    :func:`_common.emit_unreadable_document` for why exit 4 and `input_gaps[]`.
     """
-    return _common.emit_report(
-        "citation-report",
-        [
-            _common.issue(
-                "error",
-                "INSUFFICIENT_INPUT",
-                location="intake",
-                detail=str(exc)[:400],
-            )
-        ],
-        status_override="insufficient_input",
-    )
+    return _common.emit_unreadable_document("citation-report", exc)
 
 
 def main() -> int:

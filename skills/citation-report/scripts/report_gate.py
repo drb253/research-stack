@@ -494,7 +494,14 @@ def main() -> int:
         if arguments.document:
             import _intake
 
-            document = _intake.read_document(arguments.document)
+            try:
+                document = _intake.read_document(arguments.document)
+            except _intake.UnreadableDocument as exc:
+                # The gate cannot re-locate spans in a document nobody could read. That is
+                # a gap in the inputs, not a finding about the report, so it takes the same
+                # status, exit code and `input_gaps[]` shape as the report CLI: exit 1 here
+                # would read as "the report is wrong" when nothing was verified at all.
+                return _common.emit_unreadable_document("citation-report/gate", exc)
         return check_directory(arguments.dir, document=document)
 
     return _common.main_guard("citation-report/gate", run_check)

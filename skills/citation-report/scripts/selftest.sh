@@ -449,25 +449,63 @@ expect_exit 1 "unsupported extension refused" "${RUN[@]}" audit --document "$WS/
 expect_json_in "with a legible reason" "$TMP/ext.json" "str(d['issue'] if 'issue' in d else d['issues'])" "unsupported document extension"
 
 printf '%%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 595 842]>>endobj\ntrailer<</Root 1 0 R>>\n%%%%EOF\n' >"$WS/blank.pdf"
-# A file with no text layer is a scan: an input condition, not a finding. It used to be
-# refused as "no PDF text extractor is available" with the finding exit code (1) -- wrong
-# twice over, because an extractor HAD run and the reader cannot install their way out of
-# a scan. It must reach `insufficient_input` (exit 4) with a scan-specific reason.
-expect_exit 4 "a PDF with no text layer is refused as an input gap" "${RUN[@]}" report --document "$WS/blank.pdf" --offline --out-dir "$TMP/blankout"
+# A PDF nothing could read is an input condition, never a finding. Which condition
+# depends on the machine: with an extractor installed this file is a scan (an extractor
+# ran and found no text); with none installed nothing could be read at all. Both must
+# reach `insufficient_input` (exit 4) with a machine-readable `input_gaps[]` worklist,
+# and neither may be reported in the finding channel -- the absent-extractor route used
+# to exit 1 with `INVALID_INPUT`, which is how a push failed on CI, where no PDF
+# extractor is installed, while passing on a developer machine that had one.
+# The probe must agree with what the code will do, including when the forcing variable is
+# exported into the suite's environment.
+case "$(printf '%s' "${CITATION_REPORT_PDF_EXTRACTOR:-}" | tr 'A-Z' 'a-z')" in
+  none|absent|off|0|false) have_pdf_extractor=0 ;;
+  *) if command -v pdftotext >/dev/null 2>&1 || python3 -c "import pypdf" >/dev/null 2>&1; then
+       have_pdf_extractor=1
+     else
+       have_pdf_extractor=0
+     fi ;;
+esac
+expect_exit 4 "a PDF nothing can read is refused as an input gap" "${RUN[@]}" report --document "$WS/blank.pdf" --offline --out-dir "$TMP/blankout"
 "${RUN[@]}" report --document "$WS/blank.pdf" --offline --out-dir "$TMP/blankout" >"$TMP/blank.json" 2>&1
 expect_json "the status names the input gap, not a verdict" "$TMP/blank.json" "d['status']" "insufficient_input"
-expect_json_in "the reason names the missing text layer" "$TMP/blank.json" "str(d['issues'])" "no text layer"
-expect_json_in "and calls the file a scan" "$TMP/blank.json" "str(d['issues'])" "scan"
-if grep -q "no PDF text extractor is available" "$TMP/blank.json"; then
-  no "the refusal must not blame a missing extractor"
+expect_json_in "the gap says how to close it" "$TMP/blank.json" "d['input_gaps'][0]['how_to_close']" "install"
+if [ "$have_pdf_extractor" -eq 1 ]; then
+  expect_json "the gap names the condition: no text layer" "$TMP/blank.json" "d['input_gaps'][0]['kind']" "no_text_layer"
+  expect_json_in "the reason names the missing text layer" "$TMP/blank.json" "str(d['issues'])" "no text layer"
+  expect_json_in "and calls the file a scan" "$TMP/blank.json" "str(d['issues'])" "scan"
+  if grep -q "no PDF text extractor is available" "$TMP/blank.json"; then
+    no "the refusal must not blame a missing extractor"
+  else
+    ok "the refusal does not blame a missing extractor"
+  fi
+  if command -v tesseract >/dev/null 2>&1; then
+    ok "tesseract is installed here, so the absent-OCR refusal is not exercised"
+  else
+    expect_json_in "the absent-OCR refusal names the install route" "$TMP/blank.json" "str(d['issues'])" "install tesseract"
+  fi
 else
-  ok "the refusal does not blame a missing extractor"
+  expect_json "the gap names the condition: no extractor" "$TMP/blank.json" "d['input_gaps'][0]['kind']" "no_pdf_extractor"
+  expect_json_in "the reason names the missing extractor" "$TMP/blank.json" "str(d['issues'])" "no PDF text extractor"
+  if [ "$(json_field "$TMP/blank.json" "str(d['issues']).count('scan')")" = "0" ]; then
+    ok "the refusal does not call the file a scan when no extractor ran"
+  else
+    no "the refusal must not call the file a scan when no extractor ran"
+  fi
 fi
-if command -v tesseract >/dev/null 2>&1; then
-  ok "tesseract is installed here, so the absent-OCR refusal is not exercised"
-else
-  expect_json_in "the absent-OCR refusal names the install route" "$TMP/blank.json" "str(d['issues'])" "install tesseract"
-fi
+# The absent-extractor branch is forced even where an extractor exists, so the machine
+# that can read PDFs still exercises the message CI depends on.
+CITATION_REPORT_PDF_EXTRACTOR=none "${RUN[@]}" report --document "$WS/blank.pdf" --offline --out-dir "$TMP/blanknone" >"$TMP/blanknone.json" 2>&1
+expect_json "a forced absent extractor is still an input gap, not a finding" "$TMP/blanknone.json" "d['status']" "insufficient_input"
+expect_json "forced: the gap names the missing extractor" "$TMP/blanknone.json" "d['input_gaps'][0]['kind']" "no_pdf_extractor"
+expect_json_in "forced: the reason names the install route" "$TMP/blanknone.json" "d['input_gaps'][0]['how_to_close']" "install poppler"
+# The gate reads the document too, and must route an unreadable one through the same
+# channel: it verifies the report, so "the document could not be read" is a gap in its
+# inputs and not a finding about the report it was asked to check.
+expect_exit 4 "the gate refuses an unreadable document as an input gap too" "${GATE[@]}" --dir "$TMP/blankout" --document "$WS/blank.pdf"
+"${GATE[@]}" --dir "$TMP/blankout" --document "$WS/blank.pdf" >"$TMP/blankgate.json" 2>&1
+expect_json "the gate names the input gap, not a verdict" "$TMP/blankgate.json" "d['status']" "insufficient_input"
+expect_json "and the gate's gap carries the same kind as the report's" "$TMP/blankgate.json" "d['input_gaps'][0]['kind']" "$(json_field "$TMP/blank.json" "d['input_gaps'][0]['kind']")"
 
 if python3 - "$TMP/adv_on/verdicts.json" <<'PY'
 import json, sys

@@ -79,13 +79,24 @@ class IntakeError(ValueError):
 class UnreadableDocument(IntakeError):
     """Raised when a document could not be read *at all*, so nothing can be graded.
 
-    This is deliberately distinct from a generic :class:`IntakeError`: a malformed input
+    This is deliberately distinct from a generic :class:`IntakeError`: an unreadable input
     is an input condition rather than a finding, and the caller must report it as
     ``insufficient_input`` (exit 4) rather than in the finding channel
-    (``INVALID_INPUT``, exit 1). The one condition that raises it today is a PDF with no
-    text layer -- a scan -- where the honest answer is "we could not read this", never a
-    document that graded to zero sentences.
+    (``INVALID_INPUT``, exit 1). Conditions that raise it are the three ways a PDF can be
+    unreadable -- no text layer at all (a scan), an extraction below the density
+    threshold (probably a scan), and no extractor installed (or an extractor that could
+    not decode the file). In every case the honest answer is "we could not read this",
+    never a document that graded to zero sentences.
+
+    The gap kind and its worklist travel with the exception so the caller can emit a
+    structured gap rather than leaving the reader to parse prose.
     """
+
+    def __init__(self, message: str, *, kind: str = "unreadable_document",
+                 how_to_close: str = "") -> None:
+        super().__init__(message)
+        self.kind = kind
+        self.how_to_close = how_to_close
 
 
 @dataclass
@@ -739,11 +750,14 @@ def _pdf_paragraphs(path: Path) -> tuple[list, list, str]:
 
     extracted = _pdftext.extract_pdf(path)
     if not extracted.available:
-        # A file with no text layer was not read at all: that is an input condition with
-        # its own status and exit code, not a finding about the document.
-        if getattr(extracted, "no_text_layer", False):
-            raise UnreadableDocument(extracted.error or "PDF has no text layer")
-        raise IntakeError(extracted.error or "PDF text layer is not readable")
+        # A file that was not read at all is an input condition with its own status and
+        # exit code, not a finding about the document. `_pdftext` names the kind so the
+        # refusal can carry a worklist instead of only a sentence.
+        raise UnreadableDocument(
+            extracted.error or "PDF text layer is not readable",
+            kind=getattr(extracted, "gap_kind", "") or "unreadable_pdf",
+            how_to_close=getattr(extracted, "gap_worklist", ""),
+        )
 
     warnings = list(extracted.warnings)
     paragraphs: list = []

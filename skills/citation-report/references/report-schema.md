@@ -112,6 +112,27 @@ Precedence: `insufficient_input` > `insufficient_evidence` > `fail` > `pass`.
 `--allow-insufficient` keeps the status and restores the findings-based exit code, so the override is
 recorded in the artefact rather than only in a shell history. `2` remains an argparse usage error.
 
+### `input_gaps[]`
+
+A run that cannot read the document at all is `insufficient_input` and carries a top-level
+`input_gaps[]` array alongside the `INSUFFICIENT_INPUT` issue:
+
+```json
+"input_gaps": [
+  {
+    "kind": "no_pdf_extractor",
+    "detail": "cannot read the text layer of paper.pdf: no PDF text extractor is available. …",
+    "how_to_close": "install poppler (`brew install poppler` / `apt install poppler-utils`) or …"
+  }
+]
+```
+
+`kind` is `no_text_layer` (an extractor ran and the file is a scan), `no_pdf_extractor` (nothing on
+the machine can read a PDF), or `unreadable_pdf` (an extractor is installed but could not decode the
+file). `how_to_close` is the action that removes the gap. The field exists so that "we could not read
+this" is never a shape a caller could mistake for a finding, and so a gap can be closed without
+parsing the prose.
+
 ### New per-verdict fields
 
 | Field | Meaning |

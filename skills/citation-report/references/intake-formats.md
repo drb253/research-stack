@@ -161,6 +161,21 @@ condition, never a document that graded to zero sentences. There is no OCR: the 
 for `tesseract` with `shutil.which` only to name the install route, and OCR text is never
 graded, because a transcription error would become a finding about the document.
 
+All three ways a PDF can be unreadable reach that same status with a distinct
+`input_gaps[].kind`, and none of them is a finding:
+
+| Condition | `kind` | Worklist says |
+|---|---|---|
+| An extractor ran, the file has no text layer | `no_text_layer` | install `tesseract` and export the scan, or supply a text export |
+| Extraction below the per-page threshold (probably a scan) | `no_text_layer` | as above |
+| Neither `pdftotext` nor `pypdf` is available | `no_pdf_extractor` | install poppler or `pypdf`, or pass a `.txt` export |
+| An extractor is installed but cannot decode the file | `unreadable_pdf` | supply a readable copy or a text export |
+
+The third row is the one that matters most on a machine with no PDF tooling at all: it used to be
+reported as `INVALID_INPUT` with the *finding* exit code 1, which reads as a verdict on the document
+when nothing had been read. Set `CITATION_REPORT_PDF_EXTRACTOR=none` to force that route where an
+extractor is installed; the self-test uses it so both routes are covered on every machine.
+
 ---
 
 ## Intake preconditions

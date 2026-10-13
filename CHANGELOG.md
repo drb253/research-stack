@@ -6,7 +6,37 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
-_Nothing yet._
+### Fixed
+- **A machine with no PDF extractor was told about a document nothing had read.** The report CLI
+  refused an unreadable PDF as `INVALID_INPUT` with exit 1 — the finding channel and the finding
+  code — when the cause was that neither `pdftotext` nor `pypdf` was installed. A scan was already
+  `insufficient_input` (exit 4); the neighbouring condition was not. All three ways a PDF can be
+  unreadable now exit 4 with a distinct `input_gaps[].kind` — `no_text_layer`, `no_pdf_extractor`,
+  `unreadable_pdf` — and a `how_to_close` line, emitted from one shared helper so the report CLI and
+  `report_gate.py` (which had the same defect) cannot drift apart.
+- **The selftest that hid it, and the environment it assumed.** The scan fixture asserted its wording
+  unconditionally, so it passed where poppler is installed and failed on CI, which has no PDF
+  extractor at all — six failed assertions, which is how the defect above was found.
+  `CITATION_REPORT_PDF_EXTRACTOR=none` forces the absent-extractor route, and the suite now asserts
+  both routes on either machine: 133 checks with an extractor, 131 without, 0 failed both ways.
+- **"No package to patch" was reported as a failed check.** `apply_patches.py` and
+  `audit_fix_check.py` exited 1 with an install hint when the uv-tool package was absent, putting
+  "there is nothing here" in the same channel as "the fix is missing from a file that is there". Both
+  now take `--package <path>` / `$PAPER_SEARCH_MCP_PATH`, and both report a missing package as
+  `insufficient_input` (exit 4) with a worklist naming what to install and every path searched. An
+  explicit override that does not resolve is an error, never a licence to patch a different install.
+  `install.sh` no longer calls that case a FAILED self-check.
+
+### Added
+- **A gate for the patch system, with a mutation probe.** The paper-search patches edit a package that
+  lives outside this repository, so nothing on a push had ever exercised them.
+  `mcp/paper-search-patches/ci_patch_check.py` copies the vendored package to a temporary directory,
+  runs the real pipeline against it, checks the fixes are present, runs the availability suite, and
+  then mutates the copy — renaming `SOURCE_UNAVAILABLE` to `"empty"`, the exact defect the layer
+  exists to prevent — and asserts the suite still rejects it. A checker whose fail path is never run
+  is an assertion, not a gate. It exits 4, not 0, when `requests` is missing, and it states in its own
+  docstring what it does not establish: the vendored copy is already patched, so the run is
+  idempotent by construction and does not reconstruct the files from pristine upstream `0.1.4`.
 
 ## [1.1.0] — 2026-10-13
 

@@ -92,6 +92,7 @@ between a sentence and its citation, not about the quality of the literature.
 |---|---|
 | DOCX comments are not read, and deleted text is not | Comments are reported as a warning when present. Insertions (`w:ins`) **are** read and graded; deletions (`w:delText`) are not, so a sentence removed by a tracked change is silently absent. Footnotes, endnotes and text boxes *are* read and graded |
 | A PDF with no text layer is refused, not graded | A scan is `insufficient_input` (exit 4) with a scan-specific reason. No OCR is applied: OCR text is a transcription, and a misread value would become a finding about the document |
+| An unreadable PDF is never a finding, whatever made it unreadable | A scan, a sparse text layer, a machine with no PDF extractor at all, and a file an extractor cannot decode all reach exit 4 with a distinct `input_gaps[].kind` and a `how_to_close` line. None of them is graded, and none of them shares the finding exit code 1 |
 | Tracked changes are not applied | A deleted sentence may still be read. Accept all changes before reporting |
 | DOCX output is a derived document | Patching the original risks corrupting a user's file. The report is rendered from the parsed model |
 | Mathematics is not parsed | A `.tex` file with display math may lose sentence boundaries. Not the right tool for a mathematics paper |

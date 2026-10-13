@@ -14,7 +14,9 @@ Idempotent: safe to run repeatedly. Re-run after any `uv tool install/upgrade`.
 """
 from __future__ import annotations
 
+import argparse
 import glob
+import os
 import shutil
 import subprocess
 import sys
@@ -25,12 +27,76 @@ PKG_GLOBS = [
     str(Path.home() / ".local/share/uv/tools/paper-search-mcp/lib/python*/site-packages/paper_search_mcp"),
 ]
 
+#: Point the patch system at a `paper_search_mcp` tree other than the uv-tool install.
+#: The CI gate uses it to patch a throwaway copy made from this checkout, so the patch
+#: pipeline is exercised on every push without requiring a uv install on the runner.
+PACKAGE_ENV = "PAPER_SEARCH_MCP_PATH"
 
-def find_pkg() -> Path:
+
+def _locate_override() -> Path | None:
+    """The package named by `--package` or `PAPER_SEARCH_MCP_PATH`, if any."""
+    raw = os.environ.get(PACKAGE_ENV, "").strip()
+    if not raw:
+        return None
+    candidate = Path(raw).expanduser()
+    # Accept either the package directory itself or the parent that contains it.
+    if candidate.name != "paper_search_mcp" and (candidate / "paper_search_mcp").is_dir():
+        candidate = candidate / "paper_search_mcp"
+    return candidate
+
+
+def missing_package(argv_root: str | None = None) -> int:
+    """Report "no package to patch" as an input gap, in its own channel.
+
+    This is an environment condition -- nothing was patched because there is nothing to
+    patch -- so it must not share the exit status of a patch that failed to apply. The
+    caller gets a worklist saying how to close the gap instead of an ERROR line that reads
+    like a broken patch set.
+    """
+    print("STATUS: insufficient_input")
+    print("nothing was patched: no paper_search_mcp package was found.")
+    print("input_gaps:")
+    print("  - kind: package_not_found")
+    print("    how_to_close: install the uv tool (`uv tool install paper-search-mcp`)")
+    print("      or pass --package <path> / set %s=<path>" % PACKAGE_ENV)
+    searched = []
+    if argv_root:
+        searched.append((argv_root, "--package"))
+    override = os.environ.get(PACKAGE_ENV, "").strip()
+    if override:
+        searched.append((override, "$%s" % PACKAGE_ENV))
+    for label, where in searched:
+        print("    searched: %s (%s)" % (label, where))
+    print("    searched: %s" % PKG_GLOBS[0])
+    return 4
+
+
+def find_pkg(explicit: str | None = None) -> Path:
+    """The package directory to patch, or `FileNotFoundError` if there is none.
+
+    A path that does not exist is treated as "no package": the caller reports it as an
+    input gap carrying the searches that were tried, rather than proceeding to patch a
+    tree that is not there and calling the resulting noise a patch failure.
+    """
+    if explicit:
+        candidate = Path(explicit).expanduser()
+        if candidate.name != "paper_search_mcp" and (candidate / "paper_search_mcp").is_dir():
+            candidate = candidate / "paper_search_mcp"
+        if candidate.is_dir():
+            return candidate
+        raise FileNotFoundError("no package at %s" % explicit)
+    override = _locate_override()
+    if override is not None:
+        # An explicit override is an instruction, not a hint. If it does not resolve,
+        # patching some *other* install instead would silently apply the fixes somewhere
+        # the caller never asked for.
+        if override.is_dir():
+            return override
+        raise FileNotFoundError("no package at %s" % override)
     for pattern in PKG_GLOBS:
         for hit in glob.glob(pattern):
             return Path(hit)
-    sys.exit("ERROR: could not locate paper_search_mcp package. Is the uv tool installed?")
+    raise FileNotFoundError("paper_search_mcp package not found")
 
 
 DATE_HELPERS = '''from typing import List, Dict, Optional
@@ -429,7 +495,23 @@ PATCHES = [
 
 
 def main() -> int:
-    pkg = find_pkg()
+    parser = argparse.ArgumentParser(
+        description="Apply the research-stack fixes to a paper_search_mcp package."
+    )
+    parser.add_argument(
+        "--package",
+        default=None,
+        help="path to the paper_search_mcp package (or its parent); "
+             "defaults to the uv-tool install or $%s" % PACKAGE_ENV,
+    )
+    arguments = parser.parse_args()
+
+    try:
+        pkg = find_pkg(arguments.package)
+    except FileNotFoundError:
+        return missing_package(arguments.package)
+    if not pkg.is_dir():  # defensive: a race could remove it between the two checks
+        return missing_package(arguments.package)
     backup_dir = pkg / ".patch-backups"
     backup_dir.mkdir(exist_ok=True)
 
