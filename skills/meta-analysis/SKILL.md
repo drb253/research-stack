@@ -40,7 +40,7 @@ or to check whether a body of evidence exists at all, use the **`paper-search` M
 
 A PubMed-only search is a **single-source** search. It cannot see registries, preprints, or
 non-MEDLINE journals, and a meta-analysis built on it inherits that blind spot. Record every source
-searched and its hit count (`search_log.csv`); `prisma_s_appendix.py` fails a search log that omits
+searched and its hit count (`search_log.csv`); `../evidence-synthesis-forge/scripts/prisma_s_appendix.py` fails a search log that omits
 either.
 
 ## Step 0 — the poolability gate (do this first, always)

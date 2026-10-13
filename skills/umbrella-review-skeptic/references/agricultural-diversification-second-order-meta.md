@@ -66,8 +66,8 @@ When adapting this article into another environmental or agricultural second-ord
 2. Keep the search blocks separable: intervention/practice terms, outcome/service terms, and study-type terms.
 3. Require four inclusion anchors: meta-analysis design, eligible diversification practice, eligible outcome, and reported practice duration.
 4. Convert `RR` and percent change to `LnRR` when mathematically defensible.
-5. If SMD or Hedges' d cannot be converted to `LnRR` without original data, extract only direction and significance for vote-count or trade-off support.
-6. For duration intervals, use the mean duration when exact durations are unavailable.
+5. If SMD or Hedges' d cannot be converted to `LnRR` without original data, record the missing conversion as a gap and exclude it from vote counts; do not substitute direction and significance for an effect estimate, and do not use simple vote-counting of positive/negative studies as an effect estimate.
+6. For duration intervals, use the mean duration when exact durations are unavailable, and label that value as imputed wherever it is used.
 7. For open-ended durations such as `>x`, record the assumption explicitly; this article used `x + 2` years.
 8. Assign repeated response variables to the closest primary outcome family and flag any repeated secondary use.
 9. Check overlap before pooling: this article flagged meta-analyses sharing more than 30% of original studies and retained the most recent study when response variable and duration overlapped.

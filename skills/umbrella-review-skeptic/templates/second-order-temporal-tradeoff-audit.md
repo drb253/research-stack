@@ -13,13 +13,13 @@
 
 ## Evidence Base
 
-| Evidence layer | Count | Notes |
-|---|---:|---|
-| Meta-analyses / reviews | | |
-| Review-level effect sizes | | |
-| Underlying primary studies | | |
-| Long-term observations | | |
-| Trade-off paired records | | |
+| Evidence layer | Count | List obtained? | Notes |
+|---|---:|---|---|
+| Meta-analyses / reviews | | | |
+| Review-level effect sizes | | | |
+| Underlying primary studies | | | |
+| Long-term observations | | | |
+| Trade-off paired records | | | |
 
 ## Outcome Families
 

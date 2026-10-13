@@ -1,6 +1,6 @@
 ---
 name: paper-search
-description: Search, download, and read academic papers across 27 free-first sources (arXiv, PubMed, PMC, Europe PMC, bioRxiv, medRxiv, OpenAlex, Crossref, Semantic Scholar, CORE, DOAJ, OpenAIRE, HAL, SSRN, Zenodo, IACR, Unpaywall, PLOS, J-STAGE, figshare, DataCite, WHO IRIS, OSF Preprints, ClinicalTrials.gov, NCBI Bookshelf, WHO ICTRP, EU CTIS). Four upstream-broken sources (dblp, BASE, CiteSeerX, Google Scholar) are retired and not registered, so never request them. Use when the user asks to find papers, search the literature, search clinical trial registries or reference books/guidelines, download a paper PDF, or extract the full text of a paper. Backed by two local MCP servers (`paper-search` with 27 sources, `ncbi`) plus three community servers (remote `consensus`, `academic-search`, and Google Scholar via `HasData/google-scholar-mcp`), and the `paper-search` CLI.
+description: Search, download, and read academic papers across 28 free-first sources (arXiv, PubMed, PMC, Europe PMC, bioRxiv, medRxiv, chemRxiv, OpenAlex, Crossref, Semantic Scholar, CORE, DOAJ, OpenAIRE, HAL, SSRN, Zenodo, IACR, Unpaywall, PLOS, J-STAGE, figshare, DataCite, WHO IRIS, OSF Preprints, ClinicalTrials.gov, NCBI Bookshelf, WHO ICTRP, EU CTIS). Four upstream-broken sources (dblp, BASE, CiteSeerX, Google Scholar) are retired and not registered, so never request them. Use when the user asks to find papers, search the literature, search clinical trial registries or reference books/guidelines, download a paper PDF, or extract the full text of a paper. Backed by two local MCP servers (`paper-search` with 28 sources, `ncbi`) plus three community servers (remote `consensus`, `academic-search`, and Google Scholar via `HasData/google-scholar-mcp`), and the `paper-search` CLI.
 allowed-tools: Read Bash
 license: MIT
 compatibility: Requires the paper-search-mcp MCP server (or the `paper-search` CLI) installed at ~/.local/bin. Needs network access. No API keys required for the free-first sources; optional keys in ~/.config/paper-search-mcp/.env raise rate limits and unlock Unpaywall PDF resolution.
@@ -43,7 +43,7 @@ are the default, API keys are optional, and every result carries enough provenan
      `search_doaj`, `search_zenodo`, `search_hal`, `search_ssrn`, `search_unpaywall`,
      `search_plos`, `search_jstage`, `search_figshare`, `search_datacite`, `search_whoris`,
      `search_osf`, `search_clinicaltrials`, `search_bookshelf`, `search_ictrp`, `search_ctis`
-     — plus 2 keyed sources (`search_springer`, `search_elsevier`, below) for **30** active total
+     — plus 2 keyed sources (`search_springer`, `search_elsevier`, below), registered only when their key is set
    - Utility tools: `convert_paper_ids` (PMID/PMCID/DOI/MID via NCBI), `get_citation_metrics`
      (iCite citation counts/RCR), `get_citing_articles` (OpenCitations citation graph),
      `get_annotations` (Europe PMC text-mined entities; IDs need a `PMC:`/`MED:` prefix)
@@ -71,7 +71,7 @@ are the default, API keys are optional, and every result carries enough provenan
    `year_min`/`year_max`, `journal_name`, `publisher_name`, `country`, `page_size`).
    - **Prefer it for**: "what does the literature conclude" questions, evidence-quality filtering
      (RCTs with ≥100 participants, highly cited, Q1 journals), and open-access-only sweeps — none of
-     which the 27 free sources can express.
+     which the 28 free sources can express.
    - **Auth**: OAuth 2.0 against `consensus.app` (scopes `search`, `profile`). The first run opens a
      browser to sign in; tokens are then cached in `~/.mcp-auth/mcp-remote-v1/`. If a call starts
      failing with `Authentication required`, re-run the server once and sign in again.
@@ -89,7 +89,7 @@ are the default, API keys are optional, and every result carries enough provenan
      `has_pdf`, `open_access_only`, `has_abstract`, author). `get_paper_stats` summarises field
      coverage / author / year distributions.
    - **Coverage added: none.** Its four providers — Semantic Scholar, Crossref, OpenAlex, PubMed —
-     are already among the 27 sources here, and our own connectors query them *better* because they
+     are already among the 28 sources here, and our own connectors query them *better* because they
      send your API keys. `academic-search` reads **no environment variables at all** (verified by
      inspection), so it is strictly keyless. Measured consequences: OpenAlex `HTTP 429` on all 3
      retries, Semantic Scholar `Rate limited. Waiting 20s/30s`, and `explore_citations` taking
@@ -115,7 +115,7 @@ are the default, API keys are optional, and every result carries enough provenan
    - **Why this matters**: this restores the *only* source this install had given up on. Direct Google
      Scholar scraping is still blocked here (403/no-proxy) — that is why `google_scholar` remains a
      **retired source** — but HasData performs the retrieval server-side, so Scholar is reachable again
-     without a browser or a proxy. Coverage it adds over the 27 sources: theses, books, conference
+     without a browser or a proxy. Coverage it adds over the 28 sources: theses, books, conference
      slides, technical reports, and **"cited by" counts** (we otherwise only get citations for PMIDs via
      iCite and for DOIs via OpenCitations).
    - **Model**: the API is the *only* account-and-credit-based service here after Consensus —
@@ -186,10 +186,9 @@ Prefer **targeted** sources over `all` — broad fan-out is slow and produces no
 
 ## Retrieval quality features (local patches, Tiers 1–7)
 
-> **Diagrams:** `~/.local/share/paper-search-mcp-patches/ARCHITECTURE.md` holds 7 Mermaid
-> diagrams of the full request lifecycle — bounded fan-out timing, per-source outcome
-> classification, the DOI routing gate, citation export with retraction checks, and an
-> honest verified-versus-unverified status view.
+> **Behaviour:** the tiers below describe the full request lifecycle — bounded fan-out timing,
+> per-source outcome classification, the DOI routing gate, citation export with retraction
+> checks, and an honest verified-versus-unverified status view.
 
 - **Tier 1 — availability is explicit.** Connectors raise `SourceUnavailable` instead of returning
   `[]`, `Retry-After`/`retryAfter` is honoured (cap 40s), and `search_papers` reports per-source
@@ -262,7 +261,7 @@ Prefer **targeted** sources over `all` — broad fan-out is slow and produces no
   answers 200 with 1,059 bytes against ~79,000 for a valid one.
 - **Fan-out is bounded.** Every source runs under a per-source wall-clock timeout (45s) inside a
   150s per-call budget, so one stalled or internally-retrying connector can no longer hold the
-  call open to the client's 300s limit. Measured: a 27-source `sources="all"` fan-out that used to
+  call open to the client's 300s limit. Measured: a 28-source `sources="all"` fan-out that used to
   time out now completes in **13–15s**.
 - **`total: 0` is never proof of absence.** Timed-out and failed sources appear in
   `sources_unavailable` / `source_status`, and `search_papers` additionally returns a top-level
@@ -452,7 +451,7 @@ Browser-automation harness (kept for future work, not used at runtime):
 | Source | Search (real / garbage) | PDF download | Notes |
 |---|---|---|---|
 | `plos` | ✅ 5 / **0** (Tier 2 ladder) | ✅ 1.5 MB PDF, 66 690 chars read | PLOS OA journals; `everything:"..."` → `everything:(a AND b)` → raw |
-| `jstage` | ✅ 385 / **ERR_001** | ✅ 5.0 MB PDF, 57 838 chars read | Japanese journals; query uses `text=` (`q=` triggers ERR_012, `article=` rejects multi-word) |
+| `jstage` | ✅ 385 / ⚠️ **source error (ERR_001) — no result count** | ✅ 5.0 MB PDF, 57 838 chars read | Japanese journals; query uses `text=` (`q=` triggers ERR_012, `article=` rejects multi-word) |
 | `figshare` | ✅ 5 / **0** | ⚠️ only when the item carries a PDF | authors enriched from `/articles/{id}` (the search payload omits them) |
 | `datacite` | ✅ 5 / **0** (Tier 2 ladder) | ❌ **0 of 20 sampled records had a PDF** | datasets/software/theses; `titles.title:(a AND b)` + `resource-type-id=text` first |
 | `whoris` | ✅ 5 / **0** | ✅ 549 KB PDF, 60 975 chars read | WHO IRIS; PDF resolved via bundles → bitstreams |

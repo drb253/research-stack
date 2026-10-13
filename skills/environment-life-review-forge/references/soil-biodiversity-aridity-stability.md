@@ -14,7 +14,7 @@ Publicly accessible summary information indicates that the study combines:
 - aridity as a climate-stress moderator;
 - microbial network complexity and metagenomic life-history strategy as mechanism layers.
 
-The reported core result is not merely that biodiversity supports stability. It is that the biodiversity-stability relationship weakens as aridity intensifies.
+The reported core result is not merely that biodiversity supports stability. It is that the biodiversity-stability relationship weakens as aridity intensifies. `[abstract-only: full text not read]`
 
 ## Why This Pattern Matters
 
@@ -70,7 +70,7 @@ Aridity is not only a control variable here. It changes the strength of the biod
 
 ### 3. Mechanism layers make a correlational paper more useful
 
-The public summary indicates that declining microbial network complexity and a shift toward stress-tolerant life-history strategies partially explain the weakening relationship. That is stronger than leaving the stress interaction as a black-box pattern.
+The public summary indicates that declining microbial network complexity and a shift toward stress-tolerant life-history strategies partially explain the weakening relationship. That reading comes from the public summary rather than the full text, so it is a hypothesis to check, not evidence that resolves the stress interaction.
 
 ### 4. Cross-scale triangulation is powerful
 
