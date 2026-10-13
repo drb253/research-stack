@@ -92,8 +92,10 @@ jobs:
           python3 tools/normative_tokens.py --self-test
           python3 tools/normative_tokens.py --check tools/normative-baseline.json
           python3 tools/claim_guard.py --self-test
+          python3 tools/check_descriptions.py --self-test
           python3 tools/ste_lint.py --quiet --summary skills/*/SKILL.md || true
           python3 tools/claim_guard.py skills/*/SKILL.md || true
+          python3 tools/check_descriptions.py skills || true
 
   r-tests:
     name: r-tests (engine + gates)
