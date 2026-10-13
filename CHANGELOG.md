@@ -264,6 +264,22 @@ versioning follows [Semantic Versioning](https://semver.org/).
   `urllib.request`); the composition chart claimed 400 tracked files against 402
   (now derived from `git ls-files` and self-checking).
 
+### Changed
+- **The conflict ground truth was four positives wide, which made its interval the weakest number in
+  the README.** Conflict precision is the figure an accusation has to be able to defend, and at four
+  positives the Wilson lower bound was **0.510** — too small a set to distinguish "the rules work"
+  from "the rules worked four times". The labelled set now holds **26** conflict positives, built from
+  mechanisms that fail differently rather than repetitions of one: eight effect measures (HR, RR, OR,
+  MD, SMD, IRR, PR, beta) each contradicted in both directions, a contradiction that *reverses* the
+  direction of the recorded effect, retraction where the quoted figure is correct, and citation
+  numbers the reference list cannot account for. All 26 classify correctly, so precision stays 1.000
+  and its lower bound moves to **0.871**; whole-set rule and state agreement rose from 26/26 to
+  **48/48** (lower bound 0.871 → 0.926). Ten new evidence sources were added to the fixture, each
+  carrying a different recorded measure, and the fixture is still the ground truth's only source: if
+  the two disagree the benchmark reports the misclassification rather than passing. The set remains
+  author-written, which is stated where the numbers are printed — it shows the rules do what they were
+  designed to do, not that they generalise.
+
 ### Known limitations
 - **ORI Guideline 4 (syntactical structure) is not caught.** A paraphrase that changes
   every content word but keeps the source's sentence structure is plagiarism under the

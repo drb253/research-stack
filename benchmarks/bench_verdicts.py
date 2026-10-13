@@ -65,6 +65,16 @@ SOURCES_CSV = """source_id,title,authors,container,year,volume,issue,pages,doi,p
 S001,Statin therapy and cardiovascular events,Smith J,Demo Journal,2020,382,5,100-110,10.1056/NEJMoa1234567,12345678,PMC1,randomised_trial,yes,randomised controlled trial,adults with hyperlipidaemia,statin,placebo,1000,24 months,major adverse cardiovascular events,Statin therapy reduced major adverse cardiovascular events,HR 0.80 (95% CI 0.70-0.92),verified,bench,2026-01-01,abstract,clear,included,,returned,treatment,
 S002,Retracted vitamin D trial,Doe A,Demo Journal,2019,365,1,1-9,10.1136/bmj.retracted1,99999999,PMC2,randomised_trial,yes,randomised controlled trial,adults,vitamin D,placebo,500,12 months,all-cause mortality,Vitamin D supplementation reduced all-cause mortality,RR 0.70 (95% CI 0.55-0.89),verified,bench,2026-01-01,abstract,retracted,included,,returned,treatment,
 S003,Overview of lipid lowering,Roe B,Demo Review,2021,12,3,200-215,10.9999/demo.review.2021,12345670,PMC3,review,yes,narrative review,adults with hyperlipidaemia,not_applicable,not_applicable,not_reported,not_reported,not_reported,not_reported,not_reported,verified,bench,2026-01-01,abstract,clear,cited_for_context,,returned,treatment,
+ S005,Metformin and mortality in type 2 diabetes,Lee C,Demo Journal,2022,400,2,50-60,10.1000/demo.s005,,,randomised_trial,yes,randomised controlled trial,adults with type 2 diabetes,metformin,placebo,2400,36 months,all-cause mortality,Metformin reduced all-cause mortality,RR 0.75 (95% CI 0.62-0.91),verified,bench,2026-01-01,abstract,clear,included,,returned,treatment,
+ S006,Dexamethasone and ICU admission,Ng D,Demo Journal,2023,411,1,10-20,10.1000/demo.s006,,,cohort_study,yes,prospective cohort,adults with severe infection,dexamethasone,usual care,880,28 days,ICU admission,Dexamethasone was associated with higher ICU admission,OR 1.42 (95% CI 1.10-1.83),verified,bench,2026-01-01,abstract,clear,included,,returned,treatment,
+ S007,Exercise and systolic blood pressure,Patel E,Demo Journal,2021,15,4,300-310,10.1000/demo.s007,,,randomised_trial,yes,randomised controlled trial,adults with hypertension,exercise,control,310,12 weeks,systolic blood pressure,Exercise lowered systolic blood pressure,MD 3.20 (95% CI 1.30-5.10),verified,bench,2026-01-01,abstract,clear,included,,returned,treatment,
+ S008,Mindfulness and depression score,Kim F,Demo Journal,2020,8,1,1-11,10.1000/demo.s008,,,randomised_trial,yes,randomised controlled trial,adults with depression,mindfulness,waitlist,520,8 weeks,depression score,Mindfulness reduced depression severity,SMD 0.45 (95% CI 0.28-0.62),verified,bench,2026-01-01,abstract,clear,included,,returned,treatment,
+ S009,Adjuvant therapy and recurrence,Oka G,Demo Journal,2019,7,3,77-88,10.1000/demo.s009,,,randomised_trial,yes,randomised controlled trial,adults with resected cancer,adjuvant chemotherapy,observation,1800,60 months,cancer recurrence,Adjuvant chemotherapy reduced recurrence,HR 1.25 (95% CI 1.05-1.49),verified,bench,2026-01-01,abstract,clear,included,,returned,treatment,
+ S010,Thiazide and incident fractures,Ruiz H,Demo Journal,2018,6,2,120-130,10.1000/demo.s010,,,cohort_study,yes,retrospective cohort,older adults,thiazide,no thiazide,4200,48 months,incident fractures,Thiazide use was associated with fewer fractures,IRR 0.62 (95% CI 0.51-0.75),verified,bench,2026-01-01,abstract,clear,included,,returned,treatment,
+ S011,Sleep duration and cognitive score,Ibrahim I,Demo Journal,2024,20,5,400-412,10.1000/demo.s011,,,cohort_study,yes,prospective cohort,older adults,sleep duration,not_applicable,640,24 months,cognitive score,Longer sleep duration predicted a higher cognitive score,beta 0.34 (95% CI 0.12-0.56),verified,bench,2026-01-01,abstract,clear,included,,returned,prognosis,
+ S012,Screening and mortality prevalence ratio,Novak J,Demo Journal,2017,4,4,44-52,10.1000/demo.s012,,,cohort_study,yes,cross-sectional survey,adults,screening,no screening,1500,not_reported,mortality,Screen-detected cases had lower mortality prevalence,PR 0.88 (95% CI 0.79-0.98),verified,bench,2026-01-01,abstract,clear,included,,returned,epidemiology,
+ S013,Retracted calcium trial,Olsen K,Demo Journal,2016,3,3,33-41,10.1000/demo.s013,,,randomised_trial,yes,randomised controlled trial,adults,calcium,placebo,700,18 months,cardiovascular events,Calcium supplementation reduced cardiovascular events,RR 0.60 (95% CI 0.45-0.80),verified,bench,2026-01-01,abstract,retracted,included,,returned,treatment,
+ S014,Retracted antiviral trial,Petrov L,Demo Journal,2015,2,1,5-15,10.1000/demo.s014,,,randomised_trial,yes,randomised controlled trial,adults,antiviral,placebo,400,30 days,mortality,Antiviral therapy reduced mortality,OR 2.10 (95% CI 1.40-3.10),verified,bench,2026-01-01,abstract,retracted,included,,returned,treatment,
 """
 
 # --------------------------------------------------------------------------- #
@@ -122,6 +132,63 @@ CASES = [
      "D01", "'at most' must not read as a superlative claim"),
     ("Most participants were female.",
      "D01", "a majority statement without 'the most', folded into D01 by design"),
+    # --- Conflict ground truth, widened ----------------------------------------- #
+    # The first revision had four conflict positives, which put the Wilson lower bound on
+    # conflict precision at 0.51 -- the thinnest number in the README, and the one an
+    # accusation has to be able to defend. These cases reach the *same* decision through
+    # distinct mechanisms rather than repeating one: eight different effect measures, each
+    # contradicted in both directions (over- and under-statement), a contradiction against a
+    # value the trial itself records, retraction that outranks a correctly quoted figure, and
+    # a fabricated citation number. Every one is a case the rules were designed to catch, so a
+    # failure here is a defect rather than a surprise.
+    ("Metformin reduced all-cause mortality (RR 0.68) [src:S005].",
+     "D08", "RR 0.68 is not the recorded RR 0.75"),
+    ("Metformin reduced all-cause mortality (RR 0.90) [src:S005].",
+     "D08", "RR 0.90 is not the recorded RR 0.75"),
+    ("Dexamethasone was associated with ICU admission (OR 1.15) [src:S006].",
+     "D08", "OR 1.15 contradicts the recorded OR 1.42"),
+    ("Dexamethasone was associated with ICU admission (OR 1.90) [src:S006].",
+     "D08", "OR 1.90 contradicts the recorded OR 1.42"),
+    ("Exercise lowered systolic blood pressure (MD 1.10) [src:S007].",
+     "D08", "MD 1.10 contradicts the recorded MD 3.20"),
+    ("Exercise lowered systolic blood pressure (MD 5.40) [src:S007].",
+     "D08", "MD 5.40 contradicts the recorded MD 3.20"),
+    ("Mindfulness reduced depression severity (SMD 0.22) [src:S008].",
+     "D08", "SMD 0.22 contradicts the recorded SMD 0.45"),
+    ("Mindfulness reduced depression severity (SMD 0.70) [src:S008].",
+     "D08", "SMD 0.70 contradicts the recorded SMD 0.45"),
+    ("Adjuvant chemotherapy reduced recurrence (HR 0.85) [src:S009].",
+     "D08", "HR 0.85 reverses the direction of the recorded HR 1.25"),
+    ("Adjuvant chemotherapy reduced recurrence (HR 1.60) [src:S009].",
+     "D08", "HR 1.60 contradicts the recorded HR 1.25"),
+    ("Thiazide use was associated with fewer fractures (IRR 0.80) [src:S010].",
+     "D08", "IRR 0.80 contradicts the recorded IRR 0.62"),
+    ("Thiazide use was associated with fewer fractures (IRR 0.45) [src:S010].",
+     "D08", "IRR 0.45 contradicts the recorded IRR 0.62"),
+    ("Longer sleep duration predicted a higher cognitive score (beta 0.15) [src:S011].",
+     "D08", "beta 0.15 contradicts the recorded beta 0.34"),
+    ("Longer sleep duration predicted a higher cognitive score (beta 0.55) [src:S011].",
+     "D08", "beta 0.55 contradicts the recorded beta 0.34"),
+    ("Screen-detected cases had lower mortality (PR 0.70) [src:S012].",
+     "D08", "PR 0.70 contradicts the recorded PR 0.88"),
+    ("Screen-detected cases had lower mortality (PR 0.95) [src:S012].",
+     "D08", "PR 0.95 contradicts the recorded PR 0.88"),
+    ("Statin therapy reduced cardiovascular events (HR 0.60) [src:S001].",
+     "D08", "HR 0.60 contradicts the recorded HR 0.80"),
+    ("Statin therapy reduced cardiovascular events (HR 0.95) [src:S001].",
+     "D08", "HR 0.95 contradicts the recorded HR 0.80"),
+    # Retraction outranks a correctly quoted figure: the sentence reports the recorded value
+    # exactly, so there is no contradiction to find -- and it is still a conflict, because
+    # the source may not be cited at all.
+    ("Calcium supplementation reduced cardiovascular events (RR 0.60) [src:S013].",
+     "D04", "S013 is retracted; RR 0.60 is the recorded value, so the defect is the retraction alone"),
+    ("Antiviral therapy reduced mortality (OR 2.10) [src:S014].",
+     "D04", "S014 is retracted; OR 2.10 is the recorded value"),
+    # A citation number the document's own apparatus cannot account for is fabricated.
+    ("An exploratory subgroup analysis suggested benefit [98].",
+     "D03", "citation 98 matches no source"),
+    ("A post hoc analysis reported a larger effect [97].",
+     "D03", "citation 97 matches no source"),
 ]
 
 RULE_STATE = {

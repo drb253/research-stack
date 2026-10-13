@@ -643,18 +643,28 @@ matrices and intervals:
 
 | What was measured | Cases | Accuracy | Sensitivity | Specificity |
 |---|:--:|---|---|---|
-| Every state, one against the rest — cases written to exercise each rule | 26 | **100%**<br><sub>[87.1%, 100%]</sub> | 100% per class | 100% per class |
-| **The accusation decision** — is a citation being called false? | 26 | **100%**<br><sub>[87.1%, 100%]</sub> | **100%**<br><sub>[51.0%, 100%]</sub> | **100%**<br><sub>[85.1%, 100%]</sub> |
-| The trigger — does the sentence need attribution? Constructed cases | 26 | **100%**<br><sub>[87.1%, 100%]</sub> | **100%**<br><sub>[83.9%, 100%]</sub> | **100%**<br><sub>[61.0%, 100%]</sub> |
+| Every state, one against the rest — cases written to exercise each rule | 48 | **100%**<br><sub>[92.6%, 100%]</sub> | 100% per class | 100% per class |
+| **The accusation decision** — is a citation being called false? | 48 | **100%**<br><sub>[92.6%, 100%]</sub> | **100%**<br><sub>[87.1%, 100%]</sub> | **100%**<br><sub>[85.1%, 100%]</sub> |
+| The trigger — does the sentence need attribution? Constructed cases | 48 | **100%**<br><sub>[92.6%, 100%]</sub> | **100%**<br><sub>[91.6%, 100%]</sub> | **100%**<br><sub>[61.0%, 100%]</sub> |
 | The trigger — the same question on 40 unseen real sentences | 40 | **90.0%**<br><sub>[76.9%, 96.0%]</sub> | **86.7%**<br><sub>[70.3%, 94.7%]</sub> | **100%**<br><sub>[72.2%, 100%]</sub> |
 | The accusation path on those real sentences (all 40 are true negatives) | 40 | **100%**<br><sub>[91.2%, 100%]</sub> | n/a — that text holds no contradiction | **100%**<br><sub>[91.2%, 100%]</sub> |
+
+The **conflict** class is the one that accuses someone, so its interval is the number
+to judge the gate by — and it was the weakest here, because four positives is too few
+to tell "the rules work" from "the rules worked four times". It now holds **26**
+positives, reaching the same decision through mechanisms that fail differently:
+eight effect measures (HR, RR, OR, MD, SMD, IRR, PR, beta), each contradicted in both
+directions, a contradiction that *reverses* the direction of the recorded effect,
+retraction where the quoted figure is correct, and citation numbers the reference
+list cannot account for. All 26 classify correctly, so precision stays 1.000 and its
+Wilson lower bound moves **0.510 → 0.871**.
 
 **Two safety properties are asserted, not just printed.** The benchmark *fails*
 if either breaks, so they cannot silently regress in CI:
 
 ```
 SAFETY PROPERTIES HOLD:
-  conflict precision is 1.000 over 4 conflict case(s) -- no false accusation
+  conflict precision is 1.000 over 26 conflict case(s) -- no false accusation
   trigger specificity is 1.000 over 40 unseen real sentences -- no sentence was
     told it needs a citation when it did not
 ```

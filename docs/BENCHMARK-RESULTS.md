@@ -202,7 +202,7 @@ code path *no* benchmark had exercised — which is the honest argument against 
 
 ## 5. citation-report deterministic channel — 100% on a hand-labelled set, and what that is worth
 
-`benchmarks/bench_verdicts.py` runs the real CLI against 23 hand-labelled sentences covering every
+`benchmarks/bench_verdicts.py` runs the real CLI against 48 hand-labelled sentences covering every
 rule in `skills/citation-report/references/verdict-rules.md`, plus six adversarial cases that must
 **not** be flagged. Ground truth is the rule id each sentence is supposed to earn.
 
@@ -211,18 +211,41 @@ asymmetry that matters: for an accusation, a false positive accuses someone, whi
 merely leaves a sentence ungraded. Sensitivity and specificity are therefore always reported together,
 and never collapsed into one number.
 
-**A. On the 26 constructed cases** (written to exercise every rule)
+**A. On the 48 constructed cases** (written to exercise every rule)
 
 | Decision | Accuracy | Sensitivity | Specificity | Precision | F1 |
 |---|---|---|---|---|---|
-| Any state, one against the rest | 1.000 [0.871, 1.000] | 1.000 per class (see below) | 1.000 per class | 1.000 | 1.000 |
-| **The accusation decision** (conflict vs not) | **1.000** [0.871, 1.000] | **1.000** [0.510, 1.000] | **1.000** [0.851, 1.000] | 1.000 [0.510, 1.000] | 1.000 |
-| The trigger decision (needs attribution?) | 1.000 [0.871, 1.000] | 1.000 [0.839, 1.000] | 1.000 [0.610, 1.000] | 1.000 [0.839, 1.000] | 1.000 |
+| Any state, one against the rest | 1.000 [0.926, 1.000] | 1.000 per class (see below) | 1.000 per class | 1.000 | 1.000 |
+| **The accusation decision** (conflict vs not) | **1.000** [0.926, 1.000] | **1.000** [0.871, 1.000] | **1.000** [0.851, 1.000] | 1.000 [0.871, 1.000] | 1.000 |
+| The trigger decision (needs attribution?) | 1.000 [0.926, 1.000] | 1.000 [0.916, 1.000] | 1.000 [0.610, 1.000] | 1.000 [0.916, 1.000] | 1.000 |
 
-Per-state one-vs-rest, all at sensitivity 1.000 and specificity 1.000: `attributed` (3 positives of 26),
-`synthesis` (3), `unverifiable` (5), `unattributed` (5), `conflict` (4), `no_citation_needed` (6).
+Per-state one-vs-rest, all at sensitivity 1.000 and specificity 1.000: `attributed` (3 positives of 48),
+`synthesis` (3), `unverifiable` (5), `unattributed` (5), **`conflict` (26)**, `no_citation_needed` (6).
 The interval on each is wide — sensitivity 3/3 gives a lower bound of 0.438 — which is the honest
-reading of a 26-case set.
+reading of a 48-case set.
+
+### The conflict class was four positives wide, which made its interval the weakest number here
+
+`conflict` is the one class that accuses someone, so its interval is the number a reader should
+judge the tool by — and in the first revision that interval was **0.510**, because the labelled set
+held four conflict cases. That is not a rounding problem; it is a set too small to distinguish
+"the rules work" from "the rules happened to work four times".
+
+The set now holds **twenty-six** conflict positives, reaching the same decision through mechanisms
+that fail differently rather than repeating one shape:
+
+| Mechanism | Cases | Example |
+|---|---:|---|
+| Effect measure contradicted, both directions | 18 | `HR 0.60` against a recorded `HR 0.80`; `RR 0.90` against `RR 0.75` |
+| Distinct measures covered | 8 | HR, RR, OR, MD, SMD, IRR, PR, beta |
+| Direction reversed rather than merely off | 1 | `HR 0.85` for a trial whose recorded `HR 1.25` was *harm* |
+| Retraction, with the figure quoted correctly | 2 | a retracted source cited at exactly its recorded `RR 0.60` |
+| Citation number the apparatus cannot account for | 2 | `[98]` where the reference list holds three sources |
+
+All 26 classify correctly, so conflict precision stays at 1.000 and its Wilson lower bound moves
+**0.510 → 0.871**. The set is still written by the author of the rule table, so it still shows the
+rules do what they were designed to do rather than that they generalise; what it no longer does is
+let four cases stand in for a claim about accusations generally.
 
 **B. On 40 unseen real sentences** (drawn at a fixed interval from a real 34-page PTSD review, so it is
 not a set written to fit the rules; hand-labelled by reading each sentence)
@@ -305,7 +328,7 @@ answer: with those sources, no sentence's distinctive value could be confirmed.
 
 ```
 SAFETY PROPERTIES HOLD:
-  conflict precision is 1.000 over 4 conflict case(s) -- no false accusation
+  conflict precision is 1.000 over 26 conflict case(s) -- no false accusation
   trigger specificity is 1.000 over 40 unseen real sentences -- no sentence was
     told it needs a citation when it did not
 ```
@@ -343,7 +366,9 @@ because PDF extraction routinely loses tables and figures.
 The labelled set was written by the same author as the rule table, from the same reading of the
 requirements. A perfect score therefore shows the rules **do what they were designed to do**; it does
 not show they generalise to prose the author did not choose. There is also only one case per
-distinction in several classes, so the Wilson lower bound is as weak as 43.9% for conflict precision.
+distinction in several classes. The conflict class was widened for exactly this reason: it held four
+positives in the first revision, which put the Wilson lower bound on conflict precision at 51.0%,
+and now holds twenty-six, which puts it at 87.1%.
 
 The honest complement is the **unlabelled** distribution over a real 1,027-sentence document (a
 34-page PTSD review). It was measured twice, and the difference between the two runs is the point
