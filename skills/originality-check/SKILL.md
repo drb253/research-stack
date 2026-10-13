@@ -75,6 +75,27 @@ All code lives in `~/.research-stack/originality-toolkit/` (7 modules plus a
 | `outline.py` | corpus → outline + notes skeleton |
 | `style_pass.py` | style-only editor; skips sourced sentences |
 
+### A corpus that was not read is an input gap, not a measurement
+
+`--corpus` may be partly or wholly unreadable (a locked file, a corrupt PDF, a path that does not
+exist). When that happens the toolkit **exits `3`** and records every unreadable file — with its
+reason and its action — in three places, not only on stderr:
+
+* the markdown report, under `## Corpus not fully read — INPUT GAP, not a result`;
+* the `--json` payload, as `corpus.not_checked[]` plus a top-level `status`;
+* the process exit code.
+
+If **no** document in the corpus could be read, the report prints **no** score line and no
+"no passage exceeded the threshold" verdict; it says the local-corpus figures cannot be
+determined. A score over a corpus that was not read is the one output this skill must never
+produce. `--allow-insufficient` exits `0` while still recording the gap, and
+`--recheck <previous --json output>` re-reads only the files that failed, exiting `3` until every
+one of them is readable — so a gap can be shown to be closed rather than re-asserted.
+
+The same rule applies to the API sources: `sources.py` reports `ok` / `empty` / `unavailable`, and
+an unreadable local corpus is `unavailable`, never `empty` — "the corpus matched nothing" and "the
+corpus was never read" are different claims.
+
 ## Workflow
 
 Run from the toolkit directory:

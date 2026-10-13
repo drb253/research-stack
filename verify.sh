@@ -88,6 +88,14 @@ TOOLKIT_DEPLOYED="$HOME/.research-stack/originality-toolkit/originality_check.py
 TOOLKIT_CHECKOUT="$ROOT/tools/originality-toolkit/originality_check.py"
 if [ -f "$TOOLKIT_DEPLOYED" ]; then
   ok "originality-toolkit present ($HOME/.research-stack/originality-toolkit)"
+  # The deployed copy is what originality-check actually runs, so assert its behaviour
+  # rather than only its existence.
+  if env PYTHONDONTWRITEBYTECODE=1 python3 "$TOOLKIT_DEPLOYED" --self-test >/tmp/rs_toolkit.out 2>&1; then
+    ok "originality-toolkit self-test passes ($(tail -1 /tmp/rs_toolkit.out))"
+  else
+    bad "originality-toolkit self-test FAILED"
+    tail -4 /tmp/rs_toolkit.out | sed 's/^/        /'
+  fi
 elif [ -f "$TOOLKIT_CHECKOUT" ]; then
   bad "originality-toolkit not installed: $HOME/.research-stack/originality-toolkit is absent, so originality-check cannot run. It IS present in this checkout ($ROOT/tools/originality-toolkit) -> run ./install.sh"
 else

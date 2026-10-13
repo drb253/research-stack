@@ -52,6 +52,9 @@ jobs:
           # citecheck: pins the routing that keeps an unreachable registry out of the
           # findings, and the [UNRESOLVED] placeholder in the emitted reference list.
           python3 skills/citecheck/scripts/citecheck.py --self-test
+          # originality toolkit: pins the corpus-gap routing (an unreadable corpus file must
+          # reach the report and the exit code, not only stderr).
+          python3 tools/originality-toolkit/originality_check.py --self-test
       - name: medical-narrative-review selftest (19 checks)
         run: bash skills/medical-narrative-review/scripts/selftest.sh
       # citation-report writes its own PDF and DOCX, and verifies both by re-opening

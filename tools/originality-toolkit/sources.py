@@ -243,7 +243,10 @@ def _crossref(query, limit):
 
 _LOCAL_CORPUS = None       # None = not configured; [] = configured but empty
 _LOCAL_WARNINGS: list = []
-
+#: True when a --corpus was supplied but produced no usable document because of how it was
+#: read (missing path, unreadable files, no files at all). The corpus then cannot be called
+#: "empty" -- that status means the service answered with no match, and here nothing was asked.
+_LOCAL_UNREADABLE = False
 _TEXT_SUFFIXES = {".txt", ".md", ".markdown", ".rst", ".text"}
 _HTML_SUFFIXES = {".html", ".htm", ".xhtml"}
 
@@ -288,14 +291,19 @@ def set_corpus(path):
     silently dropped: the caller must know if the corpus is smaller than they
     think, because a quietly-skipped source is a false "no overlap" result.
     """
-    global _LOCAL_CORPUS, _LOCAL_WARNINGS
+    global _LOCAL_CORPUS, _LOCAL_WARNINGS, _LOCAL_UNREADABLE
     warnings: list = []
     root = Path(os.path.expanduser(str(path))).resolve()
     if not root.exists():
         _LOCAL_CORPUS, _LOCAL_WARNINGS = [], ["corpus path does not exist: %s" % root]
+        _LOCAL_UNREADABLE = True
         return 0, list(_LOCAL_WARNINGS)
 
     files = [root] if root.is_file() else sorted(p for p in root.rglob("*") if p.is_file())
+    files = [p for p in files if not p.name.startswith(".")]
+    if not files:
+        # Nothing to read at all is an input condition, not a corpus that matched nothing.
+        warnings.append("corpus contains no files: %s" % root)
 
     docs = []
     for p in files:
@@ -304,18 +312,24 @@ def set_corpus(path):
         try:
             text = _read_document(p)
         except Exception as exc:  # noqa: BLE001 - report, do not abort the run
-            warnings.append("%s: %s" % (p.name, exc))
+            # The full path, not the basename: a worklist that cannot be re-checked is not a
+            # worklist. The caller re-reads exactly these paths in --recheck mode.
+            warnings.append("%s: %s" % (p, exc))
             continue
         text = re.sub(r"\s+", " ", text).strip()
         # A user-supplied corpus is an explicit choice, so keep short documents
         # too: excluding one would silently shrink the corpus and could turn a
         # real overlap into a false "no overlap". Only near-empty files are cut.
         if len(text.split()) < 5:
-            warnings.append("%s: skipped (no usable text)" % p.name)
+            warnings.append("%s: skipped (no usable text)" % p)
             continue
         docs.append(_cand("local", str(p), p.stem, text, "", "", "", "file://%s" % p))
 
     _LOCAL_CORPUS, _LOCAL_WARNINGS = docs, warnings
+    # "The corpus loaded nothing because it could not be read" and "the corpus loaded nothing
+    # because it is empty" are different facts, and only the second may be reported as a
+    # source that answered with no match.
+    _LOCAL_UNREADABLE = not docs and bool(warnings)
     return len(docs), warnings
 
 
@@ -327,6 +341,13 @@ def _local(query, limit):
     """
     docs = _LOCAL_CORPUS or []
     if not docs:
+        if _LOCAL_UNREADABLE:
+            # search() maps a raised exception to "unavailable", which the report already
+            # renders as "results NOT clean for these". Returning [] here would instead be
+            # reported as "empty" -- the corpus answered and found no match -- which is false.
+            raise RuntimeError(
+                "the local corpus could not be read (%d problem(s)); no passage was compared "
+                "against it" % len(_LOCAL_WARNINGS))
         return []
     wanted = set(_content_tokens(query))
     if not wanted:

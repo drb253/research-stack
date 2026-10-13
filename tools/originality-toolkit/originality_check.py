@@ -26,6 +26,7 @@ import re
 import sys
 import time
 from difflib import SequenceMatcher
+from pathlib import Path
 
 import htmltext
 import sources
@@ -305,33 +306,64 @@ def _source_ref(candidate):
     return " ".join(bits)
 
 
-def render_report(draft_name, rows, source_names, threshold, statuses):
+def render_report(draft_name, rows, source_names, threshold, statuses,
+                  corpus_size=None, corpus_gaps=None, corpus_path=None):
     checked = len(rows)
     flagged = [r for r in rows if r["verdict"] != "ok"]
     violations = [r for r in flagged if is_violation(r["verdict"])]
     quoted = [r for r in flagged if r["verdict"].startswith("QUOTED")]
     verbatim = [r for r in rows if r["verdict"].startswith("QUOTE")]
     top = max([r["best"]["score"] for r in rows if r["best"]], default=0.0)
+    gaps = list(corpus_gaps or [])
+    # A corpus that loaded nothing at all cannot produce a measurement. Printing
+    # "highest score: 0.000" and "no passage exceeded the threshold" over it is the failure
+    # this whole report is supposed to avoid: a true statement about the inputs presented in
+    # the shape of a result about the draft.
+    corpus_empty = corpus_size == 0
 
     lines = []
     lines.append("# Self-originality report — %s" % draft_name)
     lines.append("")
     lines.append("Sources queried: %s  |  threshold: %.2f" % (", ".join(source_names), threshold))
     lines.append("")
-    lines.append("Sentences checked: **%d**  |  violations: **%d**  |  "
-                 "quoted verbatim (OK if cited): **%d**  |  "
-                 "verbatim runs (>=12 words): **%d**  |  highest score: **%.3f**"
-                 % (checked, len(violations), len(quoted), len(verbatim), top))
-    lines.append("")
+    if corpus_empty:
+        lines.append("Sentences checked: **%d**  |  **NO CORPUS WAS READ** — the local corpus "
+                     "figures below cannot be determined." % checked)
+        lines.append("")
+    else:
+        lines.append("Sentences checked: **%d**  |  violations: **%d**  |  "
+                     "quoted verbatim (OK if cited): **%d**  |  "
+                     "verbatim runs (>=12 words): **%d**  |  highest score: **%.3f**"
+                     % (checked, len(violations), len(quoted), len(verbatim), top))
+        lines.append("")
+    if gaps:
+        lines.append("## Corpus not fully read — INPUT GAP, not a result")
+        lines.append("")
+        lines.append("The local corpus was **not** fully read, so the overlap figures above do "
+                     "**not** cover it. These files were not compared against the draft:")
+        lines.append("")
+        for gap in gaps:
+            lines.append("- `%s` — %s" % (gap["file"], gap["reason"]))
+        lines.append("")
+        lines.append("Action: make these files readable (or remove them from the corpus) and "
+                     "re-run. A clean report over a corpus that was not read is not a clean "
+                     "report. Re-check only these files with `--recheck <previous --json output>`.")
+        lines.append("")
     unavailable = sorted(s for s, st in (statuses or {}).items() if st == "unavailable")
     if unavailable:
         lines.append("> Not reachable this run (results NOT clean for these): %s"
                      % ", ".join(unavailable))
         lines.append("")
     if not flagged:
-        lines.append("No passage exceeded the threshold against the open scholarly indexes. "
-                     "This does **not** clear you: Turnitin's web and student-paper "
-                     "repositories are private and not reachable here.")
+        if corpus_empty:
+            lines.append("**Cannot determine.** No passage could be compared against the local "
+                         "corpus because no document in it could be read%s. This is not a "
+                         "clean result and not a finding about the draft — nothing was checked."
+                         % (" (%s)" % corpus_path if corpus_path else ""))
+        else:
+            lines.append("No passage exceeded the threshold against the open scholarly indexes. "
+                         "This does **not** clear you: Turnitin's web and student-paper "
+                         "repositories are private and not reachable here.")
         lines.append("")
         return "\n".join(lines)
 
@@ -389,9 +421,117 @@ def _action_text(verdict):
     return "No action."
 
 
+def _self_test():
+    """Offline assertions for the corpus-gap routing.
+
+    The defect this guards: an unreadable corpus file was written to stderr and nowhere else.
+    The report and the JSON carried no trace of it, and the run exited 0 -- so a reader, or an
+    agent using --out where stderr is discarded, saw "highest score 0.890" over a corpus three
+    of whose four files had never been read. No network is touched.
+    """
+    import tempfile
+
+    problems = []
+    # (a) the two whole-corpus warnings are "condition: path", not "file: reason"
+    gap = _corpus_gap("corpus path does not exist: /tmp/nope")
+    if gap["file"] != "/tmp/nope" or gap["reason"] != "the corpus path does not exist":
+        problems.append("missing-path gap parsed backwards: %r" % gap)
+    gap = _corpus_gap("corpus contains no files: /tmp/empty")
+    if gap["file"] != "/tmp/empty":
+        problems.append("no-files gap parsed backwards: %r" % gap)
+    gap = _corpus_gap("/tmp/a.txt: Permission denied")
+    if gap["file"] != "/tmp/a.txt" or gap["reason"] != "Permission denied":
+        problems.append("per-file gap parsed wrong: %r" % gap)
+    if not all(_corpus_gap(w).get("action") for w in
+               ("corpus path does not exist: /x", "corpus contains no files: /x", "/x: bad")):
+        problems.append("a gap carries no action")
+
+    with tempfile.TemporaryDirectory() as tmp:
+        good = os.path.join(tmp, "good.txt")
+        with open(good, "w", encoding="utf-8") as fh:
+            fh.write("A readable sentence with comfortably more than five words in it.\n")
+        # (b) a readable corpus is not a gap, and the local source answers "ok"
+        n_docs, warnings = sources.set_corpus(tmp)
+        if n_docs != 1 or warnings:
+            problems.append("a readable corpus reported %d doc(s) and %r" % (n_docs, warnings))
+        # The local filter only returns documents that share vocabulary with the passage, so
+        # the query must share words with the fixture. "nothing matches" is a different
+        # status from "nothing was read".
+        status, _ = sources.search("readable sentence comfortably words", "local", 5)
+        if status != "ok":
+            problems.append("a readable corpus gave local status %r" % status)
+        # (c) an unreadable file is a gap, and the local source must NOT answer "empty"
+        locked = os.path.join(tmp, "locked.txt")
+        with open(locked, "w", encoding="utf-8") as fh:
+            fh.write("Some words that would be usable if the file could be opened.\n")
+        os.chmod(locked, 0o000)
+        try:
+            n_docs, warnings = sources.set_corpus(tmp)
+            if n_docs != 1 or not warnings:
+                problems.append("a locked file was not reported (%d doc(s), %r)"
+                                % (n_docs, warnings))
+            # The local filter only returns documents that share vocabulary with the passage,
+            # so the query must share words with the fixture. "nothing matches" is a different
+            # status from "nothing was read".
+            status, _ = sources.search("readable sentence comfortably words", "local", 5)
+            if status != "ok":
+                problems.append("a partly read corpus should still answer ok, got %r" % status)
+            # now nothing readable at all
+            sources.set_corpus(locked)
+            status, _ = sources.search("readable sentence comfortably words", "local", 5)
+            if status != "unavailable":
+                problems.append("an unreadable corpus reported local status %r, not "
+                                "'unavailable' -- it must never read as a corpus that "
+                                "answered with no match" % status)
+        finally:
+            os.chmod(locked, 0o644)
+        # (d) a corpus directory with no files is a gap, not an empty result
+        empty = os.path.join(tmp, "empty_dir")
+        os.makedirs(empty)
+        n_docs, warnings = sources.set_corpus(empty)
+        if n_docs != 0 or not warnings:
+            problems.append("an empty corpus directory was not reported (%r)" % warnings)
+
+        # (e) the report must not print a measurement over a corpus that loaded nothing
+        empty_report = render_report("d.md", [], ["local"], 0.30, {},
+                                     corpus_size=0,
+                                     corpus_gaps=[_corpus_gap("/tmp/x.txt: unreadable")],
+                                     corpus_path=tmp)
+        for must in ("NO CORPUS WAS READ", "Cannot determine", "INPUT GAP", "/tmp/x.txt"):
+            if must not in empty_report:
+                problems.append("empty-corpus report is missing %r" % must)
+        for forbidden in ("highest score", "No passage exceeded"):
+            if forbidden in empty_report:
+                problems.append("empty-corpus report still prints %r" % forbidden)
+        # (f) a partly-read corpus keeps its scores but must still carry the gap
+        part_report = render_report("d.md", [], ["local"], 0.30, {},
+                                    corpus_size=2,
+                                    corpus_gaps=[_corpus_gap("/tmp/x.txt: unreadable")],
+                                    corpus_path=tmp)
+        if "highest score" not in part_report:
+            problems.append("a partly-read corpus lost its measurement line")
+        if "INPUT GAP" not in part_report or "/tmp/x.txt" not in part_report:
+            problems.append("a partly-read corpus did not report the unreadable file")
+        # (g) an unchanged run is unchanged
+        clean_report = render_report("d.md", [], ["local"], 0.30, {})
+        if "highest score" not in clean_report or "INPUT GAP" in clean_report:
+            problems.append("a clean corpus run changed shape")
+
+    # (h) the benchmarks read the --threshold default out of this source text by regex
+    if '"--threshold", type=float, default=' not in Path(__file__).read_text(encoding="utf-8"):
+        problems.append("the --threshold default pattern the benchmarks parse is gone")
+
+    for p in problems:
+        print("self-test FAILED: %s" % p)
+    if problems:
+        return 1
+    print("self-test: OK (corpus-gap routing asserted offline; no network)")
+    return 0
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("draft", help="path to the draft (.txt/.md)")
+    parser.add_argument("draft", nargs="?", help="path to the draft (.txt/.md)")
     parser.add_argument("--sources", default="openalex,crossref,arxiv,europepmc",
                         help="comma-separated: openalex,crossref,arxiv,europepmc,semantic")
     parser.add_argument("--corpus", default=None,
@@ -415,9 +555,26 @@ def main(argv=None):
     parser.add_argument("--json", dest="json_out", default=None,
                         help="write machine-readable results here (consumed by cite_fix.py)")
     parser.add_argument("--refresh", action="store_true", help="ignore cache")
+    parser.add_argument("--allow-insufficient", action="store_true",
+                        help="exit 0 although part (or all) of the local corpus could not be "
+                             "read. The report and the JSON still record the gap, so the "
+                             "override is logged rather than silent.")
+    parser.add_argument("--recheck", default=None, metavar="PREVIOUS.json",
+                        help="re-read only the corpus files a previous --json run could not "
+                             "read, and exit 0 only once every one of them is readable.")
+    parser.add_argument("--self-test", action="store_true",
+                        help="offline check of the corpus-gap routing; no network")
     args = parser.parse_args(argv)
 
+    if args.self_test:
+        return _self_test()
+    if args.recheck:
+        return recheck(args.recheck)
+    if not args.draft:
+        parser.error("a draft path is required (or --recheck with a previous --json output)")
+
     source_names = [s.strip() for s in args.sources.split(",") if s.strip()]
+    corpus_gaps, n_docs = [], None
     if args.corpus:
         n_docs, corpus_warnings = sources.set_corpus(args.corpus)
         if "local" not in source_names:
@@ -425,10 +582,18 @@ def main(argv=None):
         for warning in corpus_warnings:
             sys.stderr.write("corpus: %s\n" % warning)
         sys.stderr.write("corpus: %d document(s) loaded from %s\n" % (n_docs, args.corpus))
+        # Every unreadable or skipped file becomes a worklist row. "Reported, never silently
+        # skipped" was already true of stderr and false of everything that outlives the run:
+        # --out and --json carried no trace of it, and the exit code said 0.
+        corpus_gaps = [_corpus_gap(w) for w in corpus_warnings]
         if n_docs == 0:
             sys.stderr.write(
                 "corpus: WARNING - no usable documents loaded; only the APIs will be "
                 "checked. A 'no overlap' result would NOT cover this corpus.\n")
+            if not corpus_gaps:
+                corpus_gaps.append(
+                    {"file": str(args.corpus), "reason": "no readable documents were loaded",
+                     "action": "point --corpus at readable files and re-run"})
     with open(args.draft, "r", encoding="utf-8", errors="replace") as handle:
         text = handle.read()
     if htmltext.is_html(args.draft):
@@ -449,7 +614,9 @@ def main(argv=None):
     sys.stderr.write("\r" + " " * 90 + "\r")
 
     report = render_report(os.path.basename(args.draft), rows, source_names,
-                           args.threshold, seen_statuses)
+                           args.threshold, seen_statuses,
+                           corpus_size=n_docs, corpus_gaps=corpus_gaps,
+                           corpus_path=args.corpus)
     if args.out:
         with open(args.out, "w", encoding="utf-8") as handle:
             handle.write(report)
@@ -468,6 +635,16 @@ def main(argv=None):
             "sources_unavailable": sorted(
                 s for s, st in seen_statuses.items() if st == "unavailable"
             ),
+            # The input side travels with the results, so a consumer that reads only the JSON
+            # cannot see the scores without also seeing what was not read.
+            "corpus": {
+                "path": args.corpus,
+                "documents_loaded": n_docs,
+                "not_checked": corpus_gaps,
+                "status": ("insufficient_evidence" if corpus_gaps
+                           else ("pass" if args.corpus else "not_configured")),
+            },
+            "status": "insufficient_evidence" if corpus_gaps else "pass",
             "results": [
                 {
                     "index": i,
@@ -484,6 +661,87 @@ def main(argv=None):
         with open(args.json_out, "w", encoding="utf-8") as handle:
             json.dump(payload, handle, indent=2)
         print("JSON written to %s" % args.json_out, file=sys.stderr)
+    if corpus_gaps:
+        print("INSUFFICIENT INPUT - %d corpus file(s) could not be read; the local-corpus "
+              "figures above do not cover them:" % len(corpus_gaps), file=sys.stderr)
+        for gap in corpus_gaps:
+            print("  - %s: %s" % (gap["file"], gap["reason"]), file=sys.stderr)
+        print("  status: insufficient_evidence (a statement about the inputs, not a finding "
+              "about the draft)", file=sys.stderr)
+        if n_docs == 0:
+            print("  no document in the corpus was read, so NO local-corpus result could be "
+                  "determined at all", file=sys.stderr)
+        print("  action: fix the files and re-run, or re-check only these with --recheck %s"
+              % (args.json_out or "<a --json output path>"), file=sys.stderr)
+        if not args.allow_insufficient:
+            return 3
+        print("  --allow-insufficient given: the gaps stay recorded above and in the report",
+              file=sys.stderr)
+    return 0
+
+
+def _corpus_gap(warning):
+    """Turn one corpus warning into a worklist row: which file, why, and what to do.
+
+    The two whole-corpus warnings are not "file: reason", they are "condition: path", so they
+    are read by prefix rather than split on the first colon -- which would have labelled the
+    problem as the filename and the path as the reason.
+    """
+    for prefix, reason in (
+        ("corpus path does not exist: ", "the corpus path does not exist"),
+        ("corpus contains no files: ", "the corpus contains no files to read"),
+    ):
+        if warning.startswith(prefix):
+            return {"file": warning[len(prefix):].strip(), "reason": reason,
+                    "action": "point --corpus at readable files and re-run"}
+    if ":" in warning:
+        name, detail = warning.split(":", 1)
+        return {"file": name.strip(), "reason": detail.strip(),
+                "action": "make the file readable, or remove it from the corpus, and re-run; "
+                          "nothing was compared against it"}
+    return {"file": warning.strip(), "reason": "could not be read",
+            "action": "make the file readable, or remove it from the corpus, and re-run"}
+
+
+def recheck(previous_json):
+    """Re-read only the corpus files a previous run could not read.
+
+    The invariant asks for a mode that re-checks the worklist, so that a gap can be shown to
+    be closed rather than re-asserted. Exits 3 while any listed file still cannot be read.
+    """
+    try:
+        with open(previous_json, encoding="utf-8") as handle:
+            prior = json.load(handle)
+    except Exception as exc:  # noqa: BLE001
+        print("recheck: cannot read %s: %s" % (previous_json, exc), file=sys.stderr)
+        return 1
+    corpus = prior.get("corpus") or {}
+    listed = corpus.get("not_checked") or []
+    if not listed:
+        print("recheck: %s recorded no unreadable corpus files -- nothing to re-check"
+              % previous_json)
+        return 0
+    print("recheck: %d file(s) previously unreadable; re-reading now" % len(listed))
+    still = []
+    for row in listed:
+        path = row.get("file")
+        try:
+            text = sources._read_document(Path(os.path.expanduser(str(path))).resolve())
+            words = len(re.sub(r"\s+", " ", text).split())
+        except Exception as exc:  # noqa: BLE001
+            still.append(row)
+            print("  STILL UNREADABLE  %s  %s" % (path, exc))
+            continue
+        if words < 5:
+            still.append(row)
+            print("  STILL UNUSABLE    %s  (%d word(s))" % (path, words))
+            continue
+        print("  READABLE          %s  (%d word(s))" % (path, words))
+    if still:
+        print("recheck: %d of %d file(s) still cannot be read -- the gap is NOT closed"
+              % (len(still), len(listed)))
+        return 3
+    print("recheck: every previously unreadable corpus file is now readable; the gap is closed")
     return 0
 
 
