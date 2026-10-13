@@ -21,6 +21,13 @@ printed in the same shape, with the same exit code, as a run that had checked al
 wanting. The report looked like a verdict on the writing. It was a statement about which PDFs
 happened to be in a folder.
 
+> **A note on that number.** `0/371` is the line as it was printed at the time. The denominator has
+> moved since — the sentence splitter and the claim test were both corrected later in the same work,
+> and the same document now reports a denominator of **503** (and `0/503` on a run with no sources
+> supplied). The figure is kept as a verbatim quote of the run that exposed the defect rather than
+> updated, because the defect is the point: the shape of the line, not its denominator. It is the
+> one claim in this document that cannot be reproduced from the current code.
+
 This is the failure mode the whole repository exists to prevent, one level up from the ones already
 guarded: not a *false* claim, but a **true claim presented as the wrong kind of claim**.
 
