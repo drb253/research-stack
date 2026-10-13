@@ -176,20 +176,31 @@ case ",$TARGETS," in
         esac
       done < <(python3 - "$DSH_PATCH" <<'PY'
 import re, sys
-text = open(sys.argv[1], encoding="utf-8").read()
-rows = [l for l in text.splitlines() if l.strip() and not l.strip().startswith("#")]
+raw = open(sys.argv[1], encoding="utf-8").read()
+# Comments are stripped for every structural assertion: a comment that merely
+# mentions the plugin or an `insert:` token must not satisfy a check that is
+# meant to prove a real row is present and reachable by DSH.
+body = "\n".join(l for l in raw.splitlines() if not l.strip().startswith("#"))
+rows = [l for l in body.splitlines() if l.strip()]
 print(("PASS" if rows else "FAIL") + "|patch has rows (an empty or comments-only patch fails DSH boot)")
 print(("PASS" if any(l.strip() == "- insert:" or l.strip() == "insert:" for l in rows) else "FAIL")
-      + "|rows are wrapped in an insert: patch entry")
-print(("PASS" if re.search(r"name:\s*['\"]@deepseek-ai/dsh-mcp-client['\"]", text) else "FAIL")
+      + "|patch has an insert: entry")
+# An `insert:` token anywhere is not enough: our rows must be INSIDE it. A
+# top-level `- id: mcp-*` row is a non-insert patch that DSH drops with
+# `patch: entry "<id>" not found`, even when some unrelated insert block exists.
+nested = re.findall(r"(?m)^\s+- id:\s*['\"]?mcp-[A-Za-z0-9_-]+", body)
+flat = re.findall(r"(?m)^- id:\s*['\"]?mcp-[A-Za-z0-9_-]+", body)
+print(("PASS" if nested and not flat else "FAIL")
+      + "|mcp-* rows are inserted (no top-level flat row; %d nested, %d flat)" % (len(nested), len(flat)))
+print(("PASS" if re.search(r"name:\s*['\"]@deepseek-ai/dsh-mcp-client['\"]", body) else "FAIL")
       + "|rows use the @deepseek-ai/dsh-mcp-client plugin")
 for server in ("paper-search",):
-    found = re.search(r"serverName:\s*['\"]?" + re.escape(server) + r"['\"]?\s*$", text, re.M)
+    found = re.search(r"serverName:\s*['\"]?" + re.escape(server) + r"['\"]?\s*$", body, re.M)
     print(("PASS" if found else "FAIL") + "|server '%s' configured" % server)
 # Only paper-search is required: --servers can restrict an install to any subset
 # (ncbi and academic-search are optional, and consensus/google-scholar are npx
 # servers many users skip), so the rest are reported rather than demanded.
-configured = sorted(set(re.findall(r"serverName:\s*['\"]?([A-Za-z0-9_-]+)['\"]?\s*$", text, re.M)))
+configured = sorted(set(re.findall(r"serverName:\s*['\"]?([A-Za-z0-9_-]+)['\"]?\s*$", body, re.M)))
 print("INFO|servers configured: %s" % (", ".join(configured) if configured else "none"))
 for server in ("consensus", "google-scholar"):
     if server not in configured:
