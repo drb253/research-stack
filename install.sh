@@ -299,8 +299,17 @@ if [ "$DO_SKILLS" = 1 ]; then
     UP="$HOME/.local/share/scientific-agent-skills"
     if [ -d "$UP/.git" ]; then
       info "upstream scientific skills already present ($UP)"
+    elif [ -e "$UP" ]; then
+      # The same interrupted-clone shape as AIPOCH below. This is the DEFAULT
+      # path, so an abort here left the target with no skills and no MCP patch
+      # at all. Keep the directory and say how to repair it.
+      warn "$UP exists but is not a git clone (interrupted clone?)"
+      warn "  upstream scientific skills skipped; remove that directory and re-run to fetch them"
     else
-      run "git clone --depth 1 https://github.com/K-Dense-AI/scientific-agent-skills.git '$UP'"
+      # Optional third-party pack: being offline, or having no usable git, must
+      # not fail an install whose own skills are already on disk.
+      run "git clone --depth 1 https://github.com/K-Dense-AI/scientific-agent-skills.git '$UP'" \
+        || warn "upstream scientific skills clone failed (optional) -> skipping"
     fi
   fi
 
