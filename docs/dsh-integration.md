@@ -105,8 +105,11 @@ and read back by hand):
   mode `600`);
 - **preserves** every other top-level entry, every other inserted row, and every
   comment, byte-for-byte;
-- replaces in place only the rows whose id is `mcp-<server>`; rows for servers
-  that are not there yet are appended in a new `insert:` entry;
+- replaces in place only the rows **inside the `insert:` entry it manages** whose
+  id is `mcp-<server>`; rows for servers that are not there yet are appended
+  there. A top-level `- id: mcp-<server>` row that an older revision wrote is
+  *preserved, not deleted* — it is dead weight DSH warns about, and removing a
+  row the writer does not own is the one thing this refusal boundary forbids;
 - is **idempotent** — a second run is byte-identical;
 - **refuses** (exit 1) to touch a file that is not a top-level array of mapping
   patch entries, or one using flow-style `insert: [...]`, rather than risk

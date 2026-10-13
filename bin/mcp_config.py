@@ -49,8 +49,11 @@ DSH_SERVER_RE = re.compile(r"^[A-Za-z0-9_-]{1,32}$")
 DSH_HEADER = (
     "# cordis patch -- written by research-stack (bin/mcp_config.py)\n"
     "# A top-level array of loader patch entries. The research-stack MCP rows\n"
-    "# sit inside the `insert` entry below; rows whose id is mcp-<server> are\n"
-    "# replaced on re-run. Other entries, rows and comments are preserved.\n"
+    "# sit inside the `insert` entry below; the rows in that entry whose id is\n"
+    "# mcp-<server> are replaced on re-run. A row the writer does not own --\n"
+    "# including a top-level `- id: mcp-<server>` left by an older revision --\n"
+    "# is preserved as-is rather than deleted, so DSH may warn that it matched\n"
+    "# nothing. Other entries, rows and comments are preserved.\n"
     "# An empty or comments-only patch file fails DSH boot, so keep the rows.\n"
 )
 
