@@ -211,6 +211,37 @@ NUMBER = r"[0-9]+(?:[.,][0-9]+)?"
 PERCENT_RE = re.compile(r"(?<![\w.])(" + NUMBER + r")\s?(?:%|\u2030|\bpercent\b|\bper\s?cent\b)", re.IGNORECASE)
 P_VALUE_RE = re.compile(r"\bp\s*([<>=]|\u2264|\u2265)\s*(" + NUMBER + r")", re.IGNORECASE)
 MEASURE_RE = re.compile(r"\b(" + MEASURE + r")\b\s*[:=]?\s*(" + NUMBER + r")", re.IGNORECASE)
+
+#: Short measure labels that are also ordinary English words or word-fragments. `OR` is the
+#: conjunction "or"; `MD` is a degree or a state abbreviation; `HR`/`RD`/`PR` are two letters
+#: that occur inside other tokens. Papers write all of these in upper case, so a lower-case
+#: match on the original text is read as the word rather than the statistic.
+#:
+#: This is a false-accusation guard, not a precision tweak. Measured before the guard: the
+#: sentence "Treatment continued for 6 or 12 weeks at the clinician's discretion [src:S006]."
+#: -- cited against a source recording `OR 1.42` -- was reported as a **conflict**, i.e. the
+#: tool accused the author of contradicting a source using the word "or" and the number 12.
+#: "Variables OR 95% CI" (a table header) and "Fort Detrick MD 21702" (a place and a ZIP)
+#: parsed as measures for the same reason. The long forms (hazard ratio, odds ratio, ...) and
+#: `beta` are unaffected: `beta 0.67` is the normal spelling of a regression coefficient.
+CASE_SENSITIVE_MEASURES = {"OR", "MD", "HR", "RR", "PR", "RD", "IRR", "SMD", "WMD"}
+
+#: No effect measure reaches this magnitude, so anything larger is an identifier that happens to
+#: follow a short label (`MD 21702` is a ZIP code in an address). Rejecting it costs nothing that
+#: was ever a statistic; accepting it costs a false accusation.
+MAX_PLAUSIBLE_MEASURE = 1000.0
+
+
+def _measure_label_case_ok(raw_label: str) -> bool:
+    """True when a measure label may be read as a statistic given how it was written.
+
+    A leading `a` is allowed to be lower case, because `aOR`/`aHR` (adjusted) are written that
+    way in real papers; the core label must then be upper case.
+    """
+    core = raw_label[1:] if raw_label[:1] in ("a", "A") and len(raw_label) > 1 else raw_label
+    if core.upper() not in CASE_SENSITIVE_MEASURES:
+        return True
+    return core == core.upper()
 CI_RE = re.compile(r"\b(?:95|90|99)\s?%\s*(?:CI|confidence\s+interval)", re.IGNORECASE)
 FRACTION_RE = re.compile(r"\b(" + NUMBER + r")\s*/\s*(" + NUMBER + r")\b")
 COUNT_RE = re.compile(r"\bn\s*=\s*(" + NUMBER + r")", re.IGNORECASE)
@@ -341,6 +372,19 @@ def extract_quantities(text: str) -> list:
     for match in MEASURE_RE.finditer(text):
         value = _to_float(match.group(2))
         if value is None:
+            continue
+        if not _measure_label_case_ok(match.group(1)):
+            # The label is the English word, not the statistic. See _measure_label_case_ok:
+            # the conjunction "or" in "6 or 12 weeks" was convicting a contradiction.
+            continue
+        if text[match.end():match.end() + 1] == "%":
+            # "Variables OR 95% CI" is a table header, not an odds ratio of 95: a number
+            # immediately followed by a percent sign is a percentage. In a real measure the
+            # value comes first and its interval follows in brackets ("OR 1.42 (95% CI ...)").
+            continue
+        if value >= MAX_PLAUSIBLE_MEASURE:
+            # No effect measure is this large, so a five-digit integer after a short label is
+            # an identifier rather than a result: "Fort Detrick MD 21702" is a place and a ZIP.
             continue
         _add(
             quantities,

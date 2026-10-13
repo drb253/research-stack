@@ -436,6 +436,42 @@ def format_metrics(entry: dict, label: str) -> list:
         "    F1           %6.3f" % entry["f1"],
     ]
 
+#: Ordinary prose that a measure parser can mistake for a statistic. Every one of these was
+#: measured producing a measure token before the guard in `_signals.extract_quantities()`, and
+#: the first was measured producing a **CONFLICT** against a source recording `OR 1.42` --
+#: a false accusation, from the English conjunction "or" and the number 12.
+FALSE_PARSE_PROBES = [
+    ("Treatment continued for 6 or 12 weeks at the clinician's discretion [src:S006].",
+     "'or' is a conjunction, not the odds ratio; this was a CONFLICT before the guard"),
+    ("Fatigue was rated as 0 or 1 on the severity scale [src:S006].",
+     "a 0-or-1 rating scale is not an odds ratio"),
+    ("Variables OR 95% CI were extracted from each study [src:S006].",
+     "a table header where the number carries a percent sign is not an odds ratio of 95"),
+    ("Samples were sent to Fort Detrick MD 21702 for analysis [src:S006].",
+     "a ZIP code after a state abbreviation is not a mean difference"),
+]
+
+
+def run_false_parse_guard() -> list:
+    """Assert that ordinary prose is never accused of contradicting a source.
+
+    This is the safety property that matters most, and it is different in kind from the
+    precision figures: a false red asserts that the author cited a source contradicting their
+    own sentence. Missing a real measure is a recall cost, reported elsewhere; inventing one is
+    an accusation. The benchmark fails if any probe here lands on `conflict`.
+    """
+    workspace = Path(tempfile.mkdtemp(prefix="bench-falseparse-"))
+    ledger = workspace / "sources.csv"
+    ledger.write_text(SOURCES_CSV, encoding="utf-8")
+    verdicts = _run_cli(
+        "false-parse",
+        document_text="\n\n".join(sentence for sentence, _ in FALSE_PARSE_PROBES),
+        extra_args=["--sources", str(ledger), "--allow-insufficient"],
+    )
+    return [(sentence, why, verdict)
+            for (sentence, why), verdict in zip(FALSE_PARSE_PROBES, verdicts)]
+
+
 def run_red_bar() -> list:
     """Run the three accusation cases, each in its own source configuration."""
     workspace = Path(tempfile.mkdtemp(prefix="bench-redbar-"))
@@ -685,11 +721,18 @@ def main() -> int:
     # the false-positive rate of the trigger is a safety property too, and it is measured
     # on prose the rules were not written against.
     trigger_safety_ok = real_trigger["specificity"] == 1.0
+    # ...and the parser may not INVENT a measure: a false red says the author contradicted a
+    # source, so ordinary prose must never be accused through a token like the word "or".
+    false_parse = run_false_parse_guard()
+    accused = [(sentence, verdict["rule_id"])
+               for sentence, _, verdict in false_parse if verdict["state"] == "conflict"]
+    false_parse_ok = not accused
     safety_ok = (
         conflict["support"] > 0
         and conflict_precision == 1.0
         and not weak_conflicts
         and trigger_safety_ok
+        and false_parse_ok
     )
 
     result = {
@@ -706,6 +749,12 @@ def main() -> int:
         "per_state": per_state,
         "conflict_precision_must_be_one": safety_ok,
         "trigger_false_positive_free_on_real_prose": trigger_safety_ok,
+        "false_parse_never_accuses": false_parse_ok,
+        "false_parse_probes": [
+            {"sentence": sentence, "why": why, "rule": verdict["rule_id"],
+             "state": verdict["state"]}
+            for sentence, why, verdict in false_parse
+        ],
         "metrics": {
             "per_state": per_class,
             "accusation": accusation,
@@ -810,6 +859,15 @@ def main() -> int:
           % exit_code)
 
     print()
+    print("FALSE-PARSE GUARD -- ordinary prose that must never be accused:")
+    for sentence, why, verdict in false_parse:
+        mark = "ACCUSED!" if verdict["state"] == "conflict" else "not accused"
+        print("  %-11s %-13s %s" % (mark, verdict["rule_id"], sentence[:58]))
+        print("  %-11s %-13s %s" % ("", "", why))
+    print("  %d of %d probes were treated as a contradiction; the parser may miss a real"
+          % (len(accused), len(false_parse)))
+    print("  measure, but it may not invent one.")
+    print()
     if safety_ok:
         print("SAFETY PROPERTIES HOLD:")
         print("  conflict precision is 1.000 over %d conflict case(s) -- no false accusation"
@@ -817,9 +875,13 @@ def main() -> int:
         print("  trigger specificity is %.3f over %d unseen real sentences -- no sentence was"
               % (real_trigger["specificity"], real_trigger["n"]))
         print("    told it needs a citation when it did not")
+        print("  %d of %d ordinary-prose probes were accused -- the parser never invented a "
+              "measure" % (len(accused), len(false_parse)))
     else:
         print("SAFETY PROPERTY VIOLATED: conflict precision is %.3f over %d case(s)."
               % (conflict_precision, conflict.get("support", 0)))
+        for sentence, rule in accused:
+            print("  ACCUSED %s: %s" % (rule, sentence[:70]))
         print("A false red is an accusation of fabrication. Narrow the rule that caused it.")
     print()
     print(result["advisory_channel"])
