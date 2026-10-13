@@ -117,15 +117,31 @@ def snapshot(paths, out):
     return data
 
 
+def _repo_root(snapshot_path):
+    """Paths in a snapshot are relative to the repository root.
+
+    The snapshot lives in <repo>/tools/, so the root is two levels up. Resolving
+    against the caller's cwd instead made `--check` silently read the wrong file
+    when it was run from elsewhere -- a gate that passes because it looked in the
+    wrong place is worse than one that fails.
+    """
+    return Path(snapshot_path).resolve().parent.parent
+
+
 def compare(snapshot_path):
     """Report every token present in the snapshot but missing now."""
-    snap = json.loads(Path(snapshot_path).read_text(encoding="utf-8"))
+    snap_path = Path(snapshot_path)
+    snap = json.loads(snap_path.read_text(encoding="utf-8"))
+    root = _repo_root(snap_path)
     losses = []
     for path, expected in snap.get("files", {}).items():
-        if not Path(path).is_file():
-            losses.append((path, "file", "the file no longer exists"))
+        resolved = Path(path)
+        if not resolved.is_absolute():
+            resolved = root / path
+        if not resolved.is_file():
+            losses.append((path, "file", "the file no longer exists (looked in %s)" % resolved))
             continue
-        current = extract(path)
+        current = extract(resolved)
         for kind, want in expected.items():
             have = current.get(kind, [])
             if kind in ("clause", "heading"):
@@ -171,9 +187,23 @@ def self_test():
             failures.append("case %d: loss not detected" % i)
         if not expect_loss and losses:
             failures.append("case %d: false loss %s" % (i, losses))
+    # A snapshot stores repository-relative paths, so --check must resolve them
+    # against the snapshot's own root and not the caller's cwd (finding H2).
+    root = tmp / "repo"
+    (root / "tools").mkdir(parents=True, exist_ok=True)
+    (root / "skills").mkdir(parents=True, exist_ok=True)
+    skill = root / "skills" / "x.md"
+    skill.write_text("Run it. Exit 3 on a gap. Use --json.\n", encoding="utf-8")
+    snap = root / "tools" / "snap.json"
+    snap.write_text(json.dumps({"files": {"skills/x.md": extract(str(skill))}}), encoding="utf-8")
+    if compare(str(snap)):
+        failures.append("relative snapshot path was not resolved against the snapshot root")
+    skill.write_text("Run it. Use --json.\n", encoding="utf-8")
+    if not compare(str(snap)):
+        failures.append("a loss in a relative snapshot path was not detected")
     for msg in failures:
         print("FAIL  %s" % msg)
-    print("normative_tokens self-test: %d checks, %d failed" % (len(SELF_TEST), len(failures)))
+    print("normative_tokens self-test: %d checks, %d failed" % (len(SELF_TEST) + 2, len(failures)))
     return 1 if failures else 0
 
 
@@ -191,6 +221,11 @@ def main():
         print(json.dumps(extract(args.show), indent=1, sort_keys=True))
         return 0
     if args.check:
+        if args.paths:
+            print("normative_tokens: --check reads the paths inside the snapshot; "
+                  "positional paths are not accepted with it (input gap, not a pass)",
+                  file=sys.stderr)
+            return 4
         if not Path(args.check).is_file():
             print("normative_tokens: snapshot missing (input gap, not a pass)", file=sys.stderr)
             return 4
