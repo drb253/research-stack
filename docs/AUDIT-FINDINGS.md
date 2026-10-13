@@ -324,14 +324,16 @@ The loop re-sent the *same* first page every iteration — `search_pubmed` expos
 
 ## 7. Final state
 
+_State at the end of round 2, kept as the record of that round. For the current numbers see §8._
+
 | Check | Result |
 |---|---|
 | Patch idempotency | `applied=0 already_applied=45 failed=0`, no file changed |
 | Whole-file patch copies byte-identical | yes (server, cli, elsevier, retraction, query_planning, …) |
 | Python syntax (3.11, CI parity) | 133 files, 0 bad |
 | `bash -n` all shell | clean |
-| mnr selftest | 19 passed, 0 failed |
-| esf selftest | 50 passed, 0 failed |
+| mnr selftest | 19 passed, 0 failed (29 as of §8) |
+| esf selftest | 50 passed, 0 failed (62 as of §8) |
 | R golden tests | 17 passed, 0 failed |
 | humanizer / cross_verify self-tests | OK |
 | ncbi-mcp-server tests | 52 passed, 20 deselected |
@@ -342,4 +344,58 @@ The loop re-sent the *same* first page every iteration — `search_pubmed` expos
 
 **41 files changed.** Every fix was reproduced before and re-verified after; every whole-file patch
 copy was re-synced and the patch system re-checked for drift.
+
+---
+
+## 8. Third round — the evidence-invariant audit
+
+`docs/EVIDENCE-INVARIANT.md` closed with five open questions, one per remaining gate, and said plainly
+that each was a question rather than a finding. All five were asked, by reading the code path and then
+running it against a fixture where the input was missing. **All five answered yes — every one of them
+broke the rule.** Each was reproduced against the committed code before its fix, and each fix ships a
+pass-and-fail test; the answers and the reproductions are recorded in that document, and the work is
+one commit per gate.
+
+| Gate | The pre-fix behaviour, measured | Fixed |
+|---|---|---|
+| `cross_verify_citations.py` | a refused connection and a nonexistent DOI gave byte-identical stdout, `gate: FAIL`, exit 2, and the same DOI in `unresolved[]`/`failures[]`; `--allow-unresolved` made a total outage `gate: PASS`, exit 0 | unreachable resolver gets its own status, `input_gaps[]`, gate `INCOMPLETE` and exit 3, not waivable by that flag; `--recheck` re-checks the worklist |
+| `citecheck` | an unresolvable identifier was **dropped** from the emitted list (an all-bad draft wrote 1 byte) and the run exited 0 — a hard error by its own `eval.md` C2 | `[UNRESOLVED]` / `[NOT CHECKED]` placeholders are written into the artifact; exit 2 for a finding, 3 for an input gap |
+| `medical-narrative-review` | a source row with `retrieval_status=empty` and `not_reported` extraction passed `validate_sources --strict`, `audit_citations --strict` and `gate.py` (`submission_ready: true`), all exit 0 | an unread citable source, and a verified claim joined to one, are `insufficient_evidence` (exit 3) with a worklist; `GATE_REPORT.json` records it and refuses `submission_ready` |
+| `sysreview` / PRISMA | with `source_status=unavailable, hits=0`, the appendix printed `embase … 0` and "OK", and the completeness gate printed "OK - retrieval and assessment complete", both exit 0; no script read the column | the appendix renders `unavailable (not reached)`, never the digit; both gates exit 3 and state that the identified total is a floor |
+| `originality-check` / toolkit | three of four unreadable corpus files still gave "highest score: 0.813" and a full score table, exit 0; a wholly unreadable corpus or a missing path gave the clean verdict shape | the gap reaches the report, `corpus.not_checked[]` and the exit code; a corpus that loaded nothing prints no score line and no verdict |
+
+Two consumers had inherited the same confusion, because a gate's output is the next tool's input:
+`benchmarks/bench_accuracy.py` read the old generic `error` status as *resolved*, so a lookup failure
+on a retracted paper counted as a **missed retraction** — the one number the 920-citation claim rests
+on; and `acceptance_test.py` accepted any non-zero exit, so a network outage satisfied an adversarial
+test. Both are fixed.
+
+**Current state** (re-run on the committed tree; `git diff --check` clean):
+
+| Check | Result |
+|---|---|
+| esf selftest | **62 passed, 0 failed** |
+| medical-narrative-review selftest | **29 passed, 0 failed** |
+| citation-report selftest | **95 passed, 0 failed** |
+| meta-analysis-forge golden tests | 17 passed, 0 failed |
+| offline logic self-tests (humanizer, cross_verify, citecheck, originality toolkit) | 4 of 4 OK |
+| offline benchmarks (numeric, ORI guide, verdicts) | 3 of 3 exit 0 |
+| `verify.sh --targets cline,claude,opencode` | **25 passed, 0 failed — RESEARCH-STACK VERIFIED** |
+| README check total | 220, and the chart refuses to render if it disagrees with the text |
+
+**What this round does not establish**, recorded so §8 is not read as a clean bill of health:
+
+- The five audits were verified by their own fixtures, not by an independent reviewer.
+- A malformed input file is still reported in the finding channel (`INVALID_INPUT`, exit 1): the status
+  vocabulary has no `insufficient_input` member. It exits non-zero and is labelled as an input problem,
+  so it never reads as a finding about the artefact, but the vocabulary is not yet uniform.
+- A partial failure of the retraction signals is a recorded warning rather than an input condition.
+  Crossref's own signal still runs, so the check is real; a run in which *every* signal failed would
+  still be presented as a findings-based result.
+- The trigger still misses four of thirty attribution-requiring sentences in real prose (sensitivity
+  0.867), all of them multi-clause subjects beyond the deliberate four-word cap. They are named
+  individually in `docs/BENCHMARK-RESULTS.md` rather than averaged away.
+- The conflict ground truth was widened from 4 to 26 positives, moving its Wilson lower bound from
+  0.510 to 0.871 — but it remains author-written, so it shows the rules do what they were designed to
+  do, not that they generalise.
 

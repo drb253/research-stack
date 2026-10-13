@@ -398,8 +398,13 @@ python3 scripts/export_document.py final/manuscript_cited.md --workspace . --out
 python3 scripts/gate.py --dir . --require-exports
 ```
 
-Every script prints a JSON report with `status`, `summary`, and `issues[]` carrying stable codes; the
-exit code is `1` when any `error`-severity issue is present. Full flag list and issue-code index:
+Every script prints a JSON report with `status`, `summary`, and `issues[]` carrying stable codes. The
+exit code is `1` when any `error`-severity issue is present, and **`3` when the input itself could not
+be read** — a citable source whose `retrieval_status` says its text was never obtained. That third
+code is `status: insufficient_evidence` with a worklist in `input_gaps[]`, never an `issues[]` entry,
+because it is a statement about the inputs rather than a finding about the review; `gate.py` also sets
+`submission_ready: false`. `--allow-insufficient` exits `0` while still recording the condition. Full
+flag list, exit codes and issue-code index:
 `references/cli_reference.md`. Scripts run from the skill directory and need no third-party packages.
 
 ## Failure modes this skill is designed to prevent
