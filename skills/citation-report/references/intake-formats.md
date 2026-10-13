@@ -178,9 +178,11 @@ extractor is installed; the self-test uses it so both routes are covered on ever
 
 ### OCR: reading a scan, and what it costs
 
-A scan — no text layer, or a text layer too thin to grade — is transcribed when `tesseract` and
-poppler's rasteriser (`pdftoppm`) are both installed. The tier is on by default, and every part of it
-is labelled:
+A scan — no text layer, or a text layer too thin to grade — is transcribed when an OCR engine and
+poppler's rasteriser (`pdftoppm`) are both available. Two engines are supported: the `tesseract`
+binary, and the optional `rapidocr-onnxruntime` package (models ship inside the wheel, so it needs no
+network at run time). `--ocr-engine auto|tesseract|rapidocr` chooses; `auto` prefers tesseract, then
+RapidOCR. The tier is on by default, and every part of it is labelled:
 
 - the document carries `transcribed: true` and `transcription: tesseract:<lang>`;
 - a transcribed source's `evidence_origin` begins `ocr:`, and `red_capable` is false for it;
@@ -189,13 +191,21 @@ is labelled:
 - **a contradiction where either side was transcribed is `unverifiable` (rule D13), never a
   conflict.** Measured: tesseract read `95% CI` as `95% Cl` on a real scan, and on the same fixture
   the same words with a text layer are still a `conflict` — so provenance, not the value, is what
-  decides.
+  decides. On that same page image **RapidOCR read `95% CI` correctly**, which is the argument for
+  naming the engine in the provenance and for offering a second one at all;
+- **the run is `insufficient_evidence` (exit 3) by default**, with an
+  `INPUT-BOUND — TRANSCRIBED EVIDENCE` banner, because a transcription is a machine's reading.
+  `--allow-insufficient` proceeds; the status still says `insufficient_evidence` and the override is
+  written into the artifact.
 
 The refusals are input gaps like every other unreadable-PDF outcome: `ocr_failed`, `ocr_empty`,
-`ocr_page_limit` (a scan longer than `--ocr-max-pages`, refused rather than partly read),
-`ocr_language_missing`, and `no_pdf_rasterizer`. `--no-ocr` (or `CITATION_REPORT_OCR=none`) switches
-the tier off, and the refusal then names the switch rather than claiming the build cannot transcribe
-— a machine with the engine installed is told the truth about why nothing was read.
+`ocr_page_limit` (a scan longer than `--ocr-max-pages` — default 200, `0` means no limit — refused
+rather than partly read), `ocr_language_missing`, `ocr_engine_unavailable` (you asked for an engine
+that is not installed; it never falls back to another one silently), and `no_pdf_rasterizer`.
+`--no-ocr` (or `CITATION_REPORT_OCR=none`) switches the tier off, and the refusal then names the
+switch rather than claiming the build cannot transcribe — a machine with an engine installed is told
+the truth about why nothing was read. `CITATION_REPORT_OCR_ENGINES=none` makes a run believe no
+engine is installed, which is how the "no engine at all" branch is tested on a machine that has one.
 
 ---
 

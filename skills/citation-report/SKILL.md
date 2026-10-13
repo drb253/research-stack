@@ -111,6 +111,9 @@ status:
 | `insufficient_evidence` | 3 | the document was readable; not enough source text was held |
 | `insufficient_input` | 4 | the document itself could not be read well enough to make findings (including a scan when OCR is off or unavailable) |
 
+A run that *did* read a scan is `insufficient_evidence` (exit 3) by default, because a
+transcription is a machine's reading rather than the document's own text layer.
+
 **Blocking is the default.** `--allow-insufficient` proceeds while keeping the status visible in the
 JSON. A blocked run still writes every artifact and a worklist; the artifacts carry an
 `INPUT-BOUND — NOT A FINDING` banner, in its own colour, distinct from the gate banner.
@@ -204,15 +207,22 @@ a positive claim but may never convict, so `D11` and `D12` downgrade such a cont
   sentence is `unverifiable`, which looks weak — and is correct. Supply the PDFs, or allow DOI
   resolution to fetch abstracts, to do better.
 - **An abstract is weaker evidence than full text**, and every note that relies on one says so.
-- **A scan is transcribed when OCR is available, and the transcription is labelled.** With
-  `tesseract` and poppler's rasteriser installed, a PDF with no usable text layer is read by OCR
-  (on by default; `--no-ocr` refuses instead, `--ocr-lang` picks the language data, and a scan
-  longer than `--ocr-max-pages` is refused rather than partly read). Everything read that way is
-  marked: the document carries `transcribed: true` and `transcription: tesseract:<lang>`, a
-  transcribed source's `evidence_origin` begins `ocr:`, every artifact states how many sentences
-  rested on a transcription, and **a transcription can never support an accusation** — see the
-  next bullet. Without the engine a scan is refused as `insufficient_input` (exit 4), naming the
-  install route.
+- **A scan is transcribed when an OCR engine is available, and the transcription is labelled.**
+  With `tesseract` or the optional `rapidocr-onnxruntime` package plus poppler's rasteriser, a PDF
+  with no usable text layer is read by OCR. On by default; `--no-ocr` refuses instead,
+  `--ocr-engine auto|tesseract|rapidocr` chooses the engine (`auto` prefers tesseract, then
+  RapidOCR), `--ocr-lang` picks tesseract's language data, and `--ocr-max-pages` (default 200,
+  `0` for no limit) refuses a scan longer than that rather than reading part of it. Everything
+  read that way is marked: the document carries `transcribed: true` and `transcription:
+  <engine>[:<lang>]`, a transcribed source's `evidence_origin` begins `ocr:`, every artifact
+  states how many sentences rested on a transcription, and **a transcription can never support an
+  accusation** — see the next bullet. Without an engine a scan is refused as `insufficient_input`
+  (exit 4), naming both install routes.
+- **A transcribed run is input-bound by default.** A transcription is a machine's reading, so a
+  run whose evidence rests on one is `insufficient_evidence` (exit 3) with an
+  `INPUT-BOUND — TRANSCRIBED EVIDENCE` banner, and `--allow-insufficient` is how you proceed
+  anyway: the status stays `insufficient_evidence` in the JSON and the override is written into
+  the artifact, not just into the exit code.
 - **A transcription may describe, but never convict.** A contradiction is an accusation, so it
   needs three things: a verified link, machine-comparable evidence, and text that was *read* on
   both sides. Where the sentence or the source's evidence came from OCR, rule `D13` reports the

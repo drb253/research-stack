@@ -68,7 +68,7 @@ jobs:
       # route here and the "no text layer" route on a developer machine; the suite asserts
       # both, and the absent-extractor route is forced with CITATION_REPORT_PDF_EXTRACTOR
       # so each machine covers both. Both routes must exit 4 as input gaps, never 1.
-      - name: citation-report selftest (137-144 checks, depending on the PDF tools installed)
+      - name: citation-report selftest (137-154 checks, depending on the PDF tools installed)
         run: bash skills/citation-report/scripts/selftest.sh
       # The offline benchmarks measure the claims in the README (arithmetic gate,
       # overlap detector vs the ORI guide's expert labels). They need no network,

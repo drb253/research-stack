@@ -423,6 +423,59 @@ def test_ocr_never_accuses() -> int:
     return checks
 
 
+def test_ocr_engine_resolution() -> int:
+    """Engine selection is a rule, not an accident, and it needs no engine installed.
+
+    `resolve_engine` is what decides whether a run uses tesseract, RapidOCR, or refuses
+    because the requested engine is absent. Pinned here because the CLI fixture for the
+    absent-engine gap can only run on a machine that has one engine but not the other.
+    """
+    import _pdftext
+
+    checks = 0
+    original = _pdftext.ocr_engines_available
+    try:
+        # No engine at all: auto resolves to nothing, and any request is unmet.
+        _pdftext.ocr_engines_available = lambda: []
+        _check(_pdftext.resolve_engine("auto") == "", "auto with no engine must resolve to nothing")
+        _check(_pdftext.resolve_engine("tesseract") == "",
+               "a request for an absent engine must not resolve")
+        _check(not _pdftext.ocr_available("auto"), "no engine means no OCR")
+        checks += 3
+
+        # One engine: auto picks it, the other stays unmet rather than falling back.
+        _pdftext.ocr_engines_available = lambda: [_pdftext.ENGINE_TESSERACT]
+        _check(_pdftext.resolve_engine("auto") == _pdftext.ENGINE_TESSERACT,
+               "auto must resolve to the engine that is present")
+        _check(_pdftext.resolve_engine(_pdftext.ENGINE_TESSERACT) == _pdftext.ENGINE_TESSERACT,
+               "a request for a present engine must resolve")
+        _check(_pdftext.resolve_engine(_pdftext.ENGINE_RAPIDOCR) == "",
+               "a request for an absent engine must not silently use another")
+        checks += 3
+
+        # Both present: auto prefers tesseract (the engine this tier was measured on).
+        _pdftext.ocr_engines_available = lambda: [_pdftext.ENGINE_TESSERACT,
+                                                  _pdftext.ENGINE_RAPIDOCR]
+        _check(_pdftext.resolve_engine("auto") == _pdftext.ENGINE_TESSERACT,
+               "auto must prefer the engine this tier was built on")
+        _check(_pdftext.resolve_engine(_pdftext.ENGINE_RAPIDOCR) == _pdftext.ENGINE_RAPIDOCR,
+               "an explicit choice must be honoured when available")
+        checks += 2
+
+        # And the gap it produces must be an input gap with a worklist, not a finding.
+        _pdftext.ocr_engines_available = lambda: [_pdftext.ENGINE_TESSERACT]
+        gap = _pdftext._via_ocr(__import__("pathlib").Path("nope.pdf"),
+                                engine=_pdftext.ENGINE_RAPIDOCR)
+        _check(gap is not None and gap.gap_kind == _pdftext.GAP_OCR_ENGINE,
+               "an absent requested engine must produce the engine gap")
+        _check(bool(gap.gap_worklist), "the engine gap must carry a worklist")
+        _check(not gap.transcribed, "an engine gap must not claim to have transcribed anything")
+        checks += 3
+    finally:
+        _pdftext.ocr_engines_available = original
+    return checks
+
+
 def test_sufficiency_policies() -> int:
     """A policy that cannot block is not a policy."""
     checks = 0
@@ -628,6 +681,7 @@ def main() -> int:
         ("reference entry shapes", test_reference_entry_shapes),
         ("evidence vocabulary", test_evidence_vocabulary),
         ("ocr never accuses", test_ocr_never_accuses),
+        ("ocr engine resolution", test_ocr_engine_resolution),
         ("sufficiency policies", test_sufficiency_policies),
         ("intake preconditions", test_preconditions),
         ("worklist wording", test_worklist_wording),

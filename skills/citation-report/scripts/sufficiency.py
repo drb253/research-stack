@@ -48,7 +48,8 @@ WORKLIST_COLUMNS = (
 )
 
 
-def evaluate(verdicts, summary, bundle, *, policy: str = "strict", share: float = 1.0) -> dict:
+def evaluate(verdicts, summary, bundle, *, policy: str = "strict", share: float = 1.0,
+             transcription: dict | None = None) -> dict:
     """Decide the run's status from the input side, and build the worklist.
 
     Returns a dict with `status` (one of the run statuses), `blocking` (bool), the
@@ -56,7 +57,53 @@ def evaluate(verdicts, summary, bundle, *, policy: str = "strict", share: float 
     `reason` list. It never decides anything about the *document*: findings are the
     classifier's business, and conflating the two is the failure this module exists to
     prevent.
+
+    `transcription` carries how many sentences rest on OCR. A transcription is weaker
+    evidence than a text layer -- it is a machine's reading of an image -- so by default it
+    makes the run input-bound, and `--allow-insufficient` is how a caller proceeds anyway.
     """
+    result = _evaluate_base(verdicts, summary, bundle, policy=policy, share=share)
+    return _apply_transcription_policy(result, transcription)
+
+
+def _apply_transcription_policy(result: dict, transcription: dict | None) -> dict:
+    """A run whose evidence came from OCR is input-bound unless the caller says otherwise.
+
+    The rule the OCR tier is built on is that a transcription may never *convict* (rule
+    D13). This is the other half: it may not be presented as if it were a text layer
+    either. A reader comparing a green coverage figure across two documents should be able
+    to tell that one of them was read by a machine, and a gate that treats "read" and
+    "transcribed" as the same input is the confusion this module exists to prevent.
+
+    A run already input-bound for missing evidence keeps its status; the transcription
+    reason is added to the list so the banner says both things.
+    """
+    count = int((transcription or {}).get("sentences_resting_on_ocr") or 0)
+    if not count:
+        return result
+    engine = (transcription or {}).get("document_transcription") or "OCR"
+    reason = (
+        "%d sentence(s) rest on an OCR transcription (%s) rather than on the document's "
+        "own text layer, so the evidence behind them is a machine's reading" % (count, engine)
+    )
+    updated = dict(result)
+    updated["transcription_sentences"] = count
+    if result.get("blocking"):
+        updated["reason"] = list(result.get("reason") or []) + [reason]
+        return updated
+    updated.update(
+        {
+            "status": "insufficient_evidence",
+            "blocking": True,
+            "reason": [reason],
+            "detail": "the document or its evidence was read by OCR, not from a text layer",
+        }
+    )
+    return updated
+
+
+def _evaluate_base(verdicts, summary, bundle, *, policy: str = "strict", share: float = 1.0) -> dict:
+    """The evidence assessment itself, before the transcription policy is applied."""
     by_id = {source.source_id: source for source in bundle.sources}
     cited: dict = {}
     for verdict in verdicts:
@@ -364,6 +411,15 @@ def banner(result: dict) -> str:
         return (
             "INPUT-BOUND \u2014 THE DOCUMENT COULD NOT BE READ WELL ENOUGH. "
             "Findings below are provisional and must not be quoted."
+        )
+    if result.get("transcription_sentences"):
+        # Not the same condition as missing source evidence, and the banner must not say
+        # it is: here the sources may be complete and the *text* is a machine's reading.
+        return (
+            "INPUT-BOUND \u2014 TRANSCRIBED EVIDENCE. %d sentence(s) rest on an OCR "
+            "transcription rather than on the document's own text layer. Findings below "
+            "are provisional and must not be quoted."
+            % result["transcription_sentences"]
         )
     return (
         "INPUT-BOUND \u2014 NOT A FINDING. Source evidence was insufficient to check "

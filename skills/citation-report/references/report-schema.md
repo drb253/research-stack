@@ -139,10 +139,13 @@ A run that cannot read the document at all is `insufficient_input` and carries a
 | `ocr_empty` | OCR read the pages and found no text | check the scan is legible and the language data matches |
 | `ocr_page_limit` | the scan is longer than `--ocr-max-pages` | raise the limit, or supply a text export |
 | `ocr_language_missing` | the requested language data is not installed | install it, or pass `--ocr-lang` with one that is |
+| `ocr_engine_unavailable` | you asked for an engine that is not installed | install it, or pass `--ocr-engine` with one that is (never a silent fallback) |
 
 `how_to_close` is the action that removes the gap.
 
-A run that *did* read a scan carries a `transcription` block instead, and never blocks for it:
+A run that *did* read a scan carries a `transcription` block instead. It is
+`insufficient_evidence` (exit 3) by default, because a transcription is a machine's reading;
+`--allow-insufficient` proceeds while the status still says so:
 
 ```json
 "transcription": {

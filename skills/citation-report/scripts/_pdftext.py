@@ -52,17 +52,14 @@ NO_TEXT_LAYER = (
     "page(s), so it is a scan. {ocr}. Refusing to grade against unreadable evidence."
 )
 OCR_ABSENT = (
-    "OCR is not installed; install tesseract (`brew install tesseract` / "
-    "`apt install tesseract-ocr`) and export the scan to text, or supply a text export"
+    "no OCR engine is installed; install tesseract (`brew install tesseract` / "
+    "`apt install tesseract-ocr`) or the optional Python package "
+    "(`pip install rapidocr-onnxruntime`), or supply a text export"
 )
-OCR_PRESENT = (
-    "tesseract is installed, but this build does not transcribe scans: OCR output is a "
-    "transcription, and a misread digit or citation marker would be reported as a "
-    "finding about the document rather than about the scan"
-)
-#: The scan refusal when the engine is present and OCR was switched off. Distinct from
-#: `OCR_PRESENT`, which says the build cannot transcribe -- that would be false here, and a
-#: reader who is told the wrong reason cannot close the gap.
+#: The scan refusal when an engine is present and OCR was switched off. There is no
+#: "the build cannot transcribe" wording any more: with an engine installed and OCR
+#: enabled the tier transcribes, so this refusal is only ever reached with OCR off or with
+#: no engine at all -- and saying otherwise would be false on the machine reading it.
 OCR_DISABLED = (
     "tesseract is installed; OCR was switched off for this run (--no-ocr or "
     "CITATION_REPORT_OCR), so the scan was not transcribed. Re-run without it to read the "
@@ -87,6 +84,10 @@ OCR_LANGUAGE = (
     "the language data for '{lang}' is not installed, so {name} was not transcribed. "
     "Installed: {available}."
 )
+OCR_ENGINE = (
+    "the OCR engine '{engine}' is not available, so {name} was not transcribed. "
+    "Available: {available}."
+)
 OCR_RASTERIZER = (
     "tesseract is installed but no page rasteriser is, so {name} could not be turned into "
     "page images for OCR."
@@ -102,18 +103,34 @@ OCR_BINARY = "tesseract"
 PDFTOPPM_BINARY = "pdftoppm"
 PDFINFO_BINARY = "pdfinfo"
 
-#: OCR settings. 300 dpi is the usual floor for body text; the page cap and the timeout
-#: exist so a 900-page scan cannot turn a report into an unbounded job, and both are
-#: reported as input gaps rather than silently truncating the document.
+#: The engines this tier can drive. tesseract is an external binary; RapidOCR is an
+#: optional Python package whose models ship inside the wheel (so it needs no network at
+#: run time). Both are probed, never installed or imported until used, and the engine that
+#: ran is recorded in the provenance of everything it read.
+ENGINE_TESSERACT = "tesseract"
+ENGINE_RAPIDOCR = "rapidocr"
+OCR_ENGINES = (ENGINE_TESSERACT, ENGINE_RAPIDOCR)
+
+#: OCR settings. 300 dpi is the usual floor for body text. `OCR_MAX_PAGES = 0` means no
+#: cap: the document is read in full or refused, never partly read and presented as whole.
+#: The timeout scales with the page count so a long scan is not killed by a budget meant
+#: for a short one.
 OCR_LANG_DEFAULT = "eng"
-OCR_MAX_PAGES = 40
+OCR_MAX_PAGES = 200
 OCR_DPI = 300
 OCR_TIMEOUT_SECONDS = 300
+OCR_SECONDS_PER_PAGE = 8
 
-#: Set to `none`/`off`/`0`/`false` to disable OCR even where tesseract is installed, so the
+#: Set to `none`/`off`/`0`/`false` to disable OCR even where an engine is installed, so the
 #: refusal path stays testable on a machine that has the engine (and so a user can pin the
 #: old behaviour without editing code).
 OCR_ENV = "CITATION_REPORT_OCR"
+
+#: Set to `none`/`off`/`0`/`false` to make this run believe no OCR engine is installed.
+#: A Python engine cannot be hidden with `PATH`, so without this the "no engine at all"
+#: branch could only be exercised on a machine that has none -- the same reason
+#: `EXTRACTOR_ENV` exists for the text extractors.
+ENGINES_ENV = "CITATION_REPORT_OCR_ENGINES"
 
 #: Machine-readable names for the ways a PDF can be unreadable. They travel with the
 #: refusal so the caller can put them in a structured `input_gaps[]` worklist instead of
@@ -126,6 +143,7 @@ GAP_OCR_FAILED = "ocr_failed"
 GAP_OCR_EMPTY = "ocr_empty"
 GAP_OCR_PAGE_LIMIT = "ocr_page_limit"
 GAP_OCR_LANGUAGE = "ocr_language_missing"
+GAP_OCR_ENGINE = "ocr_engine_unavailable"
 
 #: What the reader would have to change to close each gap. One string per gap kind, kept
 #: next to the refusal text it belongs to so the message and the worklist cannot drift.
@@ -154,6 +172,10 @@ WORKLIST_OCR_LANGUAGE = (
 WORKLIST_OCR_PAGE_LIMIT = (
     "raise the limit with --ocr-max-pages N, or supply a text export: the document was "
     "not read in full, so nothing was graded from it"
+)
+WORKLIST_OCR_ENGINE = (
+    "install the engine (`brew install tesseract` / `apt install tesseract-ocr`, or "
+    "`pip install rapidocr-onnxruntime`), or pass --ocr-engine with one that is installed"
 )
 
 #: Force the absent-extractor refusal even where poppler or pypdf is installed. Set to
@@ -286,8 +308,10 @@ def _no_text_layer(result: PdfText, warnings: list, path, ocr_disabled: bool = F
     caller transcribes instead of refusing.
     """
     pages = max(1, len(result.pages))
-    if shutil.which(OCR_BINARY):
-        ocr = OCR_DISABLED if ocr_disabled else OCR_PRESENT
+    # Any engine counts, not only tesseract: a machine with RapidOCR and no tesseract can
+    # transcribe, so telling it "no OCR engine is installed" would be false.
+    if ocr_disabled and ocr_engines_available():
+        ocr = OCR_DISABLED
     else:
         ocr = OCR_ABSENT
     return PdfText(
@@ -304,9 +328,45 @@ def _no_text_layer(result: PdfText, warnings: list, path, ocr_disabled: bool = F
     )
 
 
-def ocr_available() -> bool:
-    """Whether the OCR tier could run here: engine and rasteriser both present."""
-    return bool(shutil.which(OCR_BINARY)) and bool(shutil.which(PDFTOPPM_BINARY))
+def _rapidocr_importable() -> bool:
+    """Whether the optional RapidOCR engine could be used, without importing it."""
+    try:
+        import importlib.util
+
+        return importlib.util.find_spec("rapidocr_onnxruntime") is not None
+    except Exception:  # noqa: BLE001 - a broken install must not mask the refusal
+        return False
+
+
+def ocr_engines_available() -> list:
+    """The OCR engines usable here, in preference order.
+
+    `auto` resolves to the first of these. tesseract comes first because it is the engine
+    this tier was built and measured on; RapidOCR is the cross-platform second opinion, and
+    on the fixture in `docs/BENCHMARK-RESULTS.md` it read a character tesseract got wrong --
+    which is why the engine is named in the provenance rather than assumed.
+    """
+    if os.environ.get(ENGINES_ENV, "").strip().lower() in _FORCE_ABSENT:
+        return []
+    available = []
+    if shutil.which(OCR_BINARY):
+        available.append(ENGINE_TESSERACT)
+    if _rapidocr_importable():
+        available.append(ENGINE_RAPIDOCR)
+    return available
+
+
+def resolve_engine(requested: str = "auto") -> str:
+    """The concrete engine to use, or "" when the request cannot be met."""
+    available = ocr_engines_available()
+    if not requested or requested == "auto":
+        return available[0] if available else ""
+    return requested if requested in available else ""
+
+
+def ocr_available(engine: str = "auto") -> bool:
+    """Whether the OCR tier could run here: an engine and a rasteriser both present."""
+    return bool(resolve_engine(engine)) and bool(shutil.which(PDFTOPPM_BINARY))
 
 
 def ocr_languages() -> list:
@@ -355,57 +415,122 @@ def _ocr_gap(path, kind: str, worklist: str, message: str, warnings: list) -> Pd
     )
 
 
-def _via_tesseract(
+def _transcribe_tesseract(image, lang: str) -> tuple:
+    """`(text, error)` for one page image, via the tesseract binary."""
+    executable = shutil.which(OCR_BINARY)
+    try:
+        completed = subprocess.run(
+            [executable, str(image), "stdout", "-l", lang],
+            capture_output=True, timeout=OCR_TIMEOUT_SECONDS, check=False,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        return "", type(exc).__name__
+    text = (completed.stdout or b"").decode("utf-8", "replace")
+    if completed.returncode != 0 and not text.strip():
+        detail = (completed.stderr or b"").decode("utf-8", "replace").strip()[:200]
+        return "", detail or "tesseract exited %d" % completed.returncode
+    return text, ""
+
+
+class _RapidOCRRunner:
+    """A RapidOCR engine, loaded once per document rather than once per page.
+
+    The model load costs a second or two, so a per-page instance would dominate a long
+    scan. Loaded lazily and only when this engine is the one selected, so a machine without
+    the package never pays for it.
+    """
+
+    def __init__(self) -> None:
+        self._engine = None
+
+    def text(self, image) -> tuple:
+        """`(text, error)` for one page image."""
+        try:
+            if self._engine is None:
+                from rapidocr_onnxruntime import RapidOCR
+
+                self._engine = RapidOCR()
+            result = self._engine(str(image))
+        except Exception as exc:  # noqa: BLE001 - the package raises many types
+            return "", "%s: %s" % (type(exc).__name__, str(exc)[:160])
+        lines = result[0] if isinstance(result, (tuple, list)) and result else None
+        if not lines:
+            return "", ""
+        # Each entry is [box, text, score]; the text is what the page says.
+        return "\n".join(str(entry[1]) for entry in lines), ""
+
+
+def _via_ocr(
     path,
     first_page_only: bool = False,
     *,
+    engine: str = "auto",
     lang: str = OCR_LANG_DEFAULT,
     max_pages: int = OCR_MAX_PAGES,
 ) -> PdfText | None:
-    """Transcribe a scan with tesseract, or return a gap explaining why not.
+    """Transcribe a scan with the selected engine, or return a gap explaining why not.
 
-    Returns `None` only when the engine itself is absent -- the caller then refuses with
-    the "install tesseract" wording it already has. Every other outcome is a `PdfText`:
-    either transcribed text (`transcribed=True`, `transcription='tesseract:<lang>'`) or an
+    Returns `None` only when no engine is installed at all -- the caller then refuses with
+    the "install an OCR engine" wording it already has. Every other outcome is a `PdfText`:
+    either transcribed text (`transcribed=True`, `transcription='<engine>[:<lang>]'`) or an
     input gap, never a document that quietly graded to zero sentences.
 
-    poppler rasterises the pages, because tesseract reads images rather than PDFs; both
-    binaries are probed, neither is installed or imported.
+    poppler rasterises the pages, because OCR engines read images rather than PDFs; the
+    engine and the rasteriser are both probed, and the Python engine is imported only here,
+    only when selected.
     """
     name = getattr(path, "name", path)
-    engine = shutil.which(OCR_BINARY)
-    if not engine:
+    if not ocr_engines_available():
         return None
+    chosen = resolve_engine(engine)
+    if not chosen:
+        return _ocr_gap(
+            path, GAP_OCR_ENGINE, WORKLIST_OCR_ENGINE,
+            OCR_ENGINE.format(engine=engine, name=name,
+                              available=", ".join(ocr_engines_available()) or "none"), [],
+        )
     raster = shutil.which(PDFTOPPM_BINARY)
     if not raster:
         return _ocr_gap(
             path, GAP_NO_RASTERIZER, WORKLIST_NO_RASTERIZER,
             OCR_RASTERIZER.format(name=name), [],
         )
-    available = ocr_languages()
-    if available and lang not in available:
-        return _ocr_gap(
-            path, GAP_OCR_LANGUAGE, WORKLIST_OCR_LANGUAGE,
-            OCR_LANGUAGE.format(lang=lang, name=name, available=", ".join(available)), [],
+    warnings: list = []
+    if chosen == ENGINE_TESSERACT:
+        available = ocr_languages()
+        if available and lang not in available:
+            return _ocr_gap(
+                path, GAP_OCR_LANGUAGE, WORKLIST_OCR_LANGUAGE,
+                OCR_LANGUAGE.format(lang=lang, name=name, available=", ".join(available)), [],
+            )
+    elif lang != OCR_LANG_DEFAULT:
+        # RapidOCR's shipped models are multilingual rather than language-selected, so the
+        # flag cannot be honoured. Say so instead of silently pretending it was.
+        warnings.append(
+            "--ocr-lang %s was ignored: the %s engine's models are not language-selected"
+            % (lang, chosen)
         )
     # Bound the work before rasterising: pdfinfo when it is there, otherwise rasterise one
-    # page past the cap and let the count decide.
+    # page past the cap and let the count decide. `max_pages <= 0` means no cap.
+    capped = max_pages and max_pages > 0
     declared = _pdf_page_count(path)
-    if declared and declared > max_pages:
+    if capped and declared and declared > max_pages:
         return _ocr_gap(
             path, GAP_OCR_PAGE_LIMIT, WORKLIST_OCR_PAGE_LIMIT,
-            OCR_PAGE_LIMIT.format(name=name, cap=max_pages), [],
+            OCR_PAGE_LIMIT.format(name=name, cap=max_pages), warnings,
         )
+    budget = max(OCR_TIMEOUT_SECONDS, (declared or max_pages or 1) * OCR_SECONDS_PER_PAGE)
 
-    warnings: list = []
     with tempfile.TemporaryDirectory(prefix="cr-ocr-") as work:
         prefix = str(Path(work) / "page")
-        last = 1 if first_page_only else max_pages + 1
-        command = [raster, "-r", str(OCR_DPI), "-png", "-f", "1", "-l", str(last),
-                   str(path), prefix]
+        last = 1 if first_page_only else ((max_pages + 1) if capped else 0)
+        command = [raster, "-r", str(OCR_DPI), "-png", "-f", "1"]
+        if last:
+            command += ["-l", str(last)]
+        command += [str(path), prefix]
         try:
             rasterised = subprocess.run(
-                command, capture_output=True, timeout=OCR_TIMEOUT_SECONDS, check=False
+                command, capture_output=True, timeout=budget, check=False
             )
         except (OSError, subprocess.SubprocessError) as exc:
             return _ocr_gap(
@@ -420,35 +545,28 @@ def _via_tesseract(
                 OCR_FAILED.format(name=name, detail=detail or "no page images were produced"),
                 warnings,
             )
-        if not first_page_only and len(images) > max_pages:
+        if capped and not first_page_only and len(images) > max_pages:
             return _ocr_gap(
                 path, GAP_OCR_PAGE_LIMIT, WORKLIST_OCR_PAGE_LIMIT,
                 OCR_PAGE_LIMIT.format(name=name, cap=max_pages), warnings,
             )
         warnings.append(
-            "text came from OCR (%s, %s dpi): a transcription, not the document's own "
-            "text layer" % (lang, OCR_DPI)
+            "text came from OCR (%s%s, %s dpi, %d page(s)): a transcription, not the "
+            "document's own text layer"
+            % (chosen, (":" + lang) if chosen == ENGINE_TESSERACT else "",
+               OCR_DPI, len(images))
         )
+        runner = _RapidOCRRunner() if chosen == ENGINE_RAPIDOCR else None
         pages: list = []
         for image in images:
-            try:
-                completed = subprocess.run(
-                    [engine, str(image), "stdout", "-l", lang],
-                    capture_output=True, timeout=OCR_TIMEOUT_SECONDS, check=False,
-                )
-            except (OSError, subprocess.SubprocessError) as exc:
+            if runner is not None:
+                text, error = runner.text(image)
+            else:
+                text, error = _transcribe_tesseract(image, lang)
+            if error:
                 return _ocr_gap(
                     path, GAP_OCR_FAILED, WORKLIST_NO_TEXT_LAYER,
-                    OCR_FAILED.format(name=name, detail=type(exc).__name__), warnings,
-                )
-            text = (completed.stdout or b"").decode("utf-8", "replace")
-            if completed.returncode != 0 and not text.strip():
-                detail = (completed.stderr or b"").decode("utf-8", "replace").strip()[:200]
-                return _ocr_gap(
-                    path, GAP_OCR_FAILED, WORKLIST_NO_TEXT_LAYER,
-                    OCR_FAILED.format(name=name, detail=detail or "tesseract exited %d"
-                                      % completed.returncode),
-                    warnings,
+                    OCR_FAILED.format(name=name, detail=error), warnings,
                 )
             pages.append(text)
 
@@ -461,10 +579,10 @@ def _via_tesseract(
     return PdfText(
         text=joined,
         pages=pages,
-        method="tesseract",
+        method=chosen,
         warnings=warnings,
         transcribed=True,
-        transcription="tesseract:%s" % lang,
+        transcription=(chosen + ":" + lang) if chosen == ENGINE_TESSERACT else chosen,
     )
 
 
@@ -521,6 +639,7 @@ def extract_pdf(
     first_page_only: bool = False,
     *,
     ocr: bool = True,
+    ocr_engine: str = "auto",
     ocr_lang: str = OCR_LANG_DEFAULT,
     ocr_max_pages: int = OCR_MAX_PAGES,
 ) -> PdfText:
@@ -546,8 +665,9 @@ def extract_pdf(
     def transcribe(reason_warnings: list, fallback_gap: PdfText) -> PdfText:
         """Try the OCR tier, then fall back to the refusal that names what to install."""
         if ocr_enabled(ocr):
-            attempt = _via_tesseract(
-                path, first_page_only, lang=ocr_lang, max_pages=ocr_max_pages
+            attempt = _via_ocr(
+                path, first_page_only, engine=ocr_engine, lang=ocr_lang,
+                max_pages=ocr_max_pages,
             )
             if attempt is not None:
                 attempt.warnings = reason_warnings + attempt.warnings

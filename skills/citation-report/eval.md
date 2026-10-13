@@ -201,8 +201,14 @@ the source it cites — `(HR 0.50) [src:S001]` against a source recording `HR 0.
 things:
 
 * with OCR available, the run is **not** a conflict: the verdict is `unverifiable` under `D13`, the
-  note names `tesseract:<lang>` as what read it, and `transcription.sentences_resting_on_ocr` is at
-  least 1;
+  note names the engine as what read it, and `transcription.sentences_resting_on_ocr` is at least 1;
+* the run is **`insufficient_evidence` (exit 3) by default** with a `TRANSCRIBED EVIDENCE` banner,
+  and `--allow-insufficient` exits 0 while the status still says `insufficient_evidence` and the
+  override appears in the artifact;
+* asking for an engine that is not installed (`--ocr-engine rapidocr` where the package is absent)
+  exits 4 with `input_gaps[].kind = ocr_engine_unavailable` rather than silently using another one;
+* `--ocr-max-pages 0` reads a scan that the default cap would have refused, and a scan longer than a
+  finite cap is refused rather than partly read;
 * the **control** — the same sentence in a `.md` file — *is* a conflict (`D08`, exit 1), so the
   provenance is what changed the outcome rather than the value;
 * a scanned **source** PDF behaves the same way, with `evidence_origin` beginning `ocr:`;

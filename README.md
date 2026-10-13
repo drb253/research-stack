@@ -12,7 +12,7 @@ Built for one promise: **no false citations, no hallucinated numbers, no silent 
 [![platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-lightgrey.svg)](#requirements)
 [![MCP servers](https://img.shields.io/badge/MCP%20servers-5-2f6feb.svg)](#the-mcp-layer)
 [![skills](https://img.shields.io/badge/skills-13-8957e5.svg)](#the-skills-layer)
-[![tests](https://img.shields.io/badge/checks-291%20passing-2ea043.svg)](#verification--testing)
+[![tests](https://img.shields.io/badge/checks-301%20passing-2ea043.svg)](#verification--testing)
 [![ci](https://github.com/drb253/research-stack/actions/workflows/ci.yml/badge.svg)](https://github.com/drb253/research-stack/actions/workflows/ci.yml)
 [![install](https://img.shields.io/badge/install-one--command-brightgreen.svg)](#install)
 
@@ -447,19 +447,26 @@ no extractor installed, or a file an extractor cannot decode — and the line th
 It was found by CI, which has no PDF extractor at all, failing a suite that passed on a developer
 machine that had one.
 
-**Scans are read, and the reading is labelled.** With `tesseract` and poppler's rasteriser
+**Scans are read, and the reading is labelled.** With an OCR engine and poppler's rasteriser
 installed, a PDF with no usable text layer is transcribed rather than refused (on by default;
-`--no-ocr` refuses instead). Everything read that way is marked — the document carries
-`transcribed: true`, a transcribed source's `evidence_origin` begins `ocr:`, and all three artifact
-formats state how many sentences rested on a transcription — and **a transcription can never
-convict**. A contradiction is an accusation, so it needs text that was *read* on both sides: where
-either side came from OCR, rule `D13` discloses the disagreement as `unverifiable` and names what
-would close the gap.
+`--no-ocr` refuses instead). Two engines are supported — the `tesseract` binary and the optional
+`rapidocr-onnxruntime` package — and `--ocr-engine` chooses, with the engine that ran named in the
+provenance of everything it read. Everything read that way is marked: the document carries
+`transcribed: true` and `transcription: <engine>`, a transcribed source's `evidence_origin` begins
+`ocr:`, and all three artifact formats state how many sentences rested on a transcription. A
+transcribed run is **`insufficient_evidence` (exit 3) by default** — a transcription is a machine's
+reading, not the document's own text layer — and `--allow-insufficient` proceeds while the status
+still says so.
 
-That bar is not theoretical. On a real scan built for the test, tesseract read `95% CI` as `95% Cl`
-— an upper-case I as a lower-case l. On the control fixture, the same words with a text layer are
-still a `conflict` (`D08`, exit 1) while the scan is `unverifiable` (`D13`, exit 0), so what changed
-the outcome is provenance, not the value.
+**And a transcription can never convict.** A contradiction is an accusation, so it needs text that
+was *read* on both sides: where either side came from OCR, rule `D13` discloses the disagreement as
+`unverifiable` and names what would close the gap. That bar is not theoretical. On a real scan built
+for the test, tesseract read `95% CI` as `95% Cl` — an upper-case I as a lower-case l — while
+RapidOCR read the same page correctly, which is exactly why the engine is named and why a second one
+is worth having. On the control fixture the same words with a text layer are still a `conflict`
+(`D08`, exit 1) while the scan is `unverifiable` (`D13`, exit 3), so what changed the outcome is
+provenance, not the value. Engine agreement does not lift the bar: the rule is about provenance, not
+confidence.
 
 The point is the last two lines: a review is finished **only** when the gate
 passes, and the gate is a set of scripts that can each fail.
@@ -529,7 +536,7 @@ flowchart LR
 
 <div align="center"><img src="assets/coverage.svg" width="620" alt="automated checks by suite"></div>
 
-**291 automated checks, all passing.** Run them after any change:
+**301 automated checks, all passing.** Run them after any change:
 
 ```bash
 S=~/.research-stack/skills
@@ -537,7 +544,7 @@ bash  $S/evidence-synthesis-forge/scripts/doctor.sh              # toolchain rep
 bash  $S/evidence-synthesis-forge/scripts/selftest.sh            # 78 — every gate, pass+fail
 Rscript $S/meta-analysis-forge/scripts/golden_tests.R           # 22 — engine vs metafor
 bash  $S/medical-narrative-review/scripts/selftest.sh           # 30 — narrative-review chain
-bash  $S/citation-report/scripts/selftest.sh                    # 144 — citation report, pass+fail
+bash  $S/citation-report/scripts/selftest.sh                    # 154 — citation report, pass+fail
 python3 $S/evidence-synthesis-forge/scripts/acceptance_test.py  # 17 — live adversarial
 ./verify.sh --targets cline,claude,opencode                      # install acceptance
 ```
@@ -547,12 +554,14 @@ changes with the tools installed, and a suite that assumed one of them failed on
 
 | environment | unreadable PDF | suite |
 |---|---|---|
-| CI: no `pdftotext`, no `pypdf`, no OCR | `no_pdf_extractor`, exit 4 | **137 passed, 0 failed** |
-| a machine with a text extractor, no OCR | `no_text_layer`, exit 4, names the tesseract route | **139 passed, 0 failed** |
-| a machine with OCR (tesseract + poppler) | transcribed, labelled, never an accusation | **144 passed, 0 failed** |
+| CI: no `pdftotext`, no `pypdf`, no OCR engine | `no_pdf_extractor`, exit 4 | **137 passed, 0 failed** |
+| a machine with a text extractor, no OCR engine | `no_text_layer`, exit 4, names the install route | **139 passed, 0 failed** |
+| a machine with OCR (tesseract + poppler) | transcribed, labelled, input-bound by default, never an accusation | **154 passed, 0 failed** |
 
-`CITATION_REPORT_PDF_EXTRACTOR=none` and `CITATION_REPORT_OCR=none` force the absent branches, so any
-machine can exercise all three. Both unreadable routes are asserted to exit 4 rather than 1.
+`CITATION_REPORT_PDF_EXTRACTOR=none`, `CITATION_REPORT_OCR=none` and
+`CITATION_REPORT_OCR_ENGINES=none` force the absent branches, so any machine can exercise all
+three — and a fourth environment, an engine with no rasteriser, is its own gap
+(`no_pdf_rasterizer`). Both unreadable routes are asserted to exit 4 rather than 1.
 
 `verify.sh` reports the **gated core strictly** (pass/fail on the 13 skills) and
 lists any installed **third-party packs** (K-Dense / AIPOCH, with AIPOCH broken
@@ -1128,7 +1137,7 @@ PRs are welcome. Ground rules:
 
 ## Roadmap
 
-- [x] GitHub Actions CI running the 291 checks on every push
+- [x] GitHub Actions CI running the 301 checks on every push
 - [ ] Codex (TOML) MCP config support
 - [ ] A terminal demo / screen recording in the README
 - [ ] Auto re-vendor script (fetch a new upstream tag, re-apply patches)

@@ -518,6 +518,37 @@ maintainer could extend without justification.
   gate has been run on a machine stripped of its optional tooling, and that is how these two were
   found.
 
+### 9.5 The availability suite, reviewed against its own claims
+
+Asked to look deeper at §9, the next thing to check was the suite §9.3 added — the one whose
+mutation probe is supposed to prove the gate has teeth. Reading it end to end found that **it tested
+one direction only**.
+
+Every test asserted that an outage *is* caught. None asserted that a working lookup is *left alone*.
+A mutation that reported **every** success as an outage therefore passed the whole suite. Measured,
+not argued: with `SOURCE_OK` renamed to `"unavailable"` in `source_status.py`, the ten pre-existing
+tests report **OK**, and the suite as it now stands reports **FAILED**.
+
+Five tests were added, and the gap they close is worth stating precisely:
+
+| Test | The hole it closes |
+|---|---|
+| a successful lookup is not reported unavailable | specificity: nothing checked that a working source is left alone |
+| an outage lands in `source_status`, not in the papers | the module docstring's user-visible claim — "so a failed lookup is never mistaken for absent literature" — was never exercised at the aggregate level |
+| an empty answer is neither unavailable nor a paper | the third state, so "unavailable" cannot quietly absorb "empty" |
+| a record with an `error` key and a title is still a paper | `is_unavailable_marker`'s shape rules were asserted only on real markers |
+| `split_markers` separates papers from markers | the function that carries the condition through list-returning tools had no test |
+
+The gate now asserts the suite's own count (15) as a floor and runs **two** mutation probes — an
+outage named like an empty answer, and a success named like an outage — so both directions are proved
+to have teeth rather than one.
+
+**What this does not establish:** the retry path (`request_json`'s backoff and `Retry-After`) is still
+untested — a mutation that removed retries entirely would pass — and `search_ladder`, which the module
+docstring advertises as the fix for a measured defect, has no test of its own. Both are recorded here
+rather than quietly fixed, because neither was in the scope of what was asked and inventing coverage
+for them without measuring the behaviour first would be the kind of claim this file exists to avoid.
+
 ---
 
 ## 10. Fifth round — the OCR tier, and the rule that keeps it honest
@@ -561,6 +592,26 @@ prints none of it.
 | the *same words* read as text still are | the identical sentence as `.md`: `conflict`/D08, exit 1 |
 | a scanned source behaves the same way | `evidence_origin = ocr:S001.pdf:tesseract:eng`, D13, and `transcribed: true` in the verdict's source record |
 | the rule holds without an engine | `self_test.py` asserts a transcribed source is not `red_capable` at every red-capable strength, and that D13 is non-error — it runs on CI, which has no tesseract |
+
+### 10.1 The four changes asked for, and what they cost
+
+| Asked for | Done | Cost, stated |
+|---|---|---|
+| block by default on transcribed evidence | `insufficient_evidence` (exit 3), `TRANSCRIBED EVIDENCE` banner, `--allow-insufficient` to proceed | a scanned bibliography now needs the flag; the status and the override are both in the artifact |
+| raise or remove the page cap | default 200, `--ocr-max-pages 0` = no limit, timeout scales with pages | an uncapped 900-page scan is minutes of work; it is still never partly read and presented as whole |
+| a second OCR engine | `--ocr-engine auto\|tesseract\|rapidocr`; RapidOCR installed and tested; engine named in the provenance | a second dependency surface (~60 MB with onnxruntime); `--ocr-lang` is tesseract-only and says so |
+| more language packs | 163 tesseract languages installed; a German scan verified (`tesseract:deu`) | 686 MB on disk; the packs are the user's, not the tool's |
+
+The cross-engine measurement is the one worth keeping: on the same page image, **tesseract read
+`95% CI` as `95% Cl` and RapidOCR read it correctly**. It is why the engine is named in the
+provenance rather than assumed, and it is also why engine agreement does **not** lift the D13 bar —
+the rule is about provenance, not confidence, and two engines agreeing is still a machine reading.
+
+Two defects were found while making the blocking change, both by running it rather than reading it:
+the banner used the *missing-source-evidence* wording for an OCR-blocked run (which would have told
+a reader the opposite of what happened), and the `--allow-insufficient` override note was appended to
+`meta["warnings"]` **after** the artifacts had been written, so it never reached one — the note was
+dead code that looked like a feature.
 
 **What this round does not establish.**
 

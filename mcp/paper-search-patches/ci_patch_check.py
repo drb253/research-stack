@@ -15,8 +15,9 @@ It proves four things, each with the exit status that matches what was found:
   2. `apply_patches.py` applies cleanly to a fresh copy (no MISSING/COULD NOT APPLY);
   3. the patched copy passes `audit_fix_check.py` and the availability invariant suite, and
      that suite is asserted to have actually collected its tests;
-  4. the suite still FAILS on a copy with the invariant deliberately reintroduced, so the
-     checks above are a gate rather than an assertion.
+  4. the suite still FAILS on a copy with either defect deliberately reintroduced -- an
+     outage named like an empty answer, and a success named like an outage -- so the checks
+     above are a gate rather than an assertion in both directions.
 
 What this does NOT establish: the vendored package in this repository is kept in the
 patched state, so running the patcher against it is idempotent by construction. This gate
@@ -49,11 +50,25 @@ REPLACEMENTS = HERE / "replacements"
 VENDORED_TREE = REPO / "mcp" / "paper-search-mcp" / "paper_search_mcp"
 AVAILABILITY_TEST = HERE / "test_availability_invariant.py"
 
-#: The mutation that reintroduces the defect the availability layer exists to prevent:
-#: an outage reported with the same name as a genuine empty answer. Applied to a copy of
-#: source_status.py; the suite must reject it.
-MUTATION_FROM = 'SOURCE_UNAVAILABLE = "unavailable"'
-MUTATION_TO = 'SOURCE_UNAVAILABLE = "empty"'
+#: The mutations that reintroduce the two defects the availability layer exists to prevent.
+#: Applied to a copy of source_status.py; the suite must reject each one.
+#:
+#: Both directions are needed. The first makes an outage look like a genuine empty answer
+#: (the sensitivity half). The second makes every success look like an outage (the
+#: specificity half) -- and it is the one that mattered: the suite passed it until the
+#: review added `AggregateStatusTests.test_success_is_not_reported_as_unavailable`.
+MUTATIONS = (
+    (
+        "an outage is named 'empty'",
+        'SOURCE_UNAVAILABLE = "unavailable"',
+        'SOURCE_UNAVAILABLE = "empty"',
+    ),
+    (
+        "a success is named 'unavailable'",
+        'SOURCE_OK = "ok"',
+        'SOURCE_OK = "unavailable"',
+    ),
+)
 
 
 class Finding(Exception):
@@ -74,9 +89,10 @@ MIRRORS = {
                    "kept byte-identical so a re-vendor cannot silently drop the fix",
 }
 
-#: Floor on the availability suite's collected test count. A suite that collects nothing
-#: exits 0, which would make every check below a pass with no tests behind it.
-MIN_AVAILABILITY_TESTS = 10
+#: Floor on the availability suite's collected test count -- the number it defines. A
+#: suite that collects nothing exits 0, which would make every check below a pass with no
+#: tests behind it; the floor is the count itself so a *reduction* is a finding.
+MIN_AVAILABILITY_TESTS = 15
 
 
 def registry_pairs(replacements: Path, vendored: Path) -> list:
@@ -159,8 +175,8 @@ def copy_tree(destination: Path) -> Path:
     return destination
 
 
-#: What the availability suite needs to import. The suite stubs `requests`, and two of its
-#: ten tests import `paper_search_mcp.server`, which imports the rest at module level.
+#: What the availability suite needs to import. The suite stubs `requests`, and several of
+#: its tests import `paper_search_mcp.server`, which imports the rest at module level.
 #: `mcp.server.fastmcp` is the sharp one: the runner's `mcp` 2.x renamed it, so a machine
 #: with `mcp` 2.x has the package but not that module. Probed by import, not by name.
 SUITE_IMPORTS = ("requests", "httpx", "bs4", "feedparser", "pypdf", "mcp.server.fastmcp")
@@ -275,29 +291,31 @@ def main(argv=None) -> int:
             failures.append(str(exc))
             print("    " + "\n    ".join(suite.stderr.strip().splitlines()[-6:] or [""]))
 
-        print("\n== 5. the same suite still rejects the defect (mutation probe) ==")
-        mutant = copy_tree(root / "mutant")
-        status_file = mutant / "paper_search_mcp" / "source_status.py"
-        text = status_file.read_text(encoding="utf-8")
-        if MUTATION_FROM not in text:
-            try:
-                check("the mutation target is present (the probe is not silently skipped)", False)
-            except Finding as exc:
-                failures.append(str(exc))
-        else:
-            status_file.write_text(text.replace(MUTATION_FROM, MUTATION_TO, 1), encoding="utf-8")
+        print("\n== 5. the same suite still rejects both defects (mutation probes) ==")
+        for index, (label, before, after) in enumerate(MUTATIONS, start=1):
+            mutant = copy_tree(root / ("mutant%d" % index))
+            status_file = mutant / "paper_search_mcp" / "source_status.py"
+            text = status_file.read_text(encoding="utf-8")
+            if before not in text:
+                try:
+                    check("the mutation target is present for '%s' (not silently skipped)"
+                          % label, False)
+                except Finding as exc:
+                    failures.append(str(exc))
+                continue
+            status_file.write_text(text.replace(before, after, 1), encoding="utf-8")
             mutant_env = dict(os.environ, PAPER_SEARCH_MCP_PATH=str(mutant),
                               PYTHONPATH=str(mutant))
             probe = run([arguments.python, str(AVAILABILITY_TEST)], env=mutant_env)
             probe_ran = ran_test_count(probe.stderr)
             try:
-                check("the suite fails on a copy where an outage is named 'empty'",
-                      probe.returncode != 0)
+                check("the suite fails on a copy where %s" % label, probe.returncode != 0)
                 # ...and fails because a test failed, not because the copy could not be
                 # imported: a crash on import also exits non-zero and would look like a
                 # working probe.
-                check("the mutant failed its tests rather than failing to import (ran %d)"
-                      % probe_ran, probe_ran >= MIN_AVAILABILITY_TESTS)
+                check("the mutant for '%s' failed its tests rather than failing to import "
+                      "(ran %d)" % (label, probe_ran),
+                      probe_ran >= MIN_AVAILABILITY_TESTS)
             except Finding as exc:
                 failures.append(str(exc))
     finally:
@@ -359,18 +377,17 @@ def self_test() -> int:
             ("the test-count parser reports zero when nothing ran",
              ran_test_count("ModuleNotFoundError: No module named 'mcp'\n") == 0),
         ]
-        # The mutation itself: the constant must be present and change behaviour.
+        # Every mutation must have a target that exists and that changes the constant.
         mutant = root / "mutant" / "paper_search_mcp"
         mutant.mkdir(parents=True)
         src = VENDORED_TREE / "source_status.py"
         if src.exists():
             text = src.read_text(encoding="utf-8")
-            checks.append(("the mutation target exists in source_status.py", MUTATION_FROM in text))
-            (mutant / "source_status.py").write_text(
-                text.replace(MUTATION_FROM, MUTATION_TO, 1), encoding="utf-8")
-            mutated = (mutant / "source_status.py").read_text(encoding="utf-8")
-            checks.append(("the mutation changes the constant",
-                           MUTATION_TO in mutated and MUTATION_FROM not in mutated))
+            for label, before, after in MUTATIONS:
+                checks.append(("the mutation target for '%s' exists" % label, before in text))
+                mutated = text.replace(before, after, 1)
+                checks.append(("the mutation for '%s' changes the constant" % label,
+                               after in mutated and before not in mutated))
         else:
             checks.append(("source_status.py is present", False))
         # The registry this gate is driven by must itself be non-empty, or step 1 would

@@ -6,6 +6,28 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- **A transcribed run is input-bound by default.** A transcription is a machine's reading, so a run
+  whose evidence rests on one is `insufficient_evidence` (exit 3) with an
+  `INPUT-BOUND — TRANSCRIBED EVIDENCE` banner that names transcription — not missing sources — as the
+  reason. `--allow-insufficient` proceeds, the status still says `insufficient_evidence`, and the
+  override is now written into the artifact. Two defects were found while making that change: the
+  banner used the *missing-evidence* wording for an OCR-blocked run, and the override note was
+  appended after the artifacts had already been written, so it never reached one.
+- **Two OCR engines instead of one.** `--ocr-engine auto|tesseract|rapidocr`; `auto` prefers
+  tesseract, then the optional `rapidocr-onnxruntime` package, and the engine that ran is named in
+  the provenance of everything it read (`transcription: rapidocr`, `ocr:<file>:tesseract:eng`). An
+  engine that is asked for but not installed is an input gap (`ocr_engine_unavailable`), never a
+  silent fallback. On the test page image tesseract read `95% CI` as `95% Cl` and **RapidOCR read it
+  correctly** — the argument for naming the engine rather than assuming one.
+- **The OCR page cap is 200 by default and `--ocr-max-pages 0` means no limit.** The timeout scales
+  with the page count so a long scan is not killed by a budget meant for a short one, and a scan
+  above a finite cap is still refused rather than partly read.
+- **Language packs are installed here and used:** 163 tesseract languages, with a German scan
+  verified end to end (`transcription: tesseract:deu`). `--ocr-lang` is tesseract's; RapidOCR's
+  shipped models are multilingual, so a non-default `--ocr-lang` with that engine is reported as
+  ignored rather than silently pretended.
+
 ### Added
 - **A working OCR tier, and the rule that keeps it from accusing anyone.** A scanned PDF (no text
   layer, or one too thin to grade) is now transcribed when `tesseract` and poppler's rasteriser are
@@ -30,6 +52,16 @@ versioning follows [Semantic Versioning](https://semver.org/).
   on `unverifiable` — is pinned in `self_test.py`, which needs no engine, so it holds on CI.
 
 ### Fixed
+- **The availability suite tested sensitivity but not specificity.** Reviewing it against its own
+  claims found that every test asserted an outage *is* caught and none that a success is left alone —
+  so a mutation making every success look like an outage passed the whole suite. Measured: with
+  `SOURCE_OK` renamed to `"unavailable"`, the old ten tests report **OK** and the suite now reports
+  **FAILED**. Five tests were added: a successful lookup is not marked unavailable, an outage lands
+  in `source_status` rather than in the paper list, a genuinely empty answer is neither, a record
+  carrying an `error` key and a title is still a paper, and `split_markers` separates the two. The
+  gate's floor is now the suite's own count (15), and it runs **two** mutation probes — an outage
+  named like an empty answer, and a success named like an outage — so both directions are proved to
+  have teeth.
 - **A one-page scan was reported as "over 2 page(s)".** `pdftotext` ends every page with a form feed,
   and the split counted the trailing empty segment as a page; `page_of` could also fall back to that
   phantom page number.

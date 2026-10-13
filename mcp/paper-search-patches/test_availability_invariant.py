@@ -47,8 +47,11 @@ from paper_search_mcp.academic_platforms.unpaywall import (  # noqa: E402
     UnpaywallSearcher,
 )
 from paper_search_mcp.source_status import (  # noqa: E402
+    SOURCE_OK,
+    SOURCE_UNAVAILABLE,
     SourceUnavailable,
     is_unavailable_marker,
+    split_markers,
     unavailable_marker,
 )
 
@@ -187,6 +190,81 @@ class ToolBoundaryTests(unittest.TestCase):
         self.assertTrue(result, "an outage produced an empty list")
         self.assertTrue(is_unavailable_marker(result[0]))
         self.assertEqual(result[0]["error"], "unavailable")
+
+
+class MarkerShapeTests(unittest.TestCase):
+    """A marker is a marker, and a paper is never one -- in both directions."""
+
+    def test_split_markers_separates_papers_from_markers(self):
+        marker = unavailable_marker(SourceUnavailable("openaire", "boom", 429))[0]
+        paper = {"title": "A real paper", "doi": "10.1000/x"}
+        papers, markers = split_markers([paper, marker])
+        self.assertEqual(papers, [paper])
+        self.assertEqual(markers, [marker])
+
+    def test_a_paper_with_an_error_field_is_not_a_marker(self):
+        # A record that merely carries an `error` key -- and has a title -- is a paper.
+        # Without the title check, a real record would be swallowed as an outage.
+        self.assertFalse(is_unavailable_marker(
+            {"title": "A real paper", "error": SOURCE_UNAVAILABLE, "paper_id": "x"}
+        ))
+        self.assertFalse(is_unavailable_marker({"title": "A real paper"}))
+        self.assertFalse(is_unavailable_marker({"error": SOURCE_UNAVAILABLE, "paper_id": "x"}))
+        self.assertTrue(is_unavailable_marker(
+            unavailable_marker(SourceUnavailable("openaire", "boom", 429))[0]
+        ))
+
+
+class AggregateStatusTests(unittest.TestCase):
+    """`search_papers` must put an outage in `source_status`, never in the paper list.
+
+    This is the user-visible consequence the module docstring claims -- "so a failed lookup
+    is never mistaken for absent literature" -- and nothing asserted it before.
+    """
+
+    def _run(self, factory):
+        from paper_search_mcp import server
+
+        with mock.patch.object(server, "_build_task_map",
+                               lambda *a, **k: {"openaire": factory()}):
+            return asyncio.run(server.search_papers("CRISPR base editing", 3,
+                                                    sources="openaire"))
+
+    def test_outage_is_recorded_as_a_status_not_as_papers(self):
+        async def outage():
+            raise SourceUnavailable("openaire", "connection refused", None)
+
+        result = self._run(outage)
+        status = result["source_status"]["openaire"]
+        self.assertEqual(status["status"], SOURCE_UNAVAILABLE)
+        self.assertTrue(status.get("message"), "the outage must carry a reason")
+        self.assertEqual([p for p in result["papers"] if is_unavailable_marker(p)], [])
+
+    def test_success_is_not_reported_as_unavailable(self):
+        """The specificity half: an outage marker must not appear on a working lookup.
+
+        Without this, a mutation that reported *everything* as unavailable would pass the
+        whole suite: every test asserted an outage is caught, none that a success is left
+        alone.
+        """
+        async def success():
+            return [{"title": "A real paper", "doi": "10.1000/x", "source": "openaire"}]
+
+        result = self._run(success)
+        status = result["source_status"]["openaire"]
+        self.assertEqual(status["status"], SOURCE_OK)
+        self.assertNotEqual(status["status"], SOURCE_UNAVAILABLE)
+        self.assertTrue(result["papers"], "a successful lookup returned no papers")
+        self.assertEqual([p for p in result["papers"] if is_unavailable_marker(p)], [])
+
+    def test_empty_is_neither_unavailable_nor_a_paper(self):
+        async def empty():
+            return []
+
+        result = self._run(empty)
+        status = result["source_status"]["openaire"]
+        self.assertNotEqual(status["status"], SOURCE_UNAVAILABLE)
+        self.assertEqual(result["papers"], [])
 
 
 def main(argv=None) -> int:

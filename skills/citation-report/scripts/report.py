@@ -55,6 +55,13 @@ def build_parser() -> argparse.ArgumentParser:
         "then refuses as an input gap naming the install route",
     )
     parser.add_argument(
+        "--ocr-engine",
+        default="auto",
+        choices=("auto", "tesseract", "rapidocr"),
+        help="which OCR engine reads a scan (default auto: tesseract if installed, else "
+        "rapidocr). The engine that ran is recorded in the provenance of everything it read",
+    )
+    parser.add_argument(
         "--ocr-lang",
         default="eng",
         help="tesseract language data for a scan (default eng); a missing pack is refused "
@@ -63,9 +70,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--ocr-max-pages",
         type=int,
-        default=40,
+        default=200,
         help="refuse to OCR a scan longer than this rather than reading part of it "
-        "(default 40)",
+        "(default 200; 0 means no limit)",
     )
     parser.add_argument(
         "--acquire",
@@ -249,13 +256,7 @@ def _verdict_payload(document, bundle, graded, summary, meta, evidence=None) -> 
         # How much of this report rests on a machine's reading. A contradiction built on
         # OCR is `unverifiable` (rule D13) rather than red, so a reader who cannot see this
         # number cannot tell why a disagreement was disclosed instead of asserted.
-        "transcription": {
-            "document_transcribed": bool(getattr(document, "transcribed", False)),
-            "document_transcription": getattr(document, "transcription", ""),
-            "sentences_resting_on_ocr": _transcribed_sentence_count(
-                graded, bool(getattr(document, "transcribed", False))
-            ),
-        },
+        "transcription": _transcription(document, graded),
         "verdicts": [verdict.to_dict() for verdict in graded],
     }
 
@@ -275,6 +276,21 @@ def _transcribed_sentence_count(graded, document_transcribed: bool = False) -> i
         if any(record.get("transcribed") for record in payload.get("sources", []) or []):
             count += 1
     return count
+
+
+def _transcription(document, graded) -> dict:
+    """How much of this run rests on a machine's reading.
+
+    Computed once and passed to every consumer -- the sufficiency policy, the evidence
+    block and the verdict payload -- because three copies of this arithmetic is how one of
+    them ends up disagreeing with the others.
+    """
+    document_transcribed = bool(getattr(document, "transcribed", False))
+    return {
+        "document_transcribed": document_transcribed,
+        "document_transcription": getattr(document, "transcription", ""),
+        "sentences_resting_on_ocr": _transcribed_sentence_count(graded, document_transcribed),
+    }
 
 
 def _combine_status(evidence: dict, intake: dict) -> str | None:
@@ -308,9 +324,7 @@ def _meta(document, bundle, summary, graded, sufficiency_result=None, intake_res
     # not. A reader who cannot see that the text was a machine's reading cannot weigh the
     # findings, and cannot tell why a disagreement was disclosed instead of asserted.
     warnings = list(bundle.warnings) + list(document.warnings)
-    transcribed_sentences = _transcribed_sentence_count(
-        graded, bool(getattr(document, "transcribed", False))
-    )
+    transcribed_sentences = _transcription(document, graded)["sentences_resting_on_ocr"]
     if transcribed_sentences:
         warnings.append(
             "OCR: %d of %d graded sentence(s) rest on a transcription (%s), not on the "
@@ -350,11 +364,9 @@ def _meta(document, bundle, summary, graded, sufficiency_result=None, intake_res
             # somebody's software wrote. A reader who does not know this cannot weigh the
             # findings, and a contradiction that would have been red is `unverifiable`
             # here instead (rule D13), so the count is the honest summary of that.
-            "document_transcribed": bool(getattr(document, "transcribed", False)),
-            "document_transcription": getattr(document, "transcription", ""),
-            "ocr_transcription_sentences": _transcribed_sentence_count(
-                graded, bool(getattr(document, "transcribed", False))
-            ),
+            "document_transcribed": _transcription(document, graded)["document_transcribed"],
+            "document_transcription": _transcription(document, graded)["document_transcription"],
+            "ocr_transcription_sentences": _transcription(document, graded)["sentences_resting_on_ocr"],
         },
     }
 
@@ -438,15 +450,17 @@ def _read_document(arguments) -> "_intake.Document":
     return _intake.read_document(
         arguments.document,
         ocr=not getattr(arguments, "no_ocr", False),
+        ocr_engine=getattr(arguments, "ocr_engine", "auto"),
         ocr_lang=getattr(arguments, "ocr_lang", "eng"),
-        ocr_max_pages=getattr(arguments, "ocr_max_pages", 40),
+        ocr_max_pages=getattr(arguments, "ocr_max_pages", 200),
     )
 
 
 def cmd_report(arguments) -> int:
     document, bundle, graded, summary = build_all(arguments)
     policy, share = _evidence_policy(arguments.require_evidence)
-    evidence = sufficiency.evaluate(graded, summary, bundle, policy=policy, share=share)
+    evidence = sufficiency.evaluate(graded, summary, bundle, policy=policy, share=share,
+                                    transcription=_transcription(document, graded))
     intake = preconditions.summarise(preconditions.evaluate(document, bundle, graded))
     intake["records"] = preconditions.evaluate(document, bundle, graded)
     # The caveat travels inside the summary so every renderer prints the same sentence
@@ -456,6 +470,12 @@ def cmd_report(arguments) -> int:
         summary = dict(summary)
         summary["coverage_caveat"] = caveat
     meta = _meta(document, bundle, summary, graded, evidence, intake)
+    if arguments.allow_insufficient and evidence["blocking"]:
+        override_note = (
+            "insufficient evidence was overridden by --allow-insufficient; the status "
+            "remains %s and the findings are provisional" % evidence["status"]
+        )
+        meta["warnings"] = list(meta.get("warnings", [])) + [override_note]
     out_dir = Path(arguments.out_dir)
     layout = _highlight.build_layout(document, graded)
     formats = [piece.strip().lower() for piece in arguments.format.split(",") if piece.strip()]
@@ -492,13 +512,6 @@ def cmd_report(arguments) -> int:
                 detail=" ".join(intake["reason"] + evidence["reason"])[:400],
             )
         )
-    if arguments.allow_insufficient and evidence["blocking"]:
-        override_note = (
-            "insufficient evidence was overridden by --allow-insufficient; the status "
-            "remains %s and the findings are provisional" % evidence["status"]
-        )
-        meta["warnings"] = list(meta.get("warnings", [])) + [override_note]
-
     combined_status = _combine_status(evidence, intake)
     status_override = combined_status
     payload = _common.emit_report(
@@ -629,7 +642,8 @@ def cmd_sources(arguments) -> int:
     if arguments.limit:
         graded = graded[: arguments.limit]
     summary = coverage.compute(graded, bundle)
-    evidence = sufficiency.evaluate(graded, summary, bundle, policy=policy, share=share)
+    evidence = sufficiency.evaluate(graded, summary, bundle, policy=policy, share=share,
+                                    transcription=_transcription(document, graded))
     sufficiency.write_worklist(out_dir / "evidence_worklist.csv", evidence["worklist"])
     issues: list = []
     for source in bundle.sources:
@@ -762,7 +776,8 @@ def cmd_verify(arguments) -> int:
 def cmd_audit(arguments) -> int:
     document, bundle, graded, summary = build_all(arguments)
     policy, share = _evidence_policy(arguments.require_evidence)
-    evidence = sufficiency.evaluate(graded, summary, bundle, policy=policy, share=share)
+    evidence = sufficiency.evaluate(graded, summary, bundle, policy=policy, share=share,
+                                    transcription=_transcription(document, graded))
     intake_records = preconditions.evaluate(document, bundle, graded)
     intake = preconditions.summarise(intake_records)
     combined_status = _combine_status(evidence, intake)

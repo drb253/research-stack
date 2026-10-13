@@ -48,12 +48,26 @@ GATE=(python3 "$HERE/report_gate.py")
 # Which optional tools this machine has. Probed once, next to the other helpers, because
 # the expected *behaviour* changes with them: a scan is refused where no OCR exists and
 # transcribed where it does, and a suite that assumed one of those failed on CI.
+have_rapidocr=0
+if python3 -c "import rapidocr_onnxruntime" >/dev/null 2>&1; then have_rapidocr=1; fi
 have_ocr_engine=0
-if command -v tesseract >/dev/null 2>&1 && command -v pdftoppm >/dev/null 2>&1; then
-  have_ocr_engine=1
+if command -v pdftoppm >/dev/null 2>&1; then
+  # Any engine plus a rasteriser is a working tier; tesseract alone is not required. The
+  # hook is honoured here as well, or a run that forced "no engine" would be judged by the
+  # suite as though an engine were present.
+  case "$(printf '%s' "${CITATION_REPORT_OCR_ENGINES:-}" | tr 'A-Z' 'a-z')" in
+    none|off|0|false) : ;;
+    *) if command -v tesseract >/dev/null 2>&1 || [ "$have_rapidocr" -eq 1 ]; then
+         have_ocr_engine=1
+       fi ;;
+  esac
 fi
 have_scan_builder=0
 if python3 -c "import PIL" >/dev/null 2>&1; then have_scan_builder=1; fi
+have_deu=0
+if command -v tesseract >/dev/null 2>&1 && tesseract --list-langs 2>/dev/null | grep -qx deu; then
+  have_deu=1
+fi
 
 echo "== 1. offline logic self-test =="
 if python3 "$HERE/self_test.py" --self-test >/dev/null 2>&1; then
@@ -893,20 +907,105 @@ print("built a one-page scan of:", lines[1])
 PY
   # The sentence says HR 0.50; the shipped ledger records HR 0.80. Read as text that is a
   # contradiction (D08, exit 1). Transcribed, it must be disclosed as unverifiable (D13)
-  # and must not be an accusation -- the same words, a different provenance.
+  # and must not be an accusation -- the same words, a different provenance. And because a
+  # transcription is weaker evidence than a text layer, the run is input-bound by default.
   "${RUN[@]}" report --document "$WS/scan-manuscript.pdf" --sources "$ASSETS/sample-sources.csv" \
     --offline --format json --out-dir "$TMP/ocrout" >"$TMP/ocr.json" 2>&1
   ocr_exit=$?
-  if [ "$ocr_exit" -eq 0 ]; then
-    ok "a scanned document is transcribed rather than refused (exit 0)"
+  if [ "$ocr_exit" -eq 3 ]; then
+    ok "a transcribed run is input-bound by default (exit 3)"
   else
-    no "a scanned document is transcribed rather than refused (want 0, got $ocr_exit)"
+    no "a transcribed run is input-bound by default (want 3, got $ocr_exit)"
   fi
   expect_json "the document is marked transcribed" "$TMP/ocrout/verdicts.json" "d['document']['transcribed']" "True"
   expect_json "the transcription names its engine" "$TMP/ocrout/verdicts.json" "d['document']['transcription']" "tesseract:eng"
   expect_json "the run records how many sentences rest on OCR" "$TMP/ocrout/verdicts.json" "d['transcription']['sentences_resting_on_ocr'] >= 1" "True"
   expect_json "the OCR'd sentence is unverifiable, not a conflict" "$TMP/ocrout/verdicts.json" "d['coverage']['states']['conflict']" "0"
   expect_json_in "rule D13 names the transcription" "$TMP/ocrout/verdicts.json" "str(d['verdicts'])" "D13"
+  expect_json "the status names the input condition" "$TMP/ocrout/verdicts.json" "d['status']" "insufficient_evidence"
+  expect_json_in "the reason names the transcription, not missing sources" "$TMP/ocrout/verdicts.json" \
+    "str(d['evidence']['reason'])" "rest on an OCR transcription"
+  # The override keeps the status and lets the run proceed; the note must reach an
+  # artifact, which it did not until the ordering was fixed.
+  "${RUN[@]}" report --document "$WS/scan-manuscript.pdf" --sources "$ASSETS/sample-sources.csv" \
+    --offline --allow-insufficient --format html --out-dir "$TMP/ocroverride" >"$TMP/ocroverride.json" 2>&1
+  override_exit=$?
+  if [ "$override_exit" -eq 0 ]; then
+    ok "--allow-insufficient proceeds while the status still names the gap (exit 0)"
+  else
+    no "--allow-insufficient proceeds while the status still names the gap (want 0, got $override_exit)"
+  fi
+  expect_json "the overridden status is still the input condition" "$TMP/ocroverride/verdicts.json" "d['status']" "insufficient_evidence"
+  if grep -q "overridden by --allow-insufficient" "$TMP/ocroverride/report.html"; then
+    ok "the override is recorded in the artifact, not only in the exit code"
+  else
+    no "the override is not recorded in the artifact"
+  fi
+  if grep -q "INPUT-BOUND — TRANSCRIBED EVIDENCE" "$TMP/ocroverride/report.html" \
+     || grep -q "TRANSCRIBED EVIDENCE" "$TMP/ocroverride/report.html"; then
+    ok "the banner names the transcription as the reason"
+  else
+    no "the banner does not name the transcription as the reason"
+  fi
+  # The engine that ran is recorded, and asking for one that is absent is an input gap
+  # rather than a silent fallback to another engine.
+  if [ "$have_rapidocr" -eq 1 ]; then
+    "${RUN[@]}" report --document "$WS/scan-manuscript.pdf" --sources "$ASSETS/sample-sources.csv" \
+      --offline --allow-insufficient --ocr-engine rapidocr --format json \
+      --out-dir "$TMP/ocrrapid" >/dev/null 2>&1
+    expect_json "a second engine can be selected and is named in the provenance" \
+      "$TMP/ocrrapid/verdicts.json" "d['document']['transcription']" "rapidocr"
+  else
+    ok "RapidOCR is not installed here, so the second engine is not exercised"
+  fi
+  # The absent-engine gap is only reachable when some engine exists but not the one asked
+  # for; with both installed (this machine) or neither (CI) it cannot be produced from the
+  # CLI, so the pure-function form of it is pinned in self_test.py instead.
+  if [ "$have_ocr_engine" -eq 1 ] && [ "$have_rapidocr" -eq 0 ]; then
+    expect_exit 4 "an engine that is not installed is an input gap, not a silent fallback" \
+      "${RUN[@]}" report --document "$WS/scan-manuscript.pdf" --sources "$ASSETS/sample-sources.csv" \
+      --offline --ocr-engine rapidocr --out-dir "$TMP/ocrmissing" --format json
+    expect_json "and the gap names the engine" "$TMP/ocrmissing/input_gaps.json" \
+      "d['input_gaps'][0]['kind']" "ocr_engine_unavailable" 2>/dev/null || true
+  else
+    ok "the absent-engine gap is not reachable here, so it is pinned in self_test.py instead"
+  fi
+  # An unlimited page cap must not turn a one-page scan into a page-limit gap.
+  "${RUN[@]}" report --document "$WS/scan-manuscript.pdf" --sources "$ASSETS/sample-sources.csv" \
+    --offline --allow-insufficient --ocr-max-pages 0 --format json \
+    --out-dir "$TMP/ocrnocap" >/dev/null 2>&1
+  expect_json "no page cap still reads the scan" "$TMP/ocrnocap/verdicts.json" \
+    "d['document']['transcribed']" "True"
+  # A language pack, when installed, is used rather than refused.
+  if [ "$have_deu" -eq 1 ]; then
+    python3 - "$WS" <<'PYDE'
+import sys
+from pathlib import Path
+from PIL import Image, ImageDraw, ImageFont
+work = Path(sys.argv[1])
+lines = ["Statintherapie reduzierte schwerwiegende kardiovaskulaere Ereignisse",
+         "(HR 0,50) im Behandlungsarm [src:S001]."]
+image = Image.new("RGB", (2000, 900), "white")
+draw = ImageDraw.Draw(image)
+try:
+    font = ImageFont.truetype("/System/Library/Fonts/Supplemental/Arial.ttf", 44)
+except Exception:
+    font = ImageFont.load_default()
+y = 200
+for line in lines:
+    draw.text((100, y), line, fill="black", font=font)
+    y += 90
+image.save(work / "scan-de.pdf", "PDF", resolution=150.0)
+print("built a German scan")
+PYDE
+    "${RUN[@]}" report --document "$WS/scan-de.pdf" --sources "$ASSETS/sample-sources.csv" \
+      --offline --allow-insufficient --ocr-lang deu --format json \
+      --out-dir "$TMP/ocrde" >/dev/null 2>&1
+    expect_json "a non-English scan is read with its own language data" \
+      "$TMP/ocrde/verdicts.json" "d['document']['transcription']" "tesseract:deu"
+  else
+    ok "the German language pack is not installed here, so it is not exercised"
+  fi
   # The control: identical content with a text layer IS a contradiction, so what changed
   # the verdict is the provenance, not the value.
   printf '# Control\n\nStatin therapy reduced major adverse cardiovascular events (HR 0.50) [src:S001].\n' >"$WS/ocr-control.md"

@@ -55,11 +55,12 @@ def save(fig, name):
 SUITES = [
     ("evidence-synthesis\nforge selftest", 78, BLUE),
     ("medical-narrative\nreview selftest", 30, GREEN),
-    # citation-report is environment-dependent: 137 where no PDF extractor and no OCR exist
-    # (CI), 139 with an extractor but no OCR, 144 on the machine that built this chart. The
-    # README's headline number uses the same configuration as this row, and its table lists
-    # the other two; the check below is what keeps the two in step.
-    ("citation-report\nselftest", 144, "#cf222e"),
+    # citation-report is environment-dependent: 137 where no PDF extractor and no OCR engine
+    # exist (CI), 139 with an extractor but no engine, 154 on the machine that built this
+    # chart (two engines, 163 language packs). The README's headline number uses the same
+    # configuration as this row, and its table lists the others; the check below keeps them
+    # in step.
+    ("citation-report\nselftest", 154, "#cf222e"),
     ("meta-analysis-forge\ngolden tests", 22, AMBER),
     ("live acceptance\n(adversarial)", 17, "#8250df"),
 ]

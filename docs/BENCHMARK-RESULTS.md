@@ -561,10 +561,17 @@ one-page image PDF built with Pillow — no text layer, so every character came 
 | the identical sentence as `.md` (control) | read from the text layer | `conflict` / **D08**, exit 1 |
 | a scanned *source* PDF, cited by a text manuscript | transcribed, `evidence_origin = ocr:S001.pdf:tesseract:eng` | `unverifiable` / **D13**, exit 0 |
 | a blank page | no text | `ocr_empty`, exit 4 (input gap) |
+| the same page image, **RapidOCR** | `(HR 0.80, 95% CI 0.72 to 0.89)` — correct, 0.99 confidence | read, and named `rapidocr` in the provenance |
+| a German scan, `--ocr-lang deu` | read with the German data | `transcription: tesseract:deu` |
 
 The control row is the point of the whole tier: the same words, the same values, the same source — and
 a different verdict, because one side was a machine's reading. Without the rule, the scanned-manuscript
 row would have been a red finding against an author, resting on OCR.
+
+The cross-engine row is the reason the engine is part of the provenance: on one page image the two
+engines disagreed about a single character, and only one of them was right. It is also why engine
+agreement does not lift the D13 bar — two engines agreeing is still a machine reading, and the rule
+is about provenance rather than confidence.
 
 **Not measured here:** any error *rate*. One misread character in one page is evidence that the failure
 mode is real, not an estimate of how often it occurs. No scan corpus was assembled, so no

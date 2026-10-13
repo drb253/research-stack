@@ -756,13 +756,16 @@ def _wrap_lines(block: str) -> list:
 PAGE_NUMBER_RE = re.compile(r"^\s*(?:page\s+)?[0-9]{1,4}\s*$", re.IGNORECASE)
 
 
-def _pdf_paragraphs(path: Path, *, ocr: bool = True, ocr_lang=None, ocr_max_pages=None):
+def _pdf_paragraphs(path: Path, *, ocr: bool = True, ocr_engine=None, ocr_lang=None,
+                    ocr_max_pages=None):
     import _pdftext
 
     options = {"ocr": ocr}
+    if ocr_engine:
+        options["ocr_engine"] = ocr_engine
     if ocr_lang:
         options["ocr_lang"] = ocr_lang
-    if ocr_max_pages:
+    if ocr_max_pages is not None:
         options["ocr_max_pages"] = int(ocr_max_pages)
     extracted = _pdftext.extract_pdf(path, **options)
     if not extracted.available:
@@ -945,7 +948,8 @@ def _assemble(
     )
 
 
-def read_document(path_value, *, ocr: bool = True, ocr_lang=None, ocr_max_pages=None) -> Document:
+def read_document(path_value, *, ocr: bool = True, ocr_engine=None, ocr_lang=None,
+                  ocr_max_pages=None) -> Document:
     """Read a supported document into the paragraph + sentence model.
 
     ``ocr`` (default on) lets a scanned PDF be transcribed when tesseract is installed.
@@ -973,7 +977,8 @@ def read_document(path_value, *, ocr: bool = True, ocr_lang=None, ocr_max_pages=
         return _assemble(path, "tex", paragraphs, warnings)
     if suffix == ".pdf":
         paragraphs, warnings, method, transcription = _pdf_paragraphs(
-            path, ocr=ocr, ocr_lang=ocr_lang, ocr_max_pages=ocr_max_pages
+            path, ocr=ocr, ocr_engine=ocr_engine, ocr_lang=ocr_lang,
+            ocr_max_pages=ocr_max_pages,
         )
         document = _assemble(path, "pdf", paragraphs, warnings, method=method)
         if transcription:
