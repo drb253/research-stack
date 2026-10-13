@@ -136,6 +136,58 @@ versioning follows [Semantic Versioning](https://semver.org/).
   not a failure. Retraction remains a hard failure.
 
 ### Fixed
+- **The five sibling gates named in `docs/EVIDENCE-INVARIANT.md` were audited, and all five broke
+  the rule.** Each was answered by reading its code path and running it against a fixture where the
+  input was missing; each fix ships a pass-and-fail test and is its own commit. The question-by-question
+  answer, with the reproduction, is now in that document.
+  - **`medical-narrative-review`** — a source row with `retrieval_status=empty`,
+    `verification_status=verified`, `inclusion_status=included` and its ten extraction fields written
+    as the sanctioned `not_reported` passed `validate_sources --strict`, `audit_citations --strict`
+    and `gate.py` (`submission_ready: true`), all exit 0. `retrieval_status` was enum-checked and read
+    by no decision path, so an extractor could claim what a paper did not report without anyone
+    having obtained the paper. An unread citable source, and a verified claim joined to one, are now
+    `insufficient_evidence` (exit 3) with a worklist in `input_gaps[]`; the gate refuses
+    `submission_ready` and records the same status in `GATE_REPORT.json`. Harness: 19 → 29 checks.
+  - **`sysreview` / PRISMA** — with `source_status=unavailable, hits=0`, the PRISMA-S appendix
+    printed `embase … 0` and "reproducibility checks: OK", and the completeness gate printed
+    "OK - retrieval and assessment complete", both exit 0. No script read `source_status` at all. The
+    appendix now renders `unavailable (not reached)` and never the digit, and both it and the
+    completeness gate exit 3 while stating that the identified total is a floor, not a total. A
+    searched-and-empty database still renders `0` and still passes: zero is a finding when the source
+    answered and unknown when it did not.
+  - **`evidence-synthesis-forge` / citation gate** — a non-existent DOI and a resolver that refused
+    the connection produced byte-identical stdout, `gate: FAIL`, exit 2 and the same DOI in
+    `unresolved[]`/`failures[]`; with `--allow-unresolved` a total outage reported `gate: PASS`,
+    exit 0. Transport failure is now a distinct status, a distinct key (`input_gaps[]`), a distinct
+    gate word (`INCOMPLETE`) and exit 3, which `--allow-unresolved` cannot waive. `--recheck`
+    re-checks only the identifiers a previous run could not check. Harness: 50 → 62 checks.
+  - **`originality-check` / toolkit** — with three of four corpus files unreadable the report still
+    showed "highest score: 0.813" and a full score table, exit 0; a wholly unreadable corpus or a
+    nonexistent path gave "highest score: 0.000" plus the clean verdict shape. The unreadable files
+    reached stderr and nothing else. They now appear in the markdown report, in `corpus.not_checked[]`
+    in the JSON, and in the exit code (3); a corpus that loaded nothing prints no score line and no
+    verdict at all. `sources.py` no longer reports a corpus that could not be read as `empty`. The
+    toolkit gained a `--self-test`, wired into CI and into `verify.sh`, which now runs the *deployed*
+    toolkit's self-test rather than only checking that the file exists.
+  - **`citecheck`** — a draft with one resolvable and one unresolvable identifier wrote a reference
+    list with no trace of the second and exited 0; an all-unresolvable draft wrote a one-byte file.
+    That is a hard error by the skill's own `eval.md` C2. Every identifier that produced no entry now
+    gets an `[UNRESOLVED]` or `[NOT CHECKED]` line in the artifact itself, and the run exits 2 (a
+    finding) or 3 (an input gap), each with its own documented opt-out. `--self-test` added.
+  - Two consumers inherited the same confusion and are fixed with the gates:
+    `benchmarks/bench_accuracy.py` read the citation gate's old generic `error` status as *resolved*,
+    so a lookup failure on a retracted paper counted as a missed retraction — the one number the
+    920-citation benchmark exists to certify; and `acceptance_test.py` accepted any non-zero exit, so
+    a network outage satisfied the adversarial test that exists to catch false greens.
+  - README badge, totals and CI labels updated to **220** automated checks.
+- **The README's "automated checks by suite" chart had drifted from the numbers it illustrated.** It
+  showed four suites summing to 103 under a heading that said 198, and omitted `citation-report`'s 95
+  entirely — while the composition chart directly beneath it derived its own counts from `git`
+  precisely to avoid that failure. The chart now carries all five suites and **refuses to render** if
+  their total disagrees with the README's stated count, so the two cannot drift apart again. Its
+  composition chart had also begun refusing to render (`440` categories against `448` tracked files,
+  its own guard working as designed): `benchmarks/` was missing from the list. The skills chart said
+  12 skills against 13.
 - **`verify.sh` reported the originality toolkit as MISSING when it was present in the
   checkout.** The `2b` block tested only the deployed path
   (`~/.research-stack/originality-toolkit`), so a run from a git checkout whose toolkit had not

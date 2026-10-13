@@ -64,20 +64,51 @@ guarded: not a *false* claim, but a **true claim presented as the wrong kind of 
 
 ## Applying this to the other gates
 
-Scope for this change was `citation-report`, plus this document. The question to ask each remaining
-gate is the same one, and the answer is not assumed:
+Scope for the first change was `citation-report`, plus this document. The five remaining gates were
+then asked the same question by reading each code path and running it against a fixture where the
+input was missing. **All five answered yes: every one of them broke the rule**, and all five are now
+fixed with a pass-and-fail test each. The reproduction below is the pre-fix behaviour, measured on
+the committed code, and every fix is a separate commit.
 
-| Skill | The question to ask |
-|---|---|
-| `medical-narrative-review` | `validate_sources.py` already requires extraction fields for an included, verified source (`MISSING_EXTRACTION_FIELD`). Does any path let an *unread* source support a claim, and does a run with unreadable sources report a pass? |
-| `sysreview` | The PRISMA flow reconciles with the search and screening logs. If a database was `unavailable`, does the flow render a number that reads as evidence of absence? |
-| `evidence-synthesis-forge` | The citation gate resolves DOIs and matches titles. If resolution fails because the network failed rather than because the DOI is wrong, are those two recorded as the same thing? |
-| `originality-check` | An unreadable corpus file is reported, not skipped. Is the overlap result reported as a measurement when the corpus was partly unreadable? |
-| `citecheck` | An unresolved identifier is marked `[UNRESOLVED]`. Is a reference list containing one still emitted as if complete? |
+| Skill | The question | Answer, with the reproduction |
+|---|---|---|
+| `medical-narrative-review` | Does any path let an *unread* source support a claim, and does a run with unreadable sources report a pass? | **Yes.** A row with `retrieval_status=empty`, `verification_status=verified`, `inclusion_status=included` and the ten extraction fields written as the sanctioned `not_reported` passed `validate_sources --strict` (exit 0), `audit_citations --strict` (exit 0) and `gate.py` (exit 0, `submission_ready: true`). `retrieval_status` was enum-checked and read by no decision path. Fixed: an unread citable source, and a verified claim joined to one, are `insufficient_evidence` (exit 3) with a worklist; the gate refuses `submission_ready`. |
+| `sysreview` | If a database was `unavailable`, does the flow render a number that reads as evidence of absence? | **Yes.** With `source_status=unavailable, hits=0`, the PRISMA-S appendix printed `embase … 0` and "reproducibility checks: OK", and the completeness gate printed "OK - retrieval and assessment complete" — both exit 0. No script read `source_status` at all. Fixed: the appendix renders `unavailable (not reached)` and never the digit, and both it and the completeness gate exit 3, stating that the identified total is a floor rather than a total. |
+| `evidence-synthesis-forge` | If resolution fails because the network failed rather than because the DOI is wrong, are those two recorded as the same thing? | **Yes.** A non-existent DOI and a refused connection produced byte-identical stdout, `gate: FAIL`, exit 2, and the same DOI in `unresolved[]`/`failures[]`; with `--allow-unresolved` a total outage reported `gate: PASS`, exit 0. Fixed: an unreachable resolver is its own status, its own key (`input_gaps[]`), its own gate word (`INCOMPLETE`) and exit 3, which `--allow-unresolved` cannot waive. `--recheck` re-checks the worklist. |
+| `originality-check` | Is the overlap result reported as a measurement when the corpus was partly unreadable? | **Yes.** With three of four corpus files unreadable the report still showed "highest score: 0.813" and a full score table, exit 0; a wholly unreadable corpus or a nonexistent path gave "highest score: 0.000" and the clean verdict shape. The unreadable files appeared on stderr only. Fixed: they are listed in the report and in `--json`, a corpus that loaded nothing prints no score line and no verdict, and the run exits 3. `--recheck` re-reads just those files. |
+| `citecheck` | Is a reference list containing an unresolved identifier still emitted as if complete? | **Yes — worse: the entry was dropped.** A draft with one resolvable and one unresolvable identifier wrote a list with no trace of the second and exited 0; an all-unresolvable draft wrote a one-byte file (a newline) and exited 0. That contradicts the skill's own `eval.md` C2 hard error. Fixed: every identifier that produced no entry gets an `[UNRESOLVED]` or `[NOT CHECKED]` line in the artifact itself, and the run exits 2 (a finding) or 3 (an input gap), each with its own opt-out. |
 
-Each of those is a question, not a finding. Answering one means reading the code path and running it
-against a fixture where the input is missing — the same method that produced every defect recorded in
-`docs/AUDIT-FINDINGS.md`.
+### The same question, asked of two consumers
+
+Answering it for the gates exposed the identical confusion in two places that consume them, because a
+gate's output is someone else's input:
+
+- **`benchmarks/bench_accuracy.py`** read the citation gate's old generic `error` status as
+  *resolved*. A lookup failure on a retracted paper therefore counted as a **missed retraction** —
+  silently moving the one number the 920-citation benchmark exists to certify. Input-side statuses now
+  count as unresolved, and a shard exiting 3 is rejected instead of contributing rows.
+- **`acceptance_test.py`** accepted any non-zero exit from the adversarial retracted/unregistered DOI
+  cases, so a network outage satisfied the test that exists to catch false greens. It now pins the
+  finding code.
+
+### What is still not covered
+
+Recorded so the audit is not read as complete:
+
+- **`citation-report` needs a wider conflict ground truth.** Four conflict positives give a Wilson
+  lower bound of 0.51 on conflict precision. The interval, not the point estimate, is the claim.
+- **A malformed input file is reported in the finding channel.** `emit_report` has no
+  `insufficient_input` status for "the CSV could not be parsed at all" (it is an `INVALID_INPUT`
+  error, exit 1). It exits non-zero and is labelled as an input problem, so it never reads as a
+  finding about the review — but the vocabulary is not yet uniform across skills.
+- **Partial retraction-signal failure is a warning, not a gap.** When one of the three retraction
+  signals cannot be reached, the others still run and the failure is recorded per record
+  (`retraction_check_failed`). That is deliberate — Crossref alone is a real check — but a run where
+  *every* retraction signal failed would still be reported as a findings-based result rather than an
+  input condition.
+- **The five audits were verified by their own fixtures**, not by an independent reviewer. Each fix
+  ships a test asserting both the pass and the fail path, which is the strongest evidence this
+  repository can produce about itself; it is not third-party validation.
 
 ## What this rule does not claim
 

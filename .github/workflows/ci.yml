@@ -55,7 +55,7 @@ jobs:
           # originality toolkit: pins the corpus-gap routing (an unreadable corpus file must
           # reach the report and the exit code, not only stderr).
           python3 tools/originality-toolkit/originality_check.py --self-test
-      - name: medical-narrative-review selftest (19 checks)
+      - name: medical-narrative-review selftest (29 checks)
         run: bash skills/medical-narrative-review/scripts/selftest.sh
       # citation-report writes its own PDF and DOCX, and verifies both by re-opening
       # them, so this passes with no poppler and no pypdf: the PDF text-layer check
