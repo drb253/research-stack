@@ -6,6 +6,10 @@ versioning follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+_Nothing yet._
+
+## [1.1.1] — 2026-10-13
+
 ### Fixed
 - **A machine with no PDF extractor was told about a document nothing had read.** The report CLI
   refused an unreadable PDF as `INVALID_INPUT` with exit 1 — the finding channel and the finding
@@ -477,6 +481,7 @@ First release: reliable literature-review tooling for AI coding agents.
   exclude their `.env*` files; the installer writes configs and `.env` with
   mode `600`.
 
-[Unreleased]: https://github.com/drb253/research-stack/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/drb253/research-stack/compare/v1.1.1...HEAD
+[1.1.1]: https://github.com/drb253/research-stack/releases/tag/v1.1.1
 [1.1.0]: https://github.com/drb253/research-stack/releases/tag/v1.1.0
 [1.0.0]: https://github.com/drb253/research-stack/releases/tag/v1.0.0
