@@ -309,10 +309,20 @@ if [ "$DO_SKILLS" = 1 ]; then
     AIPOCH="$HOME/.local/share/aipoch-medical-research-skills"
     if [ -d "$AIPOCH/.git" ]; then
       info "AIPOCH medical-research-skills already cloned ($AIPOCH)"
+    elif [ -e "$AIPOCH" ]; then
+      # An interrupted clone leaves the directory behind without .git. `git clone`
+      # refuses a non-empty destination, so the fallback failed too and `set -e`
+      # killed the whole install (rc=128) on every re-run until the directory was
+      # removed by hand. Keep the user's directory, skip the pack, and say how to
+      # repair it rather than deleting something we did not create.
+      warn "$AIPOCH exists but is not a git clone (interrupted clone?)"
+      warn "  AIPOCH skills skipped; remove that directory and re-run to fetch them"
+      AIPOCH=""
     else
       info "cloning AIPOCH medical-research-skills (scientific-skills subset, ~120 MB)..."
       run "git clone --depth 1 --filter=blob:none --sparse https://github.com/aipoch/medical-research-skills.git '$AIPOCH' && git -C '$AIPOCH' sparse-checkout set scientific-skills" \
-        || run "git clone --depth 1 https://github.com/aipoch/medical-research-skills.git '$AIPOCH'"
+        || run "git clone --depth 1 https://github.com/aipoch/medical-research-skills.git '$AIPOCH'" \
+        || { warn "AIPOCH clone failed (third-party and optional) -> skipping"; AIPOCH=""; }
     fi
   fi
 
@@ -347,7 +357,9 @@ if [ "$DO_SKILLS" = 1 ]; then
     fi
     # link AIPOCH third-party skills (550+), when fetched
     if [ "$WITH_AIPOCH" = 1 ]; then
-      if [ "$DRY_RUN" = 1 ]; then
+      if [ -z "$AIPOCH" ]; then
+        info "  $t: AIPOCH skills skipped (not cloned; see the warning above)"
+      elif [ "$DRY_RUN" = 1 ]; then
         info "  $t: [dry-run] symlink AIPOCH skills → $sdir"
       elif [ -d "$AIPOCH" ]; then
         n=0
