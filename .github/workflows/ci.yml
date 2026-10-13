@@ -114,7 +114,7 @@ jobs:
           python3 -m pip install --quiet -r mcp/ncbi-mcp-server/requirements.txt
           python3 -m pip install --quiet pytest pytest-asyncio pytest-cov
           cd mcp/ncbi-mcp-server && PYTHONPATH=src python3 -m pytest tests/
-      - name: academic-search tests (57, fully offline)
+      - name: academic-search tests (61, fully offline)
         run: |
           python3 -m pip install --quiet fastmcp numpy pandas requests
           cd mcp/academic-search-mcp && python3 -m unittest discover -s tests

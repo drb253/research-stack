@@ -1,28 +1,200 @@
-<div align="center">
-
 # research-stack
 
-**Reliable literature-review tooling for AI coding agents.**
-The search MCP servers **plus** the systematic / scoping / narrative-review and
-meta-analysis skills — installed in one command and wired into Cline, Claude, OpenCode and more.
-
-Built for one promise: **no false citations, no hallucinated numbers, no silent empty searches.**
-
-[![license](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![platform](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-lightgrey.svg)](#requirements)
-[![MCP servers](https://img.shields.io/badge/MCP%20servers-5-2f6feb.svg)](#the-mcp-layer)
-[![skills](https://img.shields.io/badge/skills-13-8957e5.svg)](#the-skills-layer)
-[![tests](https://img.shields.io/badge/checks-301%20passing-2ea043.svg)](#verification--testing)
 [![ci](https://github.com/drb253/research-stack/actions/workflows/ci.yml/badge.svg)](https://github.com/drb253/research-stack/actions/workflows/ci.yml)
-[![install](https://img.shields.io/badge/install-one--command-brightgreen.svg)](#install)
+[![tests](https://img.shields.io/badge/checks-301%20passing-2ea043.svg)](#verification--testing)
+[![python](https://img.shields.io/badge/python-3.9%2B-3776ab.svg)](#requirements)
+[![license](https://img.shields.io/badge/license-MIT%20%2B%20vendored%20licenses-blue.svg)](#license--provenance)
 
-</div>
+**A citation checker that refuses to bluff.**
 
-> **TL;DR** — one command installs **5 MCP servers + 13 gated review skills** for
-> Cline, Claude, OpenCode and more, so an agent can run a systematic / scoping /
-> narrative review or a meta-analysis that **cannot cite a paper that does not
-> exist, quote a number nobody computed, or report screening it never performed.**
-> Zero keys needed to start; the three local MCP servers need **no network** (all vendored).
+You give it a document — a manuscript, a thesis chapter, a grant application — and the sources you
+want it checked against. It reads both, sentence by sentence, and marks each sentence:
+
+- **green** when every number in it is really in the source it cites;
+- **red** when it contradicts that source, or cites something that does not exist or has been
+  retracted;
+- **steel blue** when it *cannot tell* — because the source was not readable, or the link was only
+  guessed, or the text came from OCR.
+
+Then it hands you the document back with those marks on it, plus a worklist of exactly which files
+would turn the blue sentences into green or red.
+
+The one thing it will not do is turn "I could not check this" into a verdict. That rule — an input
+gap is never dressed up as a finding — is the spine of the whole repository, and it is why the
+output has four exit codes instead of two.
+
+---
+
+## Contents
+
+- [Read this first](#read-this-first)
+- [What you get](#what-you-get)
+- [The one rule](#the-one-rule)
+- [Why this exists](#why-this-exists)
+- [How it's different](#how-its-different)
+- [Install (one command)](#install-one-command)
+- [Install options](#install-options)
+- [What gets installed](#what-gets-installed)
+- [Blueprint](#blueprint)
+- [Architecture](#architecture)
+- [The MCP layer](#the-mcp-layer)
+- [The skills layer](#the-skills-layer)
+- [The review pipeline](#the-review-pipeline)
+- [The skills, one by one](#the-skills-one-by-one)
+- [Worked example](#worked-example)
+- [Command reference](#command-reference)
+- [Correctness guarantees](#correctness-guarantees)
+- [Verification & testing](#verification-testing)
+- [Platforms](#platforms)
+- [API keys & access (how to get 100% output)](#api-keys-access-how-to-get-100-output)
+- [Updating](#updating)
+- [Repository layout](#repository-layout)
+- [Troubleshooting & FAQ](#troubleshooting-faq)
+- [Security & privacy](#security-privacy)
+- [Contributing](#contributing)
+- [Roadmap](#roadmap)
+- [Credits](#credits)
+- [License & provenance](#license-provenance)
+- [Glossary](#glossary)
+
+---
+
+## Read this first
+
+Two audiences, two tracks. Both end up in the same place.
+
+<table>
+<tr><th>If you are not a developer</th><th>If you are a developer</th></tr>
+<tr valign="top"><td>
+
+**Start at [Why this exists](#why-this-exists)**, then
+[What you get](#what-you-get) — that pair explains the problem and the
+artefact without any code.
+
+Then [Install (one command)](#install-one-command) and the
+[60-second quickstart](#60-second-quickstart). If a word is unfamiliar,
+the [glossary](#glossary) has plain-language definitions of every term
+this file uses.
+
+You do not need to read the architecture to use this. You do need to
+know one thing: **blue means "I could not check this", and that is not
+the same as "this is wrong".**
+
+</td><td>
+
+**Start at [Blueprint](#blueprint)** — the shape of the system, the
+pipeline stages, the exit-code contract and the JSON envelope.
+
+Then [The skills, one by one](#the-skills-one-by-one) for what each gate
+reads, writes and refuses, and
+[Verification & testing](#verification--testing) for how to reproduce
+every number in this file.
+
+Before changing anything, read
+[Contributing](#contributing) — the conventions are enforced by CI, and
+one of them is that a gate is never weakened to make a test pass.
+
+</td></tr>
+</table>
+
+---
+
+## What you get
+
+A run produces a folder. Everything in it is derived from the same verdict list, so the artefacts
+cannot disagree with each other:
+
+| Artefact | What it is |
+|---|---|
+| `report.pdf` | the document with coloured highlights and a note in the margin per sentence |
+| `report.docx` | the same, with real Word comments rather than fake margin text |
+| `report.html` | the same, with hover notes and a coverage bar |
+| `verdicts.json` | every sentence, its state, the rule id that set it, and the evidence behind it |
+| `coverage.json` | the counts, the arithmetic, and the coverage figure with its caveat |
+| `sources_report.csv` | one row per source: what was tried, what was obtained, what is missing |
+| `evidence_worklist.csv` | one row per source that could not be read, and the action that would fix it |
+
+### The six states
+
+Every sentence gets exactly one, set by exactly one named rule. The rule id is printed on every note,
+so any mark can be traced to the code that made it.
+
+| State | Colour | Means |
+|---|---|---|
+| `attributed` | green | every checkable number in the sentence is present in the evidence of a source it cites |
+| `synthesis` | green-grey | cited, resolves, and carries no independently checkable number |
+| `unverifiable` | steel blue | cannot be checked: no readable evidence, a guessed link, a prose summary, or OCR |
+| `unattributed` | amber | states a checkable fact with no resolvable citation |
+| `conflict` | red | contradicts a held source, cites something that does not exist, or cites a retracted work |
+| `no_citation_needed` | grey | background, definitions, or the document's own results |
+
+**Red is the only accusation, and it has to clear four bars**: a verified link, machine-comparable
+evidence, a contradicting value, and text that was *read* rather than transcribed. Failing any bar
+produces a blue sentence with the reason and what would fix it — never a quiet downgrade to green.
+
+---
+
+## The one rule
+
+> **An input gap must never be reported in the same channel, shape, or exit status as a finding
+> about the artefact under test.**
+
+In plain language: *"I could not read your source"* and *"your sentence is wrong"* are different
+claims, and a tool that prints them the same way is lying about one of them. The full statement, the
+corollaries and the audit that found fifteen violations of it across this repository are in
+[`docs/EVIDENCE-INVARIANT.md`](docs/EVIDENCE-INVARIANT.md).
+
+The rule has teeth in four places:
+
+1. **Separate names.** A gap gets its own status (`insufficient_evidence`, `insufficient_input`) and
+   its own exit code (3 and 4). It never shares 0 or 1 with a verdict.
+2. **Separate fields.** Gaps are listed in `input_gaps[]` with a machine-readable `kind` and a
+   `how_to_close` line, so a caller can act on one without parsing prose.
+3. **Block by default.** A run that could not read what it needed exits 3 or 4, and only
+   `--allow-insufficient` proceeds — while the status still says what was wrong.
+4. **Never a metric.** A coverage percentage is only printed for the sentences that could actually be
+   checked, with the caveat beside it.
+
+The same rule applies to the tooling: "no PDF extractor is installed" is a gap, not a finding;
+"no OCR engine is installed" is a gap; "the package to patch is not installed" is a gap. Each exits 4
+with a worklist.
+
+---
+
+## Why this exists
+
+General-purpose agents happily write a *fluent* review that cites a paper that
+does not exist, quotes an effect size nobody measured, and reports a PRISMA flow
+figure that contradicts its own screening log. This stack makes those failures
+**impossible to pass silently**: every factual claim is chained to a
+verified identifier, every number must trace to a computed artifact, and every
+stage is a gate that fails loudly instead of filling a gap from memory.
+
+| Principle | Enforced by |
+|---|---|
+| No citation enters the review until its DOI/PMID resolves and the title matches | `cross_verify_citations.py`, `audit_citations.py`, `validate_sources.py` |
+| No number appears that was not computed by the analysis | `numbers_provenance.py`, `check_numbers.py` |
+| PRISMA counts must reconcile with the search + screening logs | `prisma_flow.py`, `make_prisma_flow.py`, `check_ledger_completeness.py` |
+| Retracted / unverified / non-included sources cannot be cited | retraction checks (Crossref · OpenAlex · PubMed) + ledger gates |
+| Machine-run screening is never reported as human screening | `check_screening_disclosure.py` |
+| Detector-evasion is refused by design | `humanizerdrb`, `citecheck`, `originality-check` |
+
+---
+
+## How it's different
+
+| Capability | Plain LLM | Search MCPs alone | **research-stack** |
+|---|:---:|:---:|:---:|
+| Finds literature | ⚠️ from memory | ✅ live | ✅ live · 30 sources |
+| Every citation verified against the DOI | ❌ | ❌ | ✅ |
+| Every number traceable to a computed artifact | ❌ | ❌ | ✅ |
+| PRISMA flow reconciles with the search + screening logs | ❌ | ❌ | ✅ |
+| Refuses retracted / unverified / non-included sources | ❌ | ❌ | ✅ |
+| Honest disclosure of AI-run screening | ❌ | ❌ | ✅ |
+| Refuses AI- / plagiarism-detector evasion | ❌ | ✅ | ✅ |
+
+The value is not the prose — it is the **enforced chain** from a research
+question to a verified, reproducible, submission-ready manuscript.
 
 ---
 
@@ -63,111 +235,6 @@ guessing:
 RESULT: <n> passed, 0 failed
 RESEARCH-STACK VERIFIED
 ```
-
----
-
-## Contents
-
-- [How it's different](#how-its-different)
-- [Why this exists](#why-this-exists)
-- [Architecture](#architecture)
-- [Install (one command)](#install-one-command)
-- [Install options](#install-options)
-- [What gets installed](#what-gets-installed)
-- [The MCP layer](#the-mcp-layer)
-- [The skills layer](#the-skills-layer)
-- [The review pipeline](#the-review-pipeline)
-- [Correctness guarantees](#correctness-guarantees)
-- [Verification & testing](#verification--testing)
-- [Platforms](#platforms)
-- [API keys & access (100% output)](#api-keys--access-how-to-get-100-output)
-- [Worked example](#worked-example)
-- [Command reference](#command-reference)
-- [Updating](#updating)
-- [Repository layout](#repository-layout)
-- [Troubleshooting & FAQ](#troubleshooting--faq)
-- [Security & privacy](#security--privacy)
-- [Contributing](#contributing)
-- [Roadmap](#roadmap)
-- [Credits](#credits)
-- [License & provenance](#license--provenance)
-
----
-
-## How it's different
-
-| Capability | Plain LLM | Search MCPs alone | **research-stack** |
-|---|:---:|:---:|:---:|
-| Finds literature | ⚠️ from memory | ✅ live | ✅ live · 28 sources |
-| Every citation verified against the DOI | ❌ | ❌ | ✅ |
-| Every number traceable to a computed artifact | ❌ | ❌ | ✅ |
-| PRISMA flow reconciles with the search + screening logs | ❌ | ❌ | ✅ |
-| Refuses retracted / unverified / non-included sources | ❌ | ❌ | ✅ |
-| Honest disclosure of AI-run screening | ❌ | ❌ | ✅ |
-| Refuses AI- / plagiarism-detector evasion | ❌ | ✅ | ✅ |
-
-The value is not the prose — it is the **enforced chain** from a research
-question to a verified, reproducible, submission-ready manuscript.
-
----
-
-## Why this exists
-
-General-purpose agents happily write a *fluent* review that cites a paper that
-does not exist, quotes an effect size nobody measured, and reports a PRISMA flow
-figure that contradicts its own screening log. This stack makes those failures
-**impossible to pass silently**: every factual claim is chained to a
-verified identifier, every number must trace to a computed artifact, and every
-stage is a gate that fails loudly instead of filling a gap from memory.
-
-| Principle | Enforced by |
-|---|---|
-| No citation enters the review until its DOI/PMID resolves and the title matches | `cross_verify_citations.py`, `audit_citations.py`, `validate_sources.py` |
-| No number appears that was not computed by the analysis | `numbers_provenance.py`, `check_numbers.py` |
-| PRISMA counts must reconcile with the search + screening logs | `prisma_flow.py`, `make_prisma_flow.py`, `check_ledger_completeness.py` |
-| Retracted / unverified / non-included sources cannot be cited | retraction checks (Crossref · OpenAlex · PubMed) + ledger gates |
-| Machine-run screening is never reported as human screening | `check_screening_disclosure.py` |
-| Detector-evasion is refused by design | `humanizerdrb`, `citecheck`, `originality-check` |
-
----
-
-## Architecture
-
-```mermaid
-flowchart TB
-    U(["You / coding agent"]) --> CL[Cline] & CD[Claude] & OC[OpenCode] & MORE[Gemini · LM Studio · Trae · Cursor · Windsurf]
-
-    subgraph MCP["MCP layer — retrieval & verification"]
-        PS["paper-search · 28 sources + 43 patched modules"]
-        NC["ncbi"]
-        AS["academic-search"]
-        CO["consensus"]
-        GS["google-scholar"]
-    end
-
-    subgraph SK["Skills layer — 13 skills"]
-        SR["sysreview / meta-analysis (orchestrators)"]
-        EV["evidence-synthesis-forge · meta-analysis-forge"]
-        NR["medical-narrative-review"]
-        GD["paper-search · citecheck · humanizerdrb · originality-check"]
-    end
-
-    CL & CD & OC & MORE --> PS & NC & AS & CO & GS
-    CL & CD & OC & MORE --> SR & NR
-    SR --> EV
-    NR --> GD
-    PS --> GATES
-
-    GATES{{"GATES<br/>citations · numbers · PRISMA · screening disclosure"}}
-    EV --> GATES
-    GD --> GATES
-    GATES --> OUT["Manuscript: DOCX · PDF · print-ready HTML"]
-    GATES -.->|error| STOP["BLOCKED — fix the ledger, do not waive"]
-```
-
-The stack is deliberately layered: the **MCP layer** fetches and verifies raw
-records; the **skills layer** turns them into gated, reproducible artifacts; the
-**gates** are the single authority on whether a document is finished.
 
 ---
 
@@ -252,13 +319,182 @@ output as a first draft to check, not a verified result.
 
 ---
 
+## Blueprint
+
+### The shape of the system
+
+```
+        ┌──────────────────────────────────────────────────────────────┐
+        │  your client:  Cline · Claude · OpenCode · (Gemini, LM Studio)│
+        └───────────────┬──────────────────────────────────────────────┘
+                        │  MCP (stdio)                      skills (markdown + scripts)
+        ┌───────────────▼───────────────┐                 ┌───────────────────────────────┐
+        │  MCP servers                  │                 │  13 gated skills              │
+        │  · paper-search   (87 tools)  │                 │  · citation-report            │
+        │  · ncbi                       │                 │  · evidence-synthesis-forge   │
+        │  · academic-search            │                 │  · meta-analysis-forge        │
+        │  · consensus / google-scholar │                 │  · medical-narrative-review   │
+        └───────────────┬───────────────┘                 │  · citecheck · sysreview · …  │
+                        │  live literature                 └───────────────┬───────────────┘
+                        └──────────────┬─────────────────────────────────┘
+                                       ▼
+                        ┌──────────────────────────────┐
+                        │  deterministic gates         │  exit 0 pass · 1 finding
+                        │  (scripts, stdlib-only)      │  exit 3 insufficient evidence
+                        │  JSON on stdout, only JSON   │  exit 4 insufficient input
+                        └──────────────┬───────────────┘
+                                       ▼
+             verdicts.json · coverage.json · report.pdf/docx/html · worklists
+```
+
+### The pipeline
+
+Every skill is a chain of gates that each answer one question and can each refuse. The citation
+report's chain is the clearest example:
+
+| Stage | Question | If it cannot answer |
+|---|---|---|
+| 1. Intake | can the document be read at all? | `insufficient_input` (4) with the gap kind and what to install |
+| 2. Preconditions | is there enough text, in a language we can grade? | `insufficient_input` (4), naming the precondition |
+| 3. Citation resolution | does each marker name a real source? | the sentence is `conflict` (a finding: the marker matches nothing) |
+| 4. Evidence acquisition | is there readable text for each source? | `insufficient_evidence` (3) and a worklist of files to supply |
+| 5. Classification | what does each sentence's rule say? | one state per sentence, rule id recorded |
+| 6. Sufficiency policy | was the evidence adequate? | blocks by default; `--allow-insufficient` proceeds with the status kept |
+| 7. Gate | do the artefacts agree with the verdict list? | exit 1 with the specific disagreement |
+
+Stages 3 and 5 make findings. Stages 1, 2, 4 and 6 make gaps. Stage 7 makes neither: it checks that
+the thing you are about to read is the thing that was computed.
+
+### The exit-code contract
+
+Uniform across every skill, so a CI job or an agent can branch without parsing English:
+
+| Exit | Meaning | Example |
+|---|---|---|
+| `0` | pass | the gate ran and found nothing |
+| `1` | **a finding about the artefact** | a contradiction, a broken PRISMA arithmetic, an untraceable number |
+| `2` | usage error (argparse) | a missing required argument |
+| `3` | `insufficient_evidence` | the sources were not readable enough to judge |
+| `4` | `insufficient_input` | the document, the dependency or the tool was missing |
+
+The vocabulary is deliberate: `3` and `4` exist so that "we could not check" is *impossible* to
+mistake for "we checked and it failed".
+
+### The JSON envelope
+
+The only thing a gate writes to stdout is one JSON object:
+
+```json
+{
+  "tool": "citation-report",
+  "status": "insufficient_input",
+  "summary": { "errors": 1, "warnings": 0 },
+  "issues": [
+    { "severity": "error", "code": "INSUFFICIENT_INPUT",
+      "location": "intake", "detail": "cannot read the text layer of paper.pdf: …" }
+  ],
+  "input_gaps": [
+    { "kind": "no_text_layer", "detail": "…",
+      "how_to_close": "install tesseract (`brew install tesseract` / `apt install tesseract-ocr`) …" }
+  ]
+}
+```
+
+Everything else — progress, warnings, diagnostics — goes to stderr, so a caller can pipe stdout into
+`jq` without filtering.
+
+### The module map
+
+Each skill is self-contained: its `scripts/` holds the gates, its `references/` holds the reasoning,
+and no skill imports another skill's code. Inside `citation-report`, the split is by responsibility:
+
+| Module | Responsibility |
+|---|---|
+| `_common.py` | bounded IO, the `Issue` type, the JSON envelope, exit-code mapping |
+| `_intake.py` | reading md/txt/docx/tex/pdf into paragraphs and sentences; gap kinds |
+| `_pdftext.py` | `pdftotext` → `pypdf` → OCR (tesseract or RapidOCR), with a gap for every failure |
+| `_signals.py` | what needs a citation, what number is what, the measure grammar |
+| `_sentences.py` | sentence splitting and marker stripping |
+| `_evidence.py` | the evidence index: does this value appear in that source's text? |
+| `_bundle.py` | the source registry: resolution, retraction, provenance, evidence strength |
+| `_acquire.py` | open-access acquisition tiers (keyless API → OA PDF → optional CLI) |
+| `verdicts.py` | the rule table (D01–D13) and the classifier |
+| `sufficiency.py` | the evidence policy: block, or proceed with the status kept |
+| `preconditions.py` | intake checks (length, language, trigger yield) |
+| `coverage.py` | the counts and the arithmetic that must balance |
+| `_htmlout.py`, `_pdfrender.py`, `_docxout.py` | the three renderers, one verdict list |
+| `report_gate.py` | re-checks the artefacts against the recorded verdicts |
+| `self_test.py` | pure-function assertions (no engine, no network) |
+| `selftest.sh` | end-to-end fixtures, pass and fail path per gate |
+
+### The patch system
+
+The `paper-search` MCP server is a vendored fork: upstream's package is copied into `mcp/paper-search-mcp/`
+and fixed by `mcp/paper-search-patches/`. Whole-file replacements live in `replacements/`, and each one
+is kept **byte-identical** to the vendored file it mirrors, so a reinstall cannot silently revert a
+fix. `mcp/paper-search-patches/ci_patch_check.py` proves that on every push, and then mutates a copy to
+prove the tests still reject the defect they exist to catch.
+
+### Conventions a contributor must follow
+
+1. **Stdlib only.** Optional tools (poppler, tesseract, RapidOCR) are probed with `shutil.which` or
+   `importlib.util.find_spec`, never required, and their absence is a legible refusal.
+2. **The exit vocabulary above.** No new codes, no sharing 0/1 with a gap.
+3. **Both paths tested.** Every gate ships a fixture that asserts it *fails* as well as one that
+   asserts it passes.
+4. **Never weaken a gate to make a fixture pass.** If a test fails, the code or the test is wrong.
+5. **Every number in the docs is reproducible** by a script in `benchmarks/` or a suite in the repo.
+6. **Benchmarks print confusion matrices and Wilson intervals**, not just point estimates.
+
+---
+
+## Architecture
+
+```mermaid
+flowchart TB
+    U(["You / coding agent"]) --> CL[Cline] & CD[Claude] & OC[OpenCode] & MORE[Gemini · LM Studio · Trae · Cursor · Windsurf]
+
+    subgraph MCP["MCP layer — retrieval & verification"]
+        PS["paper-search · 30 sources + 46 patched modules"]
+        NC["ncbi"]
+        AS["academic-search"]
+        CO["consensus"]
+        GS["google-scholar"]
+    end
+
+    subgraph SK["Skills layer — 13 skills"]
+        SR["sysreview / meta-analysis (orchestrators)"]
+        EV["evidence-synthesis-forge · meta-analysis-forge"]
+        NR["medical-narrative-review"]
+        GD["paper-search · citecheck · humanizerdrb · originality-check"]
+    end
+
+    CL & CD & OC & MORE --> PS & NC & AS & CO & GS
+    CL & CD & OC & MORE --> SR & NR
+    SR --> EV
+    NR --> GD
+    PS --> GATES
+
+    GATES{{"GATES<br/>citations · numbers · PRISMA · screening disclosure"}}
+    EV --> GATES
+    GD --> GATES
+    GATES --> OUT["Manuscript: DOCX · PDF · print-ready HTML"]
+    GATES -.->|error| STOP["BLOCKED — fix the ledger, do not waive"]
+```
+
+The stack is deliberately layered: the **MCP layer** fetches and verifies raw
+records; the **skills layer** turns them into gated, reproducible artifacts; the
+**gates** are the single authority on whether a document is finished.
+
+---
+
 ## The MCP layer
 
 Five MCP servers give the skills their retrieval and verification surface.
 
 | Server | Kind | What it adds |
 |---|---|---|
-| **paper-search** | local, `uv` tool | 28 sources (27 work with zero config), federated search, query planning, retraction check, citation export |
+| **paper-search** | local, `uv` tool | 30 active sources (28 need no configuration), federated search, query planning, retraction check, citation export |
 | **ncbi** | local, venv (vendored) | E-utilities: PubMed search, MeSH terms, related articles, batch fetch |
 | **academic-search** | local, venv (vendored) | Semantic Scholar / Crossref / OpenAlex multi-provider search |
 | **consensus** | remote (`npx mcp-remote`) | semantic search over 400M+ papers |
@@ -271,7 +507,7 @@ with a wall-clock budget, and **never reports a failed source as "no results"**:
 flowchart LR
     Q["query"] --> P["plan_search_query<br/>variants · MeSH · domain routing"]
     P --> F{"federated fan-out"}
-    F --> S1[PubMed] & S2[Europe PMC] & S3[OpenAlex] & S4[Crossref] & S5[arXiv] & S6[bioRxiv] & SX["… 28 sources"]
+    F --> S1[PubMed] & S2[Europe PMC] & S3[OpenAlex] & S4[Crossref] & S5[arXiv] & S6[bioRxiv] & SX["… 30 sources"]
     S1 & S2 & S3 & S4 & S5 & S6 & SX --> R["relevance-ranked, deduped"]
     R --> ST["source_status per source<br/>ok · empty · unavailable"]
     R --> RB["relevance bands<br/>high · medium · low"]
@@ -370,6 +606,81 @@ sequenceDiagram
 
 Each arrow is a **file on disk**. If a link is missing, the review is not
 finished, and the gate says so explicitly rather than filling the gap.
+
+---
+
+## The skills, one by one
+
+Thirteen skills, each a chain of gates with its own fixtures. `verify.sh` checks all thirteen install
+and run; the counts below are what each suite prints.
+
+### citation-report
+**Grade a document sentence by sentence against the sources you supply.**
+Reads a manuscript plus a source registry (ledger, BibTeX, DOI list, or a folder of PDFs) and writes
+the coloured report described above. Refuses a document it cannot read (exit 4), blocks when cited
+sources have no readable evidence (exit 3), and never accuses on transcribed text (rule D13).
+`--no-ocr`, `--ocr-engine`, `--ocr-lang`, `--ocr-max-pages`, `--allow-insufficient`.
+Docs: [`skills/citation-report/SKILL.md`](skills/citation-report/SKILL.md) ·
+`references/verdict-rules.md` (D01–D13) · `eval.md` (ten evaluation questions).
+
+### evidence-synthesis-forge
+**Orchestrate systematic reviews, scoping reviews, evidence maps, meta-analyses and umbrella reviews.**
+The largest gate set: protocol, search, screening, extraction, synthesis, PRISMA reconciliation,
+numbers provenance, completeness. Its `cross_verify_citations.py` checks a citation against a registry
+and separates "unreachable" from "not found"; `numbers_provenance.py` fails a draft whose numbers
+cannot be traced to an artifact.
+Suite: **78 checks**. Docs: [`skills/evidence-synthesis-forge/SKILL.md`](skills/evidence-synthesis-forge/SKILL.md).
+
+### meta-analysis-forge
+**Design and audit first-order meta-analyses.** Effect-size harmonisation, the pooling engine, forest
+and funnel plots, heterogeneity. The engine is checked against `metafor`'s canonical datasets
+(`dat.bcg`, `dat.normand1999`) plus closed-form maths, so a pooled estimate, τ², I² and Q are
+reproduced rather than merely plausible. Heterogeneity that is not estimable (`QE ≤ df`) is reported as
+such, not as a number.
+Suite: **22 checks** (`golden_tests.R`).
+
+### medical-narrative-review
+**Write, expand or audit a publication-ready narrative review.** Source validation, citation audit and
+a submission gate that refuses `submission_ready` when a claim rests on an unread source.
+Suite: **30 checks**.
+
+### umbrella-review-skeptic
+**Review umbrella reviews and second-order meta-analyses** — overlap between included reviews,
+quality scorecards, second-order model specifications.
+
+### meta-ml-screener
+**Design machine-learning-assisted screening workflows** — active learning, deduplication, screening
+logs. `validate_screening_log.py` refuses a log with no data rows (exit 3) rather than reporting a
+clean run.
+
+### environment-life-review-forge
+**Adapt evidence synthesis to environmental, ecological and life-science questions** — PECO framing,
+causal ML references, environmental templates.
+
+### sysreview · meta-analysis
+**Entry-point aliases.** `/sysreview` and `/meta-analysis` route to the corresponding forge skill with
+the review-type question already asked.
+
+### citecheck
+**Audit and build citations so a document is properly attributed.** Four modes (audit, fix, build,
+verify). Writes `[UNRESOLVED]` / `[NOT CHECKED]` placeholders into the emitted list rather than
+dropping an identifier it could not resolve.
+
+### originality-check
+**Pre-submission originality and attribution checking for your own drafts**, backed by a stdlib-only
+toolkit. Reports an unreadable corpus in `corpus.not_checked[]` and exits 3 rather than printing a
+score computed from whatever happened to load.
+
+### humanizerdrb
+**Rewrite AI-sounding prose so it reads like a person wrote it**, without changing what it says. Its
+checks are heuristics with known false positives, which the docs say out loud.
+
+### paper-search
+**Search, download and read academic papers across 30 active sources** (28 need no configuration;
+Springer and Elsevier register when their keys are set; four upstream-broken sources are retired).
+87 MCP tools, federated search, query planning, retraction checks, citation export. Every connector
+reports an outage as an outage — see
+[the availability invariant](#the-mcp-layer).
 
 ---
 
@@ -570,17 +881,29 @@ down by category) as *informational* — they never change the verdict.
 The vendored MCP servers have their own gate, run by CI on every push:
 
 ```bash
-python3 mcp/paper-search-patches/ci_patch_check.py   # patch system + availability invariant
-python3 mcp/paper-search-patches/ci_patch_check.py --self-test
+python3 mcp/paper-search-patches/ci_patch_check.py                 # 11 checks
+python3 mcp/paper-search-patches/ci_patch_check.py --self-test     # 13 checks
+cd mcp/paper-search-patches && python3 test_availability_invariant.py   # 28 tests
+cd mcp/academic-search-mcp && python3 -m unittest discover -s tests     # 61 tests
 ```
 
-It copies the vendored package into a temporary directory, runs the real patch pipeline against that
-copy, checks the fixes are present, then **mutates** the copy to reintroduce the defect the
-availability layer exists to prevent and asserts the suite still rejects it. It needs `requests`; if
-that is missing it exits 4 with a worklist rather than reporting success. What it does not do is
-reconstruct the fixed files from pristine upstream `0.1.4` — the vendored copy is already in the
-patched state, so the patch run is idempotent by construction. It catches drift, breakage and a
-toothless suite; it does not re-derive the patch.
+`ci_patch_check.py` copies the vendored package into a temporary directory, runs the real patch
+pipeline against that copy, checks the fixes are present, asserts the invariant suite actually
+collected its tests (floor = the count it defines, 28), and then **mutates** the copy twice — an
+outage named like an empty answer, and a success named like an outage — asserting the suite rejects
+each one. Both directions are needed: the second mutation passed the suite until a review added the
+specificity test.
+
+It needs `requests` and the package's own imports; if any is missing it exits 4 with a worklist rather
+than reporting success. What it does not do is reconstruct the fixed files from pristine upstream
+`0.1.4` — the vendored copy is already in the patched state, so the patch run is idempotent by
+construction. It catches drift, breakage and a toothless suite; it does not re-derive the patch.
+
+The invariant suite covers two things now: **availability** (an outage is never reported as "no
+results", and a success is never reported as an outage) and a **responsive event loop** (a tool doing
+blocking I/O must run it off the loop). The second is asserted by interleaving, not duration: a tick of
+the loop must happen *while* a deliberately slow searcher is working. Two mutations — either helper put
+back on the loop — are caught by name.
 
 The engine is checked against `metafor`'s canonical datasets (`dat.bcg`,
 `dat.normand1999`) plus closed-form maths, so a pooled estimate, τ², I² and Q are
@@ -890,6 +1213,42 @@ Method, caveats and per-record output: [`docs/BENCHMARK-RESULTS.md`](docs/BENCHM
 The code and documentation audit — every defect found, fixed and re-verified — is in
 [`docs/AUDIT-FINDINGS.md`](docs/AUDIT-FINDINGS.md).
 
+### The trigger's real-prose sensitivity, and why 0.867 was a floor
+
+The trigger decision on 40 unseen real sentences is reported as sensitivity **0.900** with specificity
+**1.000**. It was 0.867 until a review showed the sample is **partly digit-stripped**: several
+sentences have had their numbers removed before being recorded, leaving broken grammar (`scores at or
+above as indicative`, `attributed to -HT`). The tool's main trigger is the statistic one, so those
+sentences cannot fire by construction — and all four false negatives were in that group.
+
+| subset | n | sensitivity | specificity |
+|---|---|---|---|
+| all 40 sentences | 40 | 0.900 | 1.000 |
+| still carries a number | 14 | **1.000** (9/9) | 1.000 |
+| number removed from the sample | 26 | 0.857 | 1.000 |
+
+One genuine gap was closed: `provides … evidence on|for|that` was added to the vague-attribution
+pattern, catching one of the four misses and firing on none of the ten negatives. The widening was
+kept only because real specificity **and** constructed specificity both stayed at 1.000 — an earlier
+attempt at the same thing broke a constructed true negative and was rejected.
+
+### Measure formats the parser used to miss
+
+Four formats written by real papers were unread; all now parse, and the guards still refuse theirs:
+
+| sentence | before | now |
+|---|---|---|
+| `aOR, 3.15` | not read | `AOR=3.15` |
+| `(OR) = 2.15` | not read | `OR=2.15` |
+| `beta = −0.22` (typographic minus) | not read | `BETA=-0.22` |
+| `risk ratio (RR) 1.42` | not read | `RR=1.42` |
+| `Variables OR 95% CI` | refused | refused |
+| `MD 21702` (a ZIP code) | refused | refused |
+| `risk difference – 0.05` | not read | not read — **missed, never inverted** |
+
+All seven are fixtures in `benchmarks/bench_verdicts.py`, and the benchmark's safety block fails if any
+regresses. The formats are real; the sentences are constructed to exercise them.
+
 ### What the overlap and citation checks now cover
 
 Aligned with the **US Office of Research Integrity** guide *"Avoiding Plagiarism,
@@ -1123,15 +1482,38 @@ detector-evasion; they improve writing and fix attribution instead.
 
 ## Contributing
 
-PRs are welcome. Ground rules:
+The full developer notes are in this section; the short version is the six conventions in
+[Blueprint → Conventions](#conventions-a-contributor-must-follow).
 
-1. **Every gate needs a pass *and* a fail test** — `check_selftest_coverage.py`
-   enforces it ("a gate that cannot fail is not a gate").
-2. Run the suites before pushing: `doctor.sh`, `selftest.sh` (50),
-   `golden_tests.R` (17), `medical-narrative-review/scripts/selftest.sh` (19),
-   `acceptance_test.py` (17).
-3. **Never** weaken a gate to make a failing fixture pass.
-4. Keep the vendored MCP copies in sync via the recipe in each `UPSTREAM.md`.
+### The loop
+
+```bash
+git clone https://github.com/drb253/research-stack && cd research-stack
+bash skills/citation-report/scripts/selftest.sh      # the suite you are changing
+python3 benchmarks/bench_verdicts.py                 # the measured claims
+./verify.sh --targets cline                          # install acceptance
+```
+
+CI runs all of it on Linux and macOS, plus an R job for the meta-analysis engine and a job for the
+vendored MCP servers. Nothing is merged on a red build, and the build is the only reviewer that
+matters for a claim.
+
+### Adding a gate
+
+1. Write the script under the skill's `scripts/`, stdlib only, JSON on stdout, the exit vocabulary
+   from [Blueprint](#the-exit-code-contract).
+2. Add a **pass** fixture and a **fail** fixture to the skill's `selftest.sh`. A gate with only a
+   passing path is not a gate.
+3. If it is a rule, add it to the rule table *and* the rule reference, and make `self_test.py` assert
+   the two agree.
+4. If it changes a measured claim, update `benchmarks/` and the number in this file **together** —
+   `scripts/make_readme_charts.py` refuses to render if the chart and the text disagree.
+
+### Reporting a defect
+
+Open an issue with: what you ran, what you expected, what happened, and — if you can — the smallest
+document that reproduces it. A claim that a gate is wrong is much easier to accept with a fixture
+attached, and the fixture becomes the regression test.
 
 ---
 
@@ -1171,5 +1553,36 @@ here defeats AI- or plagiarism-detectors; the guard skills explicitly refuse tha
 Built so that a fluent paragraph is never mistaken for a verified one.
 </sub></div>
 
+## Glossary
 
+Plain-language definitions for every term this file uses.
 
+| Term | What it means here |
+|---|---|
+| **artefact** | a file the tool produces — the PDF, the DOCX, the JSON — as opposed to the document you gave it |
+| **citation marker** | the little tag in the text that points at a reference: `[12]`, `(Smith 2020)`, `[src:S001]` |
+| **conflict** | the sentence says a number, the source says a different number for the same measure. Red, and the only accusation |
+| **coverage** | of the sentences that need a citation, how many could actually be checked. Always printed with the caveat |
+| **DOI** | the permanent identifier of a paper, e.g. `10.1038/s41586-020-2649-2` |
+| **effect measure** | the statistic a study reports: `HR` (hazard ratio), `OR` (odds ratio), `RR` (risk ratio), `MD` (mean difference) … |
+| **evidence** | the text or recorded value held for a source. Its *strength* is recorded: `primary`, `recorded_estimate`, `abstract`, `prose_summary`, `none` |
+| **exit code** | the number a program returns: 0 pass, 1 finding, 3 not enough evidence, 4 not enough input |
+| **gate** | a script that checks one thing and can refuse. "The gate passed" means a script actually ran and found nothing |
+| **gap** | something the tool could not read or reach. Never a verdict — it has its own status and exit code |
+| **highlight** | the colour painted over a sentence in the report |
+| **input-bound** | the run is limited by what it was given, not by what the document says. Shown as a banner |
+| **ledger** | a CSV you supply listing sources, with a column for the recorded effect estimate |
+| **MCP** | Model Context Protocol — how the AI client talks to the search servers |
+| **OCR** | optical character recognition: reading text off a scanned image. Here it is a *transcription*, and it may never support an accusation |
+| **provenance** | where a piece of evidence came from, e.g. `file:paper.pdf`, `europepmc:fullTextXML`, `ocr:paper.pdf:tesseract:eng` |
+| **retracted** | the paper was withdrawn by its publisher. Citing one is red |
+| **rule id** | `D01`…`D13`: which rule set a sentence's state. Printed on every note |
+| **scan** | a PDF that is a picture of a page, with no text layer |
+| **state** | one of the six values above |
+| **transcription** | text a machine read off an image. Marked everywhere, and never enough to convict |
+| **unverifiable** | "cannot be checked" — the honest middle. Blue, not red |
+| **verdict** | one sentence's state, rule id, note and evidence, recorded in `verdicts.json` |
+| **worklist** | the CSV of exactly what to supply to close the gaps |
+| **Wilson interval** | the confidence interval used for every rate in this repository, because it behaves at small samples and 100% |
+
+---

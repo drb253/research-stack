@@ -572,6 +572,56 @@ FALSE_PARSE_PROBES = [
 ]
 
 
+#: Formats that a real corpus wrote and the parser used to miss. The *formats* are real (each was
+#: observed in the fetched open-access full texts recorded in `REAL_CONFLICTS`' provenance); the
+#: sentences here are constructed to exercise them, so this is a parser regression list rather than
+#: ground truth about any paper. `expect` is `(measure, value)` or None for "must not parse".
+MEASURE_FORMATS = [
+    ("The adjusted odds ratio was aOR, 3.15 in the treated arm [src:S007].",
+     ("AOR", 3.15), "comma between the label and the value"),
+    ("The odds of the outcome (OR) = 2.15 in the intervention group [src:S007].",
+     ("OR", 2.15), "the label parenthesised and the value after the closing bracket"),
+    ("The association was beta = \u22120.22 per unit [src:S007].",
+     ("BETA", -0.22), "a negative estimate set with a typographic minus"),
+    ("The relative risk risk ratio (RR) 1.42 was reported [src:S007].",
+     ("RR", 1.42), "the long form followed by the short form in brackets"),
+    ("The standardised mean difference was SMD -0.35 [src:S007].",
+     ("SMD", -0.35), "an ASCII negative"),
+    ("The risk difference was \u2013 0.05 in the control arm [src:S007].",
+     None, "a dash used as a separator must be missed, never read as a negative"),
+    ("Variables OR 95% CI were extracted [src:S007].",
+     None, "the table header guard must survive the wider separator"),
+]
+
+
+def run_measure_formats() -> list:
+    """Every format above parses to the value it should, and the guards still refuse theirs.
+
+    A parser regression here is a recall cost (a real contradiction stops being caught), which is
+    why it is asserted rather than eyeballed: the four unread formats cost four of the ten
+    real-source contradictions before they were fixed.
+    """
+    import sys
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent
+                           / "skills" / "citation-report" / "scripts"))
+    import _signals
+
+    rows: list = []
+    for sentence, expect, why in MEASURE_FORMATS:
+        found = [q for q in _signals.extract_quantities(sentence) if q.kind == "measure"]
+        if expect is None:
+            ok = not found
+            got = "(none)" if not found else "%s=%g" % (found[0].measure, found[0].values[0])
+            want = "(none)"
+        else:
+            measure, value = expect
+            ok = any(q.measure == measure and abs(q.values[0] - value) < 1e-9 for q in found)
+            got = ", ".join("%s=%g" % (q.measure, q.values[0]) for q in found) or "(none)"
+            want = "%s=%g" % (measure, value)
+        rows.append((sentence, why, got, want, ok))
+    return rows
+
+
 def run_false_parse_guard() -> list:
     """Assert that ordinary prose is never accused of contradicting a source.
 
@@ -813,6 +863,32 @@ def main() -> int:
         raise SystemExit(
             "expected %d real-sample verdicts, got %d" % (len(REAL_SAMPLE), len(real_verdicts))
         )
+    # The sample is partly digit-stripped: several sentences have had their numbers removed
+    # before being recorded ("scores at or above as indicative", "attributed to -HT"), which
+    # leaves broken grammar and makes the statistic trigger -- the tool's main one -- unable to
+    # fire by construction. Reporting sensitivity over the whole sample alone would therefore
+    # understate it and hide why. Both figures are computed, and the split is printed.
+    import re as _re
+
+    def _digit_free(text: str) -> bool:
+        return not _re.search(r"\d", text)
+
+    real_trigger_digits = binary_metrics(
+        [
+            (needs, bool(verdict.get("requires_citation")))
+            for (text, needs), verdict in zip(REAL_SAMPLE, real_verdicts)
+            if not _digit_free(text)
+        ],
+        positive="sentence needs attribution and still carries its number",
+    )
+    real_trigger_redacted = binary_metrics(
+        [
+            (needs, bool(verdict.get("requires_citation")))
+            for (text, needs), verdict in zip(REAL_SAMPLE, real_verdicts)
+            if _digit_free(text)
+        ],
+        positive="sentence needs attribution but its number was removed from the sample",
+    )
     real_trigger = binary_metrics(
         [
             (needs, bool(verdict.get("requires_citation")))
@@ -847,6 +923,12 @@ def main() -> int:
     accused = [(sentence, verdict["rule_id"])
                for sentence, _, verdict in false_parse if verdict["state"] == "conflict"]
     false_parse_ok = not accused
+    # ...and the formats a real corpus wrote must parse, or a contradiction is missed. This is a
+    # recall guard: four of the ten real-source contradictions were lost to these formats.
+    measure_formats = run_measure_formats()
+    format_misses = [(sentence, why, got, want)
+                     for sentence, why, got, want, ok in measure_formats if not ok]
+    measure_formats_ok = not format_misses
     # The externally grounded set: real articles, values copied from the fetched text. It is
     # scored on its own so its result cannot be attributed to the constructed set's caveat.
     real_conflicts = run_real_conflicts()
@@ -869,6 +951,7 @@ def main() -> int:
         and trigger_safety_ok
         and false_parse_ok
         and real_conflict_ok
+        and measure_formats_ok
     )
 
     result = {
@@ -886,6 +969,8 @@ def main() -> int:
         "conflict_precision_must_be_one": safety_ok,
         "trigger_false_positive_free_on_real_prose": trigger_safety_ok,
         "false_parse_never_accuses": false_parse_ok,
+        "measure_formats_all_parse": measure_formats_ok,
+        "measure_format_misses": [list(row) for row in format_misses],
         "real_source_conflict_recall": real_conflict_ok,
         "real_source_conflicts": {
             "cases": len(real_conflict_rows),
@@ -907,6 +992,8 @@ def main() -> int:
             "accusation": accusation,
             "trigger_constructed": constructed_trigger,
             "trigger_real_prose": real_trigger,
+            "trigger_real_prose_with_numbers": real_trigger_digits,
+            "trigger_real_prose_digit_free": real_trigger_redacted,
             "accusation_specificity_real_prose": real_accusation,
         },
         "red_bar_cases": red_bar_rows,
@@ -975,6 +1062,11 @@ def main() -> int:
     print()
     for line in format_metrics(real_trigger, "real prose (40 unseen sentences)"):
         print(line)
+    print("  the same sentences, split by whether the sample still carries their number:")
+    for line in format_metrics(real_trigger_digits, "  with a number (the trigger can fire)"):
+        print(line)
+    for line in format_metrics(real_trigger_redacted, "  number removed (it cannot)"):
+        print(line)
     print()
 
     print("D. Specificity of the accusation path on real prose")
@@ -1025,6 +1117,14 @@ def main() -> int:
           % (len(accused), len(false_parse)))
     print("  measure, but it may not invent one.")
     print()
+    print("MEASURE FORMATS -- real corpus formats the parser used to miss:")
+    for sentence, why, got, want, ok in measure_formats:
+        print("  %-6s %-16s %s" % ("ok" if ok else "MISSED", got, sentence[:52]))
+        print("  %-6s %-16s %s" % ("", "", why))
+    print("  %d of %d formats parse to the value they should; each miss is a contradiction"
+          % (len(measure_formats) - len(format_misses), len(measure_formats)))
+    print("  the parser can no longer see.")
+    print()
     if safety_ok:
         print("SAFETY PROPERTIES HOLD:")
         print("  conflict precision is 1.000 over %d conflict case(s) -- no false accusation"
@@ -1034,6 +1134,9 @@ def main() -> int:
         print("    told it needs a citation when it did not")
         print("  %d of %d ordinary-prose probes were accused -- the parser never invented a "
               "measure" % (len(accused), len(false_parse)))
+        print("  %d of %d real-corpus measure formats parse -- a format it cannot read is a "
+              "contradiction it cannot catch"
+              % (len(measure_formats) - len(format_misses), len(measure_formats)))
         print("  %d of %d real-source contradictions caught -- no contradiction in the "
               "externally grounded set was missed"
               % (len(real_conflict_rows) - len(real_missed), len(real_conflict_rows)))

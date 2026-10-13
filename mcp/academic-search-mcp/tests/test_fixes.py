@@ -27,6 +27,7 @@ from academic_search.names import (  # noqa: E402
     name_matches,
     parse_name,
 )
+from academic_search.models import FilterConfig, apply_filters  # noqa: E402
 from academic_search.quality import (  # noqa: E402
     completeness_score,
     filter_usable_records,
@@ -494,6 +495,55 @@ class CrossrefProviderTests(unittest.TestCase):
             {"DOI": "10.1/v", "title": ["P"], "abstract": "<jats:p>Base editing</jats:p>"}
         )
         self.assertEqual(record["abstract"], "Base editing")
+
+
+class YearFilterSemanticsTests(unittest.TestCase):
+    """A year filter must not silently drop a paper whose year is unknown.
+
+    Providers omit years. Dropping such a record would hide a paper that may well be in
+    range, which for a systematic review is the worse error; keeping it silently is also
+    wrong, because the caller cannot tell "in range" from "not known". The rule is: keep it,
+    and mark it `_year_unknown`.
+    """
+
+    def _papers(self):
+        return [
+            {"title": "in range", "year": 2020},
+            {"title": "too old", "year": 1999},
+            {"title": "too new", "year": 2030},
+            {"title": "no year"},
+            {"title": "year is a string", "year": "2020"},
+        ]
+
+    def test_undated_records_are_kept_and_marked(self):
+        kept = apply_filters(self._papers(), FilterConfig(year_min=2010, year_max=2025))
+        titles = [p["title"] for p in kept]
+        self.assertEqual(titles, ["in range", "no year", "year is a string"])
+        by_title = {p["title"]: p for p in kept}
+        self.assertNotIn("_year_unknown", by_title["in range"])
+        self.assertTrue(by_title["no year"].get("_year_unknown"))
+        # A year stored as a string is unknown to the filter, and must be marked as such
+        # rather than compared, which would raise or silently mis-compare.
+        self.assertTrue(by_title["year is a string"].get("_year_unknown"))
+
+    def test_no_year_filter_adds_no_marker(self):
+        # A filter is active (so `apply_filters` does work), but none of it is about the year.
+        kept = apply_filters(self._papers(), FilterConfig(has_pdf=False))
+        self.assertEqual(len(kept), len(self._papers()))
+        self.assertFalse([p for p in kept if "_year_unknown" in p])
+
+    def test_the_callers_dict_is_not_mutated(self):
+        papers = self._papers()
+        apply_filters(papers, FilterConfig(year_min=2010))
+        self.assertFalse([p for p in papers if "_year_unknown" in p],
+                         "the provider's payload was annotated in place")
+
+    def test_a_boolean_year_is_not_a_year(self):
+        # `True` is an `int` in Python; treating it as year 1 would drop the record.
+        kept = apply_filters([{"title": "b", "year": True}],
+                             FilterConfig(year_min=2010, year_max=2025))
+        self.assertEqual(len(kept), 1)
+        self.assertTrue(kept[0].get("_year_unknown"))
 
 
 if __name__ == "__main__":

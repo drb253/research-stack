@@ -70,22 +70,34 @@ def apply_filters(
 ) -> list[dict[str, Any]]:
     """Apply post-hoc filters to a list of papers.
 
-    Each paper retains its original dict shape; no keys are added.
+    Each paper keeps its original dict shape, plus one key when a year filter is active and
+    the record's year is unknown: ``_year_unknown: True``. Undated records are **kept**, not
+    dropped -- a systematic review that silently loses a paper because a provider omitted its
+    year is worse than one that shows it and says why -- so the flag is how a caller sees the
+    difference instead of having to guess.
 
     Args:
         papers: List of paper dicts from the API.
         filters: A :class:`FilterConfig` instance.
 
     Returns:
-        Filtered list of paper dicts.
+        Filtered list of paper dicts, each undated record under a year filter carrying
+        ``_year_unknown``.
     """
     if not filters.is_active():
         return papers
 
+    year_filter_active = filters.year_min is not None or filters.year_max is not None
     filtered: list[dict[str, Any]] = []
     for paper in papers:
-        if _paper_passes(paper, filters):
-            filtered.append(paper)
+        if not _paper_passes(paper, filters):
+            continue
+        if year_filter_active and not _has_year(paper):
+            # Annotate rather than mutate the caller's dict: a copy keeps this function free of
+            # side effects on the provider's payload.
+            paper = dict(paper)
+            paper["_year_unknown"] = True
+        filtered.append(paper)
 
     return filtered
 
@@ -105,12 +117,23 @@ def _journal_name(journal_val: Any) -> Optional[str]:
     return None
 
 
+def _has_year(paper: dict[str, Any]) -> bool:
+    """True when the record carries a usable publication year."""
+    year = paper.get("year")
+    return isinstance(year, (int, float)) and not isinstance(year, bool)
+
+
 def _paper_passes(paper: dict[str, Any], f: FilterConfig) -> bool:
-    """Check whether a single paper passes all active filters."""
+    """Check whether a single paper passes all active filters.
+
+    A record whose year is unknown passes the year filter deliberately: providers omit years,
+    and dropping such a record would hide a paper that may well be in range. `apply_filters`
+    marks those records `_year_unknown` so the caller can decide instead of guessing.
+    """
 
     # --- Year range ---
     year = paper.get("year")
-    if year is not None and isinstance(year, (int, float)):
+    if isinstance(year, (int, float)) and not isinstance(year, bool):
         if f.year_min is not None and year < f.year_min:
             return False
         if f.year_max is not None and year > f.year_max:

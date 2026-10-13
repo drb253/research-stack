@@ -13,8 +13,8 @@ It proves four things, each with the exit status that matches what was found:
      file it mirrors, so a reinstall cannot silently revert the fix it encodes, and no file
      in `replacements/` is dead weight that a maintainer could edit expecting an effect;
   2. `apply_patches.py` applies cleanly to a fresh copy (no MISSING/COULD NOT APPLY);
-  3. the patched copy passes `audit_fix_check.py` and the availability invariant suite, and
-     that suite is asserted to have actually collected its tests;
+  3. the patched copy passes `audit_fix_check.py` and the invariant suite (availability, and a
+     responsive event loop), and that suite is asserted to have actually collected its tests;
   4. the suite still FAILS on a copy with either defect deliberately reintroduced -- an
      outage named like an empty answer, and a success named like an outage -- so the checks
      above are a gate rather than an assertion in both directions.
@@ -92,7 +92,7 @@ MIRRORS = {
 #: Floor on the availability suite's collected test count -- the number it defines. A
 #: suite that collects nothing exits 0, which would make every check below a pass with no
 #: tests behind it; the floor is the count itself so a *reduction* is a finding.
-MIN_AVAILABILITY_TESTS = 15
+MIN_AVAILABILITY_TESTS = 28
 
 
 def registry_pairs(replacements: Path, vendored: Path) -> list:

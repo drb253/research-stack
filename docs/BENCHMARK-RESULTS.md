@@ -577,3 +577,46 @@ is about provenance rather than confidence.
 mode is real, not an estimate of how often it occurs. No scan corpus was assembled, so no
 per-character or per-value accuracy figure is claimed for OCR, and the tier's honesty rests on the
 provenance rule rather than on the engine's quality.
+
+---
+
+## 9. The trigger's real-prose sensitivity, and why 0.867 was a floor
+
+The trigger decision on 40 unseen real sentences was reported as sensitivity 0.867 with specificity
+1.000. Reviewing it showed that the sample is **partly digit-stripped**: several sentences have had
+their numbers removed before being recorded, which leaves broken grammar (`scores at or above as
+indicative`, `attributed to -HT`, `deriving an optimal cutoff f`). The tool's main trigger is the
+statistic one, so those sentences cannot fire by construction — and all four false negatives were in
+that group. Restoring one plausible number to each makes all four fire.
+
+| subset | n | sensitivity | specificity |
+|---|---|---|---|
+| all 40 sentences | 40 | 0.867 → **0.900** | 1.000 |
+| still carries a number | 14 | **1.000** (9/9) | 1.000 |
+| number removed from the sample | 26 | 0.857 | 1.000 |
+
+Both figures are now printed together, so the headline cannot be read without the split.
+
+One genuine gap was closed: adding `provides … evidence on|for|that` to the vague-attribution pattern
+catches one of the four misses and fires on none of the ten negatives, taking sensitivity to **0.900
+[0.744, 0.965]** with **real specificity 1.000 and constructed specificity 1.000** — the bar the
+earlier widening attempt failed (it broke constructed case 21). The three remaining misses are all
+digit-free: two are visibly damaged by number removal and one is a real finding-claim with no number.
+
+## 10. Measure formats the parser used to miss
+
+Four formats written by real papers were unread. All now parse, and the guards still refuse theirs:
+
+| sentence | before | now |
+|---|---|---|
+| `aOR, 3.15` | not read | `AOR=3.15` |
+| `(OR) = 2.15` | not read | `OR=2.15` |
+| `beta = −0.22` (typographic minus) | not read | `BETA=-0.22` |
+| `risk ratio (RR) 1.42` | not read | `RR=1.42` |
+| `SMD -0.35` | not read | `SMD=-0.35` |
+| `Variables OR 95% CI` | refused | refused (unchanged) |
+| `MD 21702` | refused | refused (unchanged) |
+| `risk difference – 0.05` | not read | not read — **missed, never inverted** |
+
+The formats are real; the sentences are constructed to exercise them, so this table pins the grammar
+rather than saying anything about a particular paper.

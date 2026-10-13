@@ -131,6 +131,8 @@ VAGUE_ATTRIBUTION_RE = re.compile(
     r"according\s+to\s+(?:some|many|several|various)|"
     r"several\s+studies|many\s+studies|previous\s+(?:studies|work|research)|"
     r"the\s+literature\s+(?:shows|suggests|indicates)|"
+    r"provides?\s+(?:detailed\s+|strong\s+|further\s+|new\s+|the\s+)?evidence\s+"
+    r"(?:on|for|that|of)|"
     r"there\s+is\s+(?:growing|increasing|considerable|substantial)\s+evidence"
     # A named body of evidence plus a reporting verb. The old list required an exact
     # phrase ("studies show"), so "research has documented", "investigations describe"
@@ -208,9 +210,21 @@ MEASURE = (
 
 NUMBER = r"[0-9]+(?:[.,][0-9]+)?"
 
+#: A measure value may carry a sign: "beta = -0.22", "MD \u22120.4" (a Unicode minus), "SMD +0.3".
+#: The sign must be glued to the digits, so a dash used as a separator ("risk difference \u2013 0.05")
+#: is not read as a negative -- the value is missed rather than inverted, which is the safer error.
+SIGNED_NUMBER = r"[-+\u2212\u2013]?[0-9]+(?:[.,][0-9]+)?"
+
 PERCENT_RE = re.compile(r"(?<![\w.])(" + NUMBER + r")\s?(?:%|\u2030|\bpercent\b|\bper\s?cent\b)", re.IGNORECASE)
 P_VALUE_RE = re.compile(r"\bp\s*([<>=]|\u2264|\u2265)\s*(" + NUMBER + r")", re.IGNORECASE)
-MEASURE_RE = re.compile(r"\b(" + MEASURE + r")\b\s*[:=]?\s*(" + NUMBER + r")", re.IGNORECASE)
+
+#: The separator between a measure label and its value, as papers actually write it: `OR 1.42`,
+#: `OR: 1.42`, `OR=1.42`, `aOR, 3.15`, `(OR) = 2.15`, `( OR ) 2.15`, `risk ratio (RR) 1.42`. The
+#: optional `)` covers a label the authors parenthesised; a `(` is deliberately not consumed, so
+#: `OR (95% CI 1.2 to 3.4)` is not read as an odds ratio of 95.
+MEASURE_RE = re.compile(
+    r"\b(" + MEASURE + r")\b\s*\)?\s*[:=,]?\s*(" + SIGNED_NUMBER + r")", re.IGNORECASE
+)
 
 #: Short measure labels that are also ordinary English words or word-fragments. `OR` is the
 #: conjunction "or"; `MD` is a degree or a state abbreviation; `HR`/`RD`/`PR` are two letters
@@ -343,10 +357,16 @@ class Quantity:
 
 
 def _to_float(token: str) -> float | None:
-    """Parse a numeric token. Handles `1,730` (thousands) and `0.49` (decimal)."""
+    """Parse a numeric token. Handles `1,730` (thousands), `0,49` (decimal comma) and signs.
+
+    A Unicode minus (`\u2212`) and an en dash are normalised to an ASCII hyphen first: papers
+    set a negative estimate with a typographic minus, and `float()` rejects it, so the value
+    would be silently dropped rather than read as negative.
+    """
     token = token.strip()
     if not token:
         return None
+    token = token.replace("\u2212", "-").replace("\u2013", "-")
     if "," in token and "." in token:
         token = token.replace(",", "")
     elif "," in token:
@@ -414,7 +434,7 @@ def extract_quantities(text: str) -> list:
             # immediately followed by a percent sign is a percentage. In a real measure the
             # value comes first and its interval follows in brackets ("OR 1.42 (95% CI ...)").
             continue
-        if value >= MAX_PLAUSIBLE_MEASURE:
+        if abs(value) >= MAX_PLAUSIBLE_MEASURE:
             # No effect measure is this large, so a five-digit integer after a short label is
             # an identifier rather than a result: "Fort Detrick MD 21702" is a place and a ZIP.
             continue

@@ -541,21 +541,21 @@ expect_exit 4 "the gate refuses an unreadable document as an input gap too" "${G
 expect_json "the gate names the input gap, not a verdict" "$TMP/blankgate.json" "d['status']" "insufficient_input"
 expect_json "and the gate's gap carries the same kind as the report's" "$TMP/blankgate.json" "d['input_gaps'][0]['kind']" "$(json_field "$TMP/blank.json" "d['input_gaps'][0]['kind']")"
 
-if python3 - "$TMP/adv_on/verdicts.json" <<'PY'
+if python3 - "$TMP/adv_on/verdicts.json" "$TMP/cr_badadvisory.json" <<'PY'
 import json, sys
 payload = json.load(open(sys.argv[1]))
 for row in payload["verdicts"]:
     if row.get("advisory"):
         row["advisory"]["grade"] = "definitely_supported"
         break
-json.dump(payload, open("/tmp/cr_badadvisory.json", "w"), indent=2)
+json.dump(payload, open(sys.argv[2], "w"), indent=2)
 PY
 then
   if python3 -c "
 import sys; sys.path.insert(0, '$HERE')
 import _common, verdicts
 try:
-    verdicts.from_dict(__import__('json').load(open('/tmp/cr_badadvisory.json')))
+    verdicts.from_dict(__import__('json').load(open('$TMP/cr_badadvisory.json')))
     raise SystemExit(1)
 except _common.InputError:
     raise SystemExit(0)

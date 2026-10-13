@@ -1,10 +1,16 @@
 #!/usr/bin/env python3
-"""Offline regression test for the evidence invariant in paper-search-mcp.
+"""Offline regression tests for two paper-search-mcp invariants.
 
-The invariant: a lookup that FAILED because the network or the remote API was
-unavailable must never be reported as "no results found".  These tests stub the
-HTTP layer -- raise a connection error, or answer 429 -- and assert the affected
-tool returns an explicit availability marker rather than an empty success.
+1. Availability. A lookup that FAILED because the network or the remote API was
+   unavailable must never be reported as "no results found". These tests stub the
+   HTTP layer -- raise a connection error, or answer 429 -- and assert the affected
+   tool returns an explicit availability marker rather than an empty success, and
+   that a *successful* lookup is not marked unavailable either.
+
+2. A responsive event loop. A tool that does blocking socket or file I/O must run it
+   off the loop (`asyncio.to_thread`), or one slow download stalls every other tool
+   and every other client. The last test asserts a tick of the loop happens *during*
+   a deliberately slow searcher call.
 
 Offline and deterministic: no real request is made.  Runs either against the
 installed patched package or, when ``PAPER_SEARCH_MCP_PATH`` is set, against
@@ -20,6 +26,7 @@ import asyncio
 import logging
 import os
 import sys
+import time
 import unittest
 from contextlib import contextmanager
 from pathlib import Path
@@ -46,11 +53,15 @@ from paper_search_mcp.academic_platforms.unpaywall import (  # noqa: E402
     UnpaywallResolver,
     UnpaywallSearcher,
 )
+from paper_search_mcp import source_status as status_module  # noqa: E402
 from paper_search_mcp.source_status import (  # noqa: E402
+    MAX_RETRY_AFTER,
     SOURCE_OK,
     SOURCE_UNAVAILABLE,
     SourceUnavailable,
     is_unavailable_marker,
+    request_json,
+    search_ladder,
     split_markers,
     unavailable_marker,
 )
@@ -265,6 +276,196 @@ class AggregateStatusTests(unittest.TestCase):
         status = result["source_status"]["openaire"]
         self.assertNotEqual(status["status"], SOURCE_UNAVAILABLE)
         self.assertEqual(result["papers"], [])
+
+
+class _StubSession:
+    """A session whose `get` replays a scripted sequence of responses."""
+
+    def __init__(self, script):
+        self.script = list(script)
+        self.calls = 0
+        self.kwargs = []
+
+    def get(self, url, **kwargs):
+        self.calls += 1
+        self.kwargs.append(kwargs)
+        item = self.script[min(self.calls - 1, len(self.script) - 1)]
+        if isinstance(item, Exception):
+            raise item
+        return item
+
+
+class _Resp:
+    def __init__(self, status_code, payload=None, headers=None):
+        self.status_code = status_code
+        self._payload = payload
+        self.headers = headers or {}
+
+    def json(self):
+        if self._payload is None:
+            raise ValueError("no json")
+        return self._payload
+
+
+class RetryTests(unittest.TestCase):
+    """The retry path: transient failures are retried, and the wait is honoured.
+
+    Nothing asserted this before, so a mutation that removed retries entirely -- turning a
+    rate-limited source into an immediate failure, or worse into an empty result -- passed the
+    whole suite.
+    """
+
+    def setUp(self):
+        self.slept = []
+        self._real_sleep = status_module.time.sleep
+        status_module.time.sleep = lambda seconds: self.slept.append(seconds)
+        self.addCleanup(lambda: setattr(status_module.time, "sleep", self._real_sleep))
+
+    def test_a_transient_status_is_retried_and_then_succeeds(self):
+        session = _StubSession([_Resp(429), _Resp(200, {"ok": True})])
+        result = request_json(session, "https://example.invalid", "openaire", max_retries=2)
+        self.assertEqual(result, {"ok": True})
+        self.assertEqual(session.calls, 2, "the transient failure was not retried")
+        self.assertEqual(len(self.slept), 1, "no wait between attempts")
+
+    def test_a_transport_error_is_retried(self):
+        session = _StubSession([requests.ConnectionError("refused"), _Resp(200, {"ok": 1})])
+        self.assertEqual(request_json(session, "https://example.invalid", "openaire"),
+                         {"ok": 1})
+        self.assertEqual(session.calls, 2)
+
+    def test_retry_after_is_honoured(self):
+        session = _StubSession([_Resp(503, None, {"Retry-After": "7"}),
+                                _Resp(200, {"ok": True})])
+        request_json(session, "https://example.invalid", "openaire", max_retries=2)
+        self.assertEqual(self.slept, [7.0], "Retry-After was not honoured")
+
+    def test_retry_after_is_capped(self):
+        session = _StubSession([_Resp(503, None, {"Retry-After": "99999"}),
+                                _Resp(200, {"ok": True})])
+        request_json(session, "https://example.invalid", "openaire", max_retries=2)
+        self.assertEqual(self.slept, [MAX_RETRY_AFTER], "the wait was not capped")
+
+    def test_a_json_retry_after_is_honoured(self):
+        session = _StubSession([_Resp(429, {"retryAfter": 3}), _Resp(200, {"ok": True})])
+        request_json(session, "https://example.invalid", "openaire", max_retries=2)
+        self.assertEqual(self.slept, [3.0], "the JSON retryAfter was ignored")
+
+    def test_retries_are_bounded(self):
+        session = _StubSession([_Resp(429)])
+        with self.assertRaises(SourceUnavailable):
+            request_json(session, "https://example.invalid", "openaire", max_retries=3)
+        self.assertEqual(session.calls, 3, "the retry count is not bounded by max_retries")
+
+    def test_a_rejected_request_is_not_retried(self):
+        """403 is a decision, not an outage: retrying it wastes the caller's time."""
+        session = _StubSession([_Resp(403), _Resp(200, {"ok": True})])
+        with self.assertRaises(SourceUnavailable):
+            request_json(session, "https://example.invalid", "openaire", max_retries=3)
+        self.assertEqual(session.calls, 1, "a non-retryable status was retried")
+
+
+class SearchLadderTests(unittest.TestCase):
+    """The ladder's whole point: a refused rung must not end the search."""
+
+    def setUp(self):
+        self._real_sleep = status_module.time.sleep
+        status_module.time.sleep = lambda seconds: None
+        self.addCleanup(lambda: setattr(status_module.time, "sleep", self._real_sleep))
+
+    def test_a_later_rung_can_succeed_after_a_refusal(self):
+        session = _StubSession([_Resp(429), _Resp(200, {"results": ["paper"]})])
+        attempts = [("precise", {"search": "x"}), ("loose", {"filter": "x"})]
+        records, label = search_ladder(
+            "openaire", session, "https://example.invalid", attempts,
+            lambda payload: payload.get("results"),
+        )
+        self.assertEqual(records, ["paper"])
+        self.assertEqual(label, "loose", "the ladder did not report which rung answered")
+        self.assertEqual(session.calls, 2)
+
+    def test_every_rung_empty_is_a_real_empty_result(self):
+        session = _StubSession([_Resp(200, {"results": []}), _Resp(200, {"results": []})])
+        records, label = search_ladder(
+            "openaire", session, "https://example.invalid",
+            [("precise", {}), ("loose", {})], lambda payload: payload.get("results"),
+        )
+        self.assertEqual(records, [], "an empty ladder must not invent a result")
+        self.assertEqual(label, "precise")
+
+    def test_every_rung_refused_raises_rather_than_returning_empty(self):
+        session = _StubSession([_Resp(429)])
+        with self.assertRaises(SourceUnavailable):
+            search_ladder("openaire", session, "https://example.invalid",
+                          [("precise", {}), ("loose", {})], lambda payload: [])
+
+    def test_a_parser_bug_is_not_an_empty_result(self):
+        def broken(payload):
+            raise ValueError("bad shape")
+
+        session = _StubSession([_Resp(200, {"results": ["x"]})])
+        with self.assertRaises(SourceUnavailable):
+            search_ladder("openaire", session, "https://example.invalid",
+                          [("precise", {})], broken)
+
+
+class EventLoopResponsivenessTests(unittest.TestCase):
+    """A blocking searcher must not stall the event loop.
+
+    The assertion is about interleaving, not duration: a tick of the loop must happen *while*
+    the searcher is working. A direct call inside the `async def` tool blocks the loop, so no
+    tick can occur until the call returns -- which is the defect this pins.
+    """
+
+    def test_a_slow_searcher_does_not_stall_the_loop(self):
+        from paper_search_mcp import server
+
+        ticked: list = []
+        started = finished = 0.0
+
+        def slow(*args, **kwargs):
+            time.sleep(0.2)
+            return []
+
+        async def scenario():
+            nonlocal started, finished
+
+            async def ticker():
+                while True:
+                    ticked.append(time.monotonic())
+                    await asyncio.sleep(0.01)
+
+            tick = asyncio.ensure_future(ticker())
+            with mock.patch.object(server.arxiv_searcher, "search", slow):
+                started = time.monotonic()
+                await server.search_arxiv("CRISPR base editing", 1)
+                finished = time.monotonic()
+            tick.cancel()
+
+        asyncio.run(scenario())
+        during = [moment for moment in ticked if started < moment < finished]
+        self.assertTrue(
+            during,
+            "no tick of the event loop ran while a 0.2s searcher was working: the tool is "
+            "calling blocking I/O on the loop (%d tick(s) in total)" % len(ticked),
+        )
+
+    def test_the_off_loop_helper_is_what_runs_it(self):
+        """`async_call` must actually leave the loop, whatever it is handed."""
+        from paper_search_mcp import server
+
+        seen: list = []
+
+        def where():
+            import threading
+
+            seen.append(threading.current_thread().name)
+            return "ok"
+
+        result = asyncio.run(server.async_call(where))
+        self.assertEqual(result, "ok")
+        self.assertTrue(seen)
+        self.assertNotEqual(seen[0], "MainThread", "async_call ran on the event loop")
 
 
 def main(argv=None) -> int:

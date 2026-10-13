@@ -310,15 +310,20 @@ The loop re-sent the *same* first page every iteration — `search_pubmed` expos
 `check_review_integrity.py` listed `"referral"` twice in the same set literal.
 *Fix:* removed all three. *Verified:* syntax clean, esf selftest still 50/50.
 
-### Still open (verified as real, **not** fixed — flagged as a deliberate deferral)
+### Formerly open — both fixed in the fifth round (§11)
 
-- **~35 `async` MCP tools call blocking sync searchers** with no `asyncio.to_thread`, stalling the
-  event loop. Real, but a wide refactor across many tools; the repo already uses `to_thread` in
-  `cli.py`, so the pattern to follow exists. Deferred because the blast radius is large relative to
-  the benefit (throughput, not correctness).
-- **`academic-search` filters keep `year=None` records** when a year range is set. The string-year
-  bypass is *not* reachable (Crossref/PubMed/OpenAlex all yield ints), and keeping undated records
-  looks deliberate but is undocumented. Deferred rather than silently changing filter semantics.
+- **`async` MCP tools calling blocking searchers.** Fixed: the search path already went through
+  `async_search` (→ `asyncio.to_thread`), but 34 *other* tools — every `download_pdf`, `read_paper`,
+  `list_categories` and `quota_status` — still did blocking socket and file I/O on the event loop.
+  All 36 call sites now go through `async_call`, and a test asserts a tick of the loop happens
+  *during* a deliberately slow searcher call. Two mutations (either helper put back on the loop) are
+  caught by name.
+- **`academic-search` keeping `year=None` records.** Fixed by making the semantics explicit rather
+  than by changing them: an undated record still passes a year filter (dropping it could hide a paper
+  that is in range, the worse error for a review), and it is now returned with
+  `_year_unknown: True` so the caller can tell "in range" from "not known". The annotation is made on
+  a copy, so the provider's payload is not mutated, and a boolean `year` is no longer treated as
+  year 1. Four tests pin it.
 
 ---
 
@@ -543,11 +548,12 @@ The gate now asserts the suite's own count (15) as a floor and runs **two** muta
 outage named like an empty answer, and a success named like an outage — so both directions are proved
 to have teeth rather than one.
 
-**What this does not establish:** the retry path (`request_json`'s backoff and `Retry-After`) is still
-untested — a mutation that removed retries entirely would pass — and `search_ladder`, which the module
-docstring advertises as the fix for a measured defect, has no test of its own. Both are recorded here
-rather than quietly fixed, because neither was in the scope of what was asked and inventing coverage
-for them without measuring the behaviour first would be the kind of claim this file exists to avoid.
+**Both gaps named here were then closed**, in the fifth round: `request_json`'s retry path (a
+transient status is retried and then succeeds, a transport error is retried, `Retry-After` and a JSON
+`retryAfter` are honoured and capped, retries are bounded, and a 403 is *not* retried) and
+`search_ladder` (a later rung succeeds after a refusal, an all-empty ladder is a real empty result, an
+all-refused ladder raises rather than returning empty, and a parser bug is not an empty result). The
+suite went from 15 to 28 tests, and a mutation that removes retries is caught by five of them.
 
 ---
 
@@ -630,3 +636,110 @@ dead code that looked like a feature.
   report says so, and D13 covers accusations, but a misread word could still change which sentences
   exist. Nothing here measures that.
 
+
+---
+
+## 11. Sixth round — the deferred defects, and what measuring them showed
+
+Everything §6 and §9.5 had recorded as open, plus the four the user asked for, with the measurements
+that decided each one.
+
+### 11.1 The measure formats a real corpus writes (recall)
+
+Four formats observed in the fetched open-access full texts were unread by the grammar: a comma
+between label and value (`aOR, 3.15`), a parenthesised label (`(OR) = 2.15`), a negative estimate set
+with a typographic minus (`beta = −0.22`), and the long form followed by the short form in brackets
+(`risk ratio (RR) 1.42`). The grammar now accepts a `,` separator, an optional closing bracket after
+the label, and a signed value, and `_to_float` normalises a Unicode minus.
+
+The guards were the risk, and they held: `Variables OR 95% CI` (a table header), `MD 21702` (a ZIP
+code) and `Treatment continued for 6 or 12 weeks` (the conjunction) are still refused, and a dash used
+as a separator (`risk difference – 0.05`) is *missed rather than inverted*. All seven cases are
+fixtures in `benchmarks/bench_verdicts.py`, and the safety block fails if any regresses.
+
+### 11.2 The trigger misses were partly a measurement artefact
+
+The four false negatives that had been recorded as a sensitivity limit turned out to be **all
+digit-free**. The sample is partly digit-stripped — several sentences have had their numbers removed
+before being recorded, leaving broken grammar (`scores at or above as indicative`, `attributed to -HT`,
+`deriving an optimal cutoff f`) — and the tool's main trigger is the statistic one, so those sentences
+cannot fire *by construction*. Restoring one plausible number to each makes all four fire.
+
+Measured, on the sample as recorded:
+
+| subset | n | sensitivity | specificity |
+|---|---|---|---|
+| all 40 sentences | 40 | 0.867 → **0.900** | 1.000 |
+| sentences that still carry a number | 14 | **1.000** (9/9) | 1.000 |
+| sentences whose number was removed | 26 | 0.857 | 1.000 |
+
+So `0.867` was a floor on a handicapped sample, not an estimate of field sensitivity. Both figures are
+now computed and printed, so the headline number cannot be read without the split beside it.
+
+One genuine gap was closed anyway, under the rule that a widening is kept only if sensitivity rises
+without losing specificity: `provides … evidence on|for|that` was added to the vague-attribution
+pattern. It catches one of the four misses and fires on none of the ten negatives; **sensitivity
+0.867 → 0.900 with real specificity 1.000 and constructed specificity 1.000** (the earlier widening
+attempt broke constructed case 21, which is why that bar exists). The three remaining misses are all
+digit-free; two are visibly damaged by number removal, and one is a genuine finding-claim with no
+number.
+
+### 11.3 The event loop (the defect §6 deferred as too wide)
+
+The search path was already off the loop (`async_search` → `asyncio.to_thread`), so §6's "~35 async
+tools call blocking sync searchers" was **stale for search but right about everything else**: 34 tools
+— every `download_pdf`, `read_paper`, `list_categories` and `quota_status` — did blocking socket and
+file I/O inside an `async def`. All 36 call sites now go through `async_call`, and the vendored file
+and its patch replacement are byte-identical (the gate asserts it).
+
+The test asserts *interleaving*, not duration: a tick of the event loop must happen while a
+deliberately slow searcher is working. A direct call cannot produce one. Two mutations were run to
+prove the tests bite: putting `async_call` back on the loop fails
+`test_the_off_loop_helper_is_what_runs_it`, and putting `async_search` back on the loop fails
+`test_a_slow_searcher_does_not_stall_the_loop`.
+
+### 11.4 The year filter: semantics made explicit, not changed
+
+An undated record still passes a year filter — dropping it could hide a paper that is in range, which
+for a review is the worse error — but it now comes back with `_year_unknown: True`, so a caller can
+tell "in range" from "not known" instead of guessing. The annotation is made on a copy (the provider's
+payload is not mutated), a boolean `year` is no longer treated as year 1, and four tests pin the
+behaviour including the no-year-filter case.
+
+### 11.5 The two test gaps named in §9.5
+
+`request_json`'s retry path and `search_ladder` now have eleven tests between them: a transient status
+is retried and then succeeds, a transport error is retried, `Retry-After` and a JSON `retryAfter` are
+honoured and capped, retries are bounded by `max_retries`, a 403 is *not* retried, a later rung
+succeeds after a refusal, an all-empty ladder is a real empty result, an all-refused ladder raises, and
+a parser bug is not an empty result. A mutation that removes retries is caught by five of them. The
+suite went from 15 tests to 28 and the gate's floor moved with it.
+
+**What this round does not establish.**
+
+- The trigger's remaining three misses are still misses. Two look like sample damage; one
+  (`provides detailed evidence on …`) is a real gap that the added pattern does not cover, and the
+  sample is too small (26 digit-free positives, 10 negatives) to justify a wider rule.
+- The measure-format fixtures are *formats* observed in the corpus, with sentences written for the
+  test. They pin the grammar; they are not ground truth about any paper.
+- The event-loop tests prove the loop is not stalled by the two helpers. They do not prove no other
+  tool blocks: a new tool that calls a sync function directly would pass, because nothing enumerates
+  the tools and asserts every blocking call is wrapped.
+- The year-filter change adds a key to records that pass a year filter. A consumer that asserts on the
+  exact key set of a record would see it; none in this repository does, and no downstream consumer was
+  surveyed.
+
+### 11.6 A flaky suite, chased rather than re-run
+
+`verify.sh` reported `24 passed, 1 failed` once and `25 passed, 0 failed` on every re-run. The
+temptation is to call it transient; the honest move is to find it, because an intermittent gate is
+worse than a broken one — it teaches people to re-run until it passes.
+
+Cause: one fixture in `skills/citation-report/scripts/selftest.sh` wrote its tampered verdict file to a
+fixed global path, `/tmp/cr_badadvisory.json`. The failing run was executed **concurrently** with a
+hand-run of the same suite (both were started to save time), so the two runs read each other's file.
+The fixture now writes into the suite's own temporary directory, and two concurrent runs both report
+154/0.
+
+Recorded because it is the same class of defect as the rest of this file: the suite was asserting a
+fact about a shared global, not about the code.

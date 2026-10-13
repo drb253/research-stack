@@ -28,6 +28,53 @@ versioning follows [Semantic Versioning](https://semver.org/).
   shipped models are multilingual, so a non-default `--ocr-lang` with that engine is reported as
   ignored rather than silently pretended.
 
+### Fixed
+- **The citation-report suite raced with itself.** One fixture wrote its tampered verdict file to a
+  fixed global path (`/tmp/cr_badadvisory.json`), so two concurrent runs — a `verify.sh` and a
+  hand-run suite, which is exactly what happened — read each other's file and one failed
+  intermittently. It now writes into the suite's own temporary directory. Found by chasing an
+  unexplained `24 passed, 1 failed` instead of re-running it away; two concurrent runs now both pass
+  154/0.
+
+### Fixed
+- **Four measure formats a real corpus writes were unread.** A comma between label and value
+  (`aOR, 3.15`), a parenthesised label (`(OR) = 2.15`), a negative estimate set with a typographic
+  minus (`beta = −0.22`) and the long form followed by the short form in brackets
+  (`risk ratio (RR) 1.42`) all failed the grammar. All now parse, `_to_float` normalises a Unicode
+  minus, and the guards still refuse theirs — `Variables OR 95% CI`, `MD 21702`, and the conjunction
+  in `6 or 12 weeks` — while a dash used as a separator (`risk difference – 0.05`) is *missed rather
+  than inverted*. Seven fixtures pin this in the benchmark.
+- **The four "trigger misses" were mostly a measurement artefact.** The 40-sentence real-prose sample
+  is partly digit-stripped, and all four false negatives were in the digit-free group — sentences the
+  statistic trigger cannot fire on by construction. Restoring one plausible number to each makes all
+  four fire. Measured: sensitivity **1.000 (9/9)** where the sentence still carries its number, 0.857
+  where it does not; both figures are now printed together so the headline cannot be read without the
+  split. One genuine gap was closed under the rule that a widening is kept only if specificity holds:
+  `provides … evidence on|for|that` takes real-prose sensitivity **0.867 → 0.900** with real and
+  constructed specificity both still **1.000**.
+- **34 MCP tools did blocking I/O on the event loop.** The search path already went through
+  `asyncio.to_thread`, but every `download_pdf`, `read_paper`, `list_categories` and `quota_status`
+  did blocking socket and file I/O inside an `async def`, stalling the loop for every other tool and
+  client. All 36 call sites now go through `async_call`, the vendored file and its patch replacement
+  stay byte-identical, and two tests assert the property by *interleaving* — a tick of the loop must
+  happen while a deliberately slow searcher works. Mutating either helper back onto the loop fails a
+  named test.
+- **`academic-search` kept undated records silently under a year filter.** It still keeps them —
+  dropping one could hide a paper that is in range, the worse error for a review — but they now come
+  back marked `_year_unknown: true`, so a caller can tell "in range" from "not known". The marker is
+  added to a copy (the provider's payload is not mutated), a boolean `year` is no longer treated as
+  year 1, and four tests pin it.
+- **Two test gaps the ledger had recorded as open.** `request_json`'s retry path and `search_ladder`
+  now have eleven tests between them — a transient status is retried and then succeeds, a transport
+  error is retried, `Retry-After` and a JSON `retryAfter` are honoured and capped, retries are
+  bounded, a 403 is *not* retried, a later rung succeeds after a refusal, an all-empty ladder is a
+  real empty result, an all-refused ladder raises, and a parser bug is not an empty result. The
+  vendored suite went from 15 tests to 28 and the gate's floor moved with it; a mutation removing
+  retries is caught by five of them.
+- **The `paper-search` source count was stale in two places.** Measured live: **30 active sources**,
+  **28 of which need no configuration** (Springer and Elsevier register when their keys are set), 87
+  registered MCP tools. The README and the skill description said 28 sources, "27 with zero config".
+
 ### Added
 - **A working OCR tier, and the rule that keeps it from accusing anyone.** A scanned PDF (no text
   layer, or one too thin to grade) is now transcribed when `tesseract` and poppler's rasteriser are
