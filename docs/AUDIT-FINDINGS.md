@@ -460,6 +460,15 @@ renaming `SOURCE_UNAVAILABLE` to `"empty"`, which is exactly the defect the laye
 and asserts the suite still rejects it. A checker whose fail path is never run is an assertion, not a
 gate; this one is run against its own mutant on every push.
 
+The gate's own first CI run then failed for the same reason in a new place. Two of the availability
+suite's ten tests import the package's own `server.py`, and the job's earlier steps had installed
+`mcp` 2.x — which renamed `mcp.server.fastmcp` — so those two tests could not run while the other
+eight passed. The suite was therefore borrowing the job's interpreter and its ambient dependencies.
+It now gets a hermetic venv built from the package's own pins, and the checker **probes the imports
+it needs** (`requests`, `httpx`, `bs4`, `feedparser`, `pypdf`, `mcp.server.fastmcp`) and exits 4 with
+a worklist rather than reporting a pass, so a future environment change cannot silently reduce ten
+tests to eight.
+
 **What this round does not establish**, recorded so §9 is not read as a clean bill of health:
 
 - The vendored package is kept in the patched state, so the patch run against it is idempotent by

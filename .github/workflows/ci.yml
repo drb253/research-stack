@@ -123,11 +123,20 @@ jobs:
       # replacement that drifted from the vendored file it mirrors. ci_patch_check.py
       # supplies the missing target: a throwaway copy of the vendored package, patched for
       # real, checked for the fixes, and then mutated to prove the availability suite still
-      # rejects the defect. `requests` is what that suite stubs.
+      # rejects the defect.
+      #
+      # The gate gets its own venv rather than borrowing the job's interpreter: two of the
+      # suite's ten tests import the package's own server module, and the earlier steps in
+      # this job install their own dependencies (the first run failed with `mcp` 2.x, which
+      # renamed `mcp.server.fastmcp`). A hermetic environment with the package's own pins
+      # cannot be perturbed by them, and the checker probes the imports and exits 4 --
+      # never a pass -- if any is missing.
       - name: paper-search patch system + availability invariant (offline, gated)
         run: |
-          python3 -m pip install --quiet requests
-          python3 mcp/paper-search-patches/ci_patch_check.py
+          python3 -m venv /tmp/ps-venv
+          /tmp/ps-venv/bin/python -m pip install --quiet --upgrade pip
+          /tmp/ps-venv/bin/python -m pip install --quiet requests httpx beautifulsoup4 feedparser pypdf 'mcp[cli]>=1.27.2,<2'
+          /tmp/ps-venv/bin/python mcp/paper-search-patches/ci_patch_check.py
       # verify_fixes.py also performs LIVE searches; it is informational here so a network
       # hiccup cannot fail a push, but its offline check 10 runs above as a gate.
       - name: paper-search live checks (informational)

@@ -83,18 +83,33 @@ def copy_tree(destination: Path) -> Path:
     return destination
 
 
+#: What the availability suite needs to import. The suite stubs `requests`, and two of its
+#: ten tests import `paper_search_mcp.server`, which imports the rest at module level.
+#: `mcp.server.fastmcp` is the sharp one: the runner's `mcp` 2.x renamed it, so a machine
+#: with `mcp` 2.x has the package but not that module. Probed by import, not by name.
+SUITE_IMPORTS = ("requests", "httpx", "bs4", "feedparser", "pypdf", "mcp.server.fastmcp")
+
+
 def check_environment(python: str) -> int:
-    """`requests` is what the availability suite stubs; without it nothing is verified."""
-    probe = run([python, "-c", "import requests"])
-    if probe.returncode != 0:
-        print("STATUS: insufficient_input")
-        print("nothing was verified: the availability suite needs `requests`, which this")
-        print("interpreter cannot import.")
-        print("input_gaps:")
-        print("  - kind: dependency_missing")
-        print("    how_to_close: %s -m pip install requests" % python)
-        return 4
-    return 0
+    """Every import the suite needs must be present, or nothing is verified.
+
+    A missing dependency is an input gap, not a failed check: this returns 4 with the
+    command that closes it. Reporting the suite as passing while two of its tests never
+    ran is exactly the confusion this repository exists to prevent.
+    """
+    probe_code = ";".join("import %s" % name for name in SUITE_IMPORTS)
+    probe = run([python, "-c", probe_code])
+    if probe.returncode == 0:
+        return 0
+    missing = probe.stderr.strip().splitlines()[-1] if probe.stderr.strip() else "unknown"
+    print("STATUS: insufficient_input")
+    print("nothing was verified: the availability suite cannot import what it stubs.")
+    print("  %s" % missing)
+    print("input_gaps:")
+    print("  - kind: dependency_missing")
+    print("    how_to_close: %s -m pip install requests httpx beautifulsoup4 feedparser "
+          "pypdf 'mcp[cli]>=1.27.2,<2'" % python)
+    return 4
 
 
 def main(argv=None) -> int:

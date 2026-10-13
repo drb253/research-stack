@@ -34,8 +34,11 @@ versioning follows [Semantic Versioning](https://semver.org/).
   runs the real pipeline against it, checks the fixes are present, runs the availability suite, and
   then mutates the copy — renaming `SOURCE_UNAVAILABLE` to `"empty"`, the exact defect the layer
   exists to prevent — and asserts the suite still rejects it. A checker whose fail path is never run
-  is an assertion, not a gate. It exits 4, not 0, when `requests` is missing, and it states in its own
-  docstring what it does not establish: the vendored copy is already patched, so the run is
+  is an assertion, not a gate. CI gives it a hermetic venv with the package's own pins, because two of
+  the suite's ten tests import the package's server module and the job's other steps installed `mcp`
+  2.x, which renamed `mcp.server.fastmcp`; the first run of this gate failed exactly there. The
+  checker probes the imports it needs and exits 4 — never a pass — when one is missing, and it states
+  in its own docstring what it does not establish: the vendored copy is already patched, so the run is
   idempotent by construction and does not reconstruct the files from pristine upstream `0.1.4`.
 
 ## [1.1.0] — 2026-10-13
