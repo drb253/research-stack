@@ -126,6 +126,9 @@ meaning:
 - a first-person choice the writer can explain.
 - a genuine aside, parenthetical, or self-correction.
 
+Do not make every paragraph equally tidy. Do not rewrite a distinctive line only to keep the style
+consistent. Uneven prose is a voice trait, not a defect.
+
 ## Registers (target tone)
 
 When the user asks for a tone, adopt the matching preset from `references/registers.md`:

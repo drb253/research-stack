@@ -50,7 +50,35 @@ PATTERNS = {
     "verdict": re.compile("|".join(re.escape(v) for v in VERDICTS)),
 }
 
-CLAUSE = re.compile(r"\b(MUST NOT|MUST|SHALL NOT|SHALL|NEVER|DO NOT|ALWAYS)\b")
+# Obligations and prohibitions. Case-insensitive on purpose: the first version
+# matched only upper-case modals, so "Do not rewrite a distinctive line merely for
+# consistency" was never captured -- and when the STE rewrite dropped it, this gate
+# said "no normative token lost". A prohibition is the last thing a rewrite may
+# lose silently.
+CLAUSE = re.compile(
+    r"(?i)\b(MUST NOT|MUST|SHALL NOT|SHALL|NEVER|DO NOT|DON'T|FORBIDDEN|"
+    r"REFUSE|REFUSES|AVOID|AVOIDS|PROHIBITED|REQUIRED)\b"
+)
+
+# Two kinds of rule, so a synonym is not mistaken for a loss: "Avoid repeated
+# sentence shapes" reworded to "Do not repeat sentence shapes" is the same
+# prohibition, and a matcher that demanded the literal word AVOID reported it as
+# dropped. Only a file that stops expressing prohibitions (or obligations) at all
+# has really lost one.
+PROHIBITION_MODALS = frozenset({"NEVER", "DO NOT", "DON'T", "MUST NOT", "SHALL NOT",
+                                "FORBIDDEN", "PROHIBITED", "REFUSE", "REFUSES", "AVOID", "AVOIDS"})
+OBLIGATION_MODALS = frozenset({"MUST", "SHALL", "REQUIRED"})
+
+
+def modal_classes(text):
+    """The kinds of rule a sentence states: {'prohibition'}, {'obligation'} or both."""
+    found = {m.upper() for m in CLAUSE.findall(text)}
+    classes = set()
+    if found & PROHIBITION_MODALS:
+        classes.add("prohibition")
+    if found & OBLIGATION_MODALS:
+        classes.add("obligation")
+    return classes
 
 
 def _strip_code(text):
@@ -128,12 +156,91 @@ def _repo_root(snapshot_path):
     return Path(snapshot_path).resolve().parent.parent
 
 
-def compare(snapshot_path):
-    """Report every token present in the snapshot but missing now."""
+def snapshot_from_git(rev, paths, out):
+    """Snapshot the tokens a revision had, stored under repo-relative paths.
+
+    This is how the baseline is built: the pre-rewrite revision is the contract,
+    and the current files must not lose anything it stated.
+    """
+    import subprocess
+    import tempfile
+
+    data = {"files": {}, "from_git": rev}
+    for p in paths:
+        rel = str(p)
+        try:
+            text = subprocess.check_output(["git", "show", "%s:%s" % (rev, rel)],
+                                           text=True, stderr=subprocess.DEVNULL)
+        except subprocess.CalledProcessError:
+            continue
+        with tempfile.NamedTemporaryFile("w", suffix=".md", delete=False) as handle:
+            handle.write(text)
+            tmp = handle.name
+        data["files"][rel] = extract(tmp)
+    Path(out).write_text(json.dumps(data, indent=1, sort_keys=True), encoding="utf-8")
+    return data
+
+
+# Words that carry no meaning for survival matching.
+_STOP = frozenset("""
+a an the this that these those and or but nor so yet for of in on at by with from to into
+during after before while when where which who whom whose if whether than then as is are was
+were be been being am do does did done have has had having will would shall should can could
+may might must not no there here it its their his her our your my we they he she you i them
+us him one such other more most much many few all both each every any some only own same very
+also however therefore thus hence although because since unless until about above below between
+among within without across
+""".split())
+
+
+def _content_words(text):
+    return {w for w in re.findall(r"[a-z0-9][a-z0-9'’_-]*", text.lower()) if w not in _STOP}
+
+
+def clause_survived(baseline_text, current_clauses, threshold=0.6):
+    """A prohibition survives when some current sentence still carries its words.
+
+    Exact text cannot be required: an STE rewrite changes the wording on purpose.
+    Matching by hash reported twenty "lost" prohibitions in citation-report that
+    were all present and merely reworded, and a gate that cries wolf twenty times
+    gets ignored. Survival is measured as containment of the baseline sentence's
+    content words in the best-matching current sentence, so a genuinely dropped
+    rule -- "do not rewrite a distinctive line merely for consistency", with no
+    "distinctive" or "consistency" anywhere in the file -- still fails.
+    """
+    want = _content_words(baseline_text)
+    if not want:
+        return True
+    best = 0.0
+    for clause in current_clauses:
+        text = clause.get("text", "") if isinstance(clause, dict) else str(clause)
+        have = _content_words(text)
+        if not have:
+            continue
+        best = max(best, len(want & have) / float(len(want)))
+        if best >= threshold:
+            return True
+    return best >= threshold
+
+
+def compare(snapshot_path, clause_threshold=0.6):
+    """Return (losses, review).
+
+    `losses` are hard: an exact token (exit code, flag, tool name, path, verdict
+    string, heading, measured number) that disappeared.
+
+    `review` is advisory: prohibitions whose content words no longer appear in any
+    sentence of the file. No mechanical matcher separates "the rule was reworded"
+    from "the rule was dropped" -- measured on this rewrite, 137 clauses fell below
+    the threshold and exactly one was a real drop (humanizerdrb's "do not rewrite a
+    distinctive line merely for consistency"). Reporting them as failures would
+    make the gate cry wolf; reporting them as a worklist means a human sees every
+    one, which is how the real drop was found. The list is printed, never silent.
+    """
     snap_path = Path(snapshot_path)
     snap = json.loads(snap_path.read_text(encoding="utf-8"))
     root = _repo_root(snap_path)
-    losses = []
+    losses, review = [], []
     for path, expected in snap.get("files", {}).items():
         resolved = Path(path)
         if not resolved.is_absolute():
@@ -144,7 +251,22 @@ def compare(snapshot_path):
         current = extract(resolved)
         for kind, want in expected.items():
             have = current.get(kind, [])
-            if kind in ("clause", "heading"):
+            if kind == "clause":
+                # Advisory, never a hard failure. Three attempts to decide this
+                # mechanically all produced false positives: exact text reported 20
+                # "lost" prohibitions in citation-report that were present and merely
+                # reworded; content-word containment reported 137; and matching the
+                # modal class reported a loss when STE correctly rewrote "must be
+                # validated" as the imperative "Validate ...". The one real drop in
+                # this rewrite (humanizerdrb's "do not rewrite a distinctive line
+                # merely for consistency") was found by reading this list, which is
+                # why the list is printed and never silent.
+                for item in want:
+                    text = item.get("text") if isinstance(item, dict) else item
+                    if not clause_survived(text, have, clause_threshold):
+                        review.append((path, text))
+                continue
+            if kind == "heading":
                 have_keys = {c["hash"] if isinstance(c, dict) else c for c in have}
                 for item in want:
                     key = item["hash"] if isinstance(item, dict) else item
@@ -155,16 +277,17 @@ def compare(snapshot_path):
             for token in want:
                 if token not in have:
                     losses.append((path, kind, token))
-    return losses
+    return losses, review
 
 
 SELF_TEST = [
-    # (baseline text, current text, must the loss be detected?)
+    # (baseline text, current text, must a HARD loss be detected?)
     ("Run it. Exit 3 on a gap. Use --json.\n", "Run it. Exit 3 on a gap. Use --json.\n", False),
     ("Run it. Exit 3 on a gap.\n", "Run it. Exit 3 on a gap. Use --json.\n", False),
     ("Run it. Exit 3 on a gap.\n", "Run it. Exit 0 on a gap.\n", True),
     ("Run it. Use --json.\n", "Run it.\n", True),
-    ("You MUST cite every source.\n", "Cite every source.\n", True),
+    # A prohibition is advisory, never a hard loss -- see compare().
+    ("You MUST cite every source.\n", "Cite every source.\n", False),
     ("Call paper-search__check_retraction.\n", "Check for retraction.\n", True),
 ]
 
@@ -182,7 +305,7 @@ def self_test():
         data = json.loads(snap.read_text())
         data["files"][str(c)] = data["files"].pop(str(b))
         snap.write_text(json.dumps(data), encoding="utf-8")
-        losses = compare(str(snap))
+        losses, _review = compare(str(snap))
         if expect_loss and not losses:
             failures.append("case %d: loss not detected" % i)
         if not expect_loss and losses:
@@ -196,10 +319,10 @@ def self_test():
     skill.write_text("Run it. Exit 3 on a gap. Use --json.\n", encoding="utf-8")
     snap = root / "tools" / "snap.json"
     snap.write_text(json.dumps({"files": {"skills/x.md": extract(str(skill))}}), encoding="utf-8")
-    if compare(str(snap)):
+    if compare(str(snap))[0]:
         failures.append("relative snapshot path was not resolved against the snapshot root")
     skill.write_text("Run it. Use --json.\n", encoding="utf-8")
-    if not compare(str(snap)):
+    if not compare(str(snap))[0]:
         failures.append("a loss in a relative snapshot path was not detected")
     for msg in failures:
         print("FAIL  %s" % msg)
@@ -211,6 +334,8 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("paths", nargs="*")
     ap.add_argument("--snapshot", metavar="OUT.json")
+    ap.add_argument("--from-git", metavar="REV",
+                    help="build the snapshot from a revision's version of each path")
     ap.add_argument("--check", metavar="SNAPSHOT.json")
     ap.add_argument("--show", metavar="FILE")
     ap.add_argument("--self-test", action="store_true")
@@ -229,19 +354,29 @@ def main():
         if not Path(args.check).is_file():
             print("normative_tokens: snapshot missing (input gap, not a pass)", file=sys.stderr)
             return 4
-        losses = compare(args.check)
+        losses, review = compare(args.check)
         for path, kind, token in losses:
             print("LOST  %-46s %-10s %s" % (path, kind, token))
+        if review:
+            print("\nREVIEW -- prohibitions whose words are no longer present (%d). A rewrite may "
+                  "reword a rule; read each one and restore any that was dropped:" % len(review))
+            for path, text in review[:40]:
+                print("  ?  %-46s %s" % (path, text[:110]))
+            if len(review) > 40:
+                print("  ... %d more" % (len(review) - 40))
         if losses:
             print("normative_tokens: %d token(s) lost" % len(losses))
             return 1
-        print("normative_tokens: no normative token lost")
+        print("normative_tokens: no normative token lost (%d prohibition(s) need review)" % len(review))
         return 0
     if args.snapshot:
         if not args.paths:
             print("normative_tokens: no input files (input gap, not a pass)", file=sys.stderr)
             return 4
-        data = snapshot(args.paths, args.snapshot)
+        if args.from_git:
+            data = snapshot_from_git(args.from_git, args.paths, args.snapshot)
+        else:
+            data = snapshot(args.paths, args.snapshot)
         total = sum(sum(len(v) for v in t.values()) for t in data["files"].values())
         print("normative_tokens: snapshot of %d file(s), %d token(s) -> %s"
               % (len(data["files"]), total, args.snapshot))
