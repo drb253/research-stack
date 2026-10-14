@@ -15,6 +15,8 @@ set -u
 SKILLS="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 SKILL="$SKILLS/sysreview/SKILL.md"
 ESF="$SKILLS/evidence-synthesis-forge/scripts"
+TOOLS="$SKILLS/../tools"
+MG="$SKILLS/sysreview/scripts/manuscript_gate.py"
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 
 pass=0; fail=0; declared=0
@@ -32,6 +34,8 @@ grep -qE '^ROUTE ' "$SKILL" || { echo "selftest: no ROUTE block in $SKILL (input
 grep -qE '^FALLBACK ' "$SKILL" || { echo "selftest: no FALLBACK line in $SKILL (input gap)" >&2; exit 4; }
 grep -qE '^GATE ' "$SKILL" || { echo "selftest: no GATE registry in $SKILL (input gap)" >&2; exit 4; }
 [ -d "$ESF" ] || { echo "selftest: $ESF missing (input gap, not a pass)" >&2; exit 4; }
+[ -f "$TOOLS/attribution.py" ] || { echo "selftest: $TOOLS/attribution.py missing (input gap, not a pass)" >&2; exit 4; }
+[ -f "$MG" ] || { echo "selftest: $MG missing (input gap, not a pass)" >&2; exit 4; }
 
 # ------------------------------------------------------------------- router ---
 # The router reads the skill's own ROUTE block. The fixture is only the request text;
@@ -104,8 +108,8 @@ echo "== 3. Every declared gate has a pass fixture and a fail fixture =="
 grep -E '^GATE ' "$SKILL" | sed -E 's/^GATE[[:space:]]+([a-z0-9-]+).*/\1/' | sort -u > "$TMP/gates.txt"
 # Two explicit lists, kept in step with the fixtures in section 4. A gate added to the
 # skill registry without a fixture on either path is caught here.
-PASS_FIXTURED=" toolchain search-reproducibility prisma-counts citation-integrity numeric-provenance cross-artifact-integrity ledger-completeness review-completeness screening-disclosure gate-coverage appraisal-honesty screening-calibration certainty defect-regressions acceptance-live "
-FAIL_FIXTURED=" toolchain search-reproducibility prisma-counts citation-integrity numeric-provenance cross-artifact-integrity ledger-completeness review-completeness screening-disclosure gate-coverage appraisal-honesty screening-calibration certainty defect-regressions acceptance-live "
+PASS_FIXTURED=" toolchain search-reproducibility prisma-counts citation-integrity numeric-provenance cross-artifact-integrity ledger-completeness review-completeness screening-disclosure gate-coverage appraisal-honesty screening-calibration certainty defect-regressions acceptance-live manuscript-attribution "
+FAIL_FIXTURED=" toolchain search-reproducibility prisma-counts citation-integrity numeric-provenance cross-artifact-integrity ledger-completeness review-completeness screening-disclosure gate-coverage appraisal-honesty screening-calibration certainty defect-regressions acceptance-live manuscript-attribution "
 while read -r g; do
   case "$PASS_FIXTURED" in *" $g "*) ;; *) no "gate '$g' has no pass fixture";; esac
   case "$FAIL_FIXTURED" in *" $g "*) ;; *) no "gate '$g' has no fail fixture";; esac
@@ -205,6 +209,74 @@ expect_exit 0 "defect-regressions: suite passes (pass)" python3 "$ESF/regression
 declare_ "defect-regressions (fail)" "its fail path is a re-introduced defect; the suite has no negative CLI mode"
 declare_ "acceptance-live (pass)" "it runs the whole toolchain on a live query; not run offline"
 declare_ "acceptance-live (fail)" "the adversarial cases need the live query; not run offline"
+
+echo "== 5. Manuscript gate: the defined attribution claim =="
+# Three review roots. They differ in one artifact each, so the fixture proves both
+# directions: every condition holds, and one missing gate or one unresolved citation.
+mg_ok="$TMP/mg_ok"; mg_nogate="$TMP/mg_nogate"; mg_unres="$TMP/mg_unres"
+for d in "$mg_ok" "$mg_nogate" "$mg_unres"; do
+  mkdir -p "$d/ledgers"
+  printf 'source_id,doi,pmid,title,year,inclusion_status,verification_status\n' > "$d/sources.csv"
+  i=1; while [ $i -le 8 ]; do
+    printf 'S%03d,10.1/x%d,1,Study %d,2024,included,verified\n' "$i" "$i" "$i" >> "$d/sources.csv"
+    i=$((i+1))
+  done
+  printf 'source,platform,query,date_run,hits\npubmed,NCBI,x,2026-09-20,42\nclinicaltrials,CTgov,y,2026-09-20,3\n' > "$d/search_log.csv"
+  printf 'source_id\nS001\nS002\nS003\n' > "$d/ledgers/sources_included.csv"
+  printf '{"included_studies":3,"not_retrieved":0}\n' > "$d/prisma_counts.json"
+  printf '{"states":{"attributed":6,"synthesis":0,"unverifiable":0,"unattributed":0,"conflict":0,"no_citation_needed":2}}\n' > "$d/coverage.json"
+done
+printf '{"checked":8,"unresolved":[],"no_identifier":[],"retracted":[],"input_gaps":[],"status":"pass","gate":"PASS"}\n' > "$mg_ok/GATE_REPORT.json"
+printf '{"checked":8,"unresolved":["10.9999/not-real"],"no_identifier":[],"retracted":[],"input_gaps":[],"status":"fail","gate":"FAIL"}\n' > "$mg_unres/GATE_REPORT.json"
+
+expect_exit 0 "manuscript-attribution: every condition holds (issued)" python3 "$MG" --root "$mg_ok" --json "$TMP/mg_ok.json"
+expect_exit 1 "manuscript-attribution: the citation gate is absent (withheld)" python3 "$MG" --root "$mg_nogate" --json "$TMP/mg_nogate.json"
+expect_exit 1 "manuscript-attribution: one unresolved citation (withheld)" python3 "$MG" --root "$mg_unres" --json "$TMP/mg_unres.json"
+
+cat > "$TMP/mg_check.py" <<'PY'
+import json, pathlib, sys
+ok, nogate, unres = (json.load(open(p)) for p in sys.argv[1:4])
+outdir = pathlib.Path(sys.argv[4])
+problems = []
+def need(cond, msg):
+    if not cond:
+        problems.append(msg)
+scope = ("Scope: 8 source(s) checked; 3 supplied document(s) read; 0 document(s) could not be "
+         "read; structure is not verified above the measured separation.")
+need(ok["attribution"]["issuable"] is True, "the clean fixture was not issued")
+need(scope in ok["attribution"]["statement"], "the issued statement is missing a scope fact")
+need(ok["facts"]["sources_checked"] == 8, "sources_checked did not come from GATE_REPORT.json")
+need(ok["facts"]["corpus_docs"] == 3, "corpus_docs did not come from the full-text ledger")
+need(ok["facts"]["corpus_unreadable"] == 0, "corpus_unreadable is wrong for a read corpus")
+need(ok["fact_sources"]["citations_unresolved"].startswith("GATE_REPORT.json"),
+     "citations_unresolved is not attributed to the citation gate")
+need(ok["fact_sources"]["corpus_docs"].startswith("ledgers/sources_included.csv"),
+     "corpus_docs is not attributed to the full-text ledger")
+need(nogate["attribution"]["issuable"] is False, "the missing-gate fixture was issued")
+need("NOT ISSUED" in nogate["attribution"]["statement"], "the missing gate did not refuse")
+need(any("citation resolution was not verified" in b for b in nogate["attribution"]["blockers"]),
+     "the missing gate is not named as the blocker")
+need("Scope:" in nogate["block"], "the withheld block dropped the scope anchor")
+need(unres["attribution"]["issuable"] is False, "the unresolved-citation fixture was issued")
+need(any("do not resolve" in b for b in unres["attribution"]["blockers"]),
+     "the unresolved citation is not named as the blocker")
+need(unres["facts"]["citations_unresolved"] == 1, "the unresolved count was not read")
+for name, payload in (("mg_ok", ok), ("mg_nogate", nogate)):
+    (outdir / (name + ".md")).write_text(payload["block"] + "\n", encoding="utf-8")
+print("; ".join(problems))
+sys.exit(1 if problems else 0)
+PY
+if python3 "$TMP/mg_check.py" "$TMP/mg_ok.json" "$TMP/mg_nogate.json" "$TMP/mg_unres.json" "$TMP" >"$TMP/mg_check.log" 2>&1; then
+  ok "manuscript-attribution: issued and withheld lines carry the scope, the blocker, and each fact's source"
+else
+  no "manuscript-attribution fixture check: $(cat "$TMP/mg_check.log")"
+fi
+# The term may appear only inside the definition. Both directions are pinned.
+expect_exit 0 "claim_guard accepts the issued block" python3 "$TOOLS/claim_guard.py" "$TMP/mg_ok.md"
+expect_exit 0 "claim_guard accepts the withheld block" python3 "$TOOLS/claim_guard.py" "$TMP/mg_nogate.md"
+printf 'The draft is plagiarism-free.\n' > "$TMP/mg_bare.md"
+expect_exit 1 "claim_guard refuses the bare term (fail)" python3 "$TOOLS/claim_guard.py" "$TMP/mg_bare.md"
+expect_exit 0 "the shared definition self-test" python3 "$TOOLS/attribution.py" --self-test
 
 echo
 printf 'RESULT: %d passed, %d failed, %d declared-only\n' "$pass" "$fail" "$declared"

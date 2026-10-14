@@ -138,6 +138,25 @@ Stage 6 is **Gate 2**, the screening audit. Stage 7 is **Gate 3**, the dataset l
 is **Gate 4**, the appraisal confirmation. Stage 9 is **Gate 5**, the synthesis plan approval.
 Stage 10 is **Gate D**, the citation gate.
 
+### Which gate supplies which attribution fact
+
+Stage 10 asks one question: may the manuscript carry the defined term? The stage table above
+names the gates. This table names the fact each gate supplies. `scripts/manuscript_gate.py`
+reads them and calls `tools/attribution.py`.
+
+| Fact | Gate and artifact |
+|---|---|
+| passage_findings | `check_review_integrity.py` and the citation grading report `coverage.json`, state `unattributed`. Else the `claims.csv` rows with no supporting S-id. |
+| open_reviews | `coverage.json` state `unverifiable`. Else the `claims.csv` rows whose source is absent from `sources.csv`, or present and not `verification_status=verified`. |
+| citations_unresolved | `cross_verify_citations.py`, through `GATE_REPORT.json`: `unresolved` plus `no_identifier`. |
+| retracted_cited | `GATE_REPORT.json`: `retracted`. |
+| sources_checked | `GATE_REPORT.json`: `checked`. Else the `sources.csv` row count. |
+| corpus_docs | The `ledgers/sources_included.csv` row count. |
+| corpus_unreadable | `prisma_counts.json` `not_retrieved`, plus every declared included study the full-text ledger does not show as read. |
+
+A gate that did not run supplies None. A ledger that is absent counts as unread. The gate
+then withholds the term and names the blocker.
+
 ## Routing
 
 - Design, eligibility, protocol, and search structure go to `evidence-synthesis-forge`.
@@ -217,6 +236,10 @@ traceback. The citation gate writes `GATE_REPORT.json`. An autonomous run also w
 `CONDUCT_DISCLOSURE.txt`. A waived gap needs an entry in `completeness_waivers.json`. The
 human sign-off worklist is `screening_human_confirmation.csv`.
 
+The citation grading report is `coverage.json`. It carries one state per sentence.
+`scripts/manuscript_gate.py` writes an `attribution` object into its JSON output, beside the
+facts and the source of each fact.
+
 Draft with `[claim:C001] [src:S001,S004]` markers. The reference builder renumbers by first
 appearance (ICMJE or Vancouver) and strips the claim markers.
 
@@ -266,6 +289,8 @@ appearance (ICMJE or Vancouver) and strips the claim markers.
 - `../evidence-synthesis-forge/scripts/check_screening_disclosure.py` — the conduct-disclosure gate.
 - `../evidence-synthesis-forge/scripts/check_selftest_coverage.py` — the gate-coverage check.
 
+- `scripts/manuscript_gate.py` — the Stage 10 attribution gate, which renders the defined claim or withholds it.
+
 ## Quality gates (must pass before anything is reported)
 
 Each gate below fails loudly. None is optional. The registry is machine-readable; the routing
@@ -287,6 +312,7 @@ GATE screening-calibration | script: ../evidence-synthesis-forge/scripts/gate2a_
 GATE certainty | script: ../evidence-synthesis-forge/scripts/sof_table.py | pass-exit: 0 | fail-exit: 2
 GATE defect-regressions | script: ../evidence-synthesis-forge/scripts/regression_suite.py | pass-exit: 0 | fail-exit: declared
 GATE acceptance-live | script: ../evidence-synthesis-forge/scripts/acceptance_test.py | pass-exit: 0 | fail-exit: declared
+GATE manuscript-attribution | script: scripts/manuscript_gate.py | pass-exit: 0 | fail-exit: 1
 ```
 
 The gate list.
@@ -306,6 +332,7 @@ The gate list.
 
 - **Review completeness** (`check_completeness.py`): `removed_other` or `not_retrieved` is non-zero without an attributed, value-matched waiver in `completeness_waivers.json`. This gate stops an incomplete review from passing on a prose limitation alone.
 - **Screening-conduct disclosure** (`check_screening_disclosure.py`): agent-run screening presented as human or independent, or no `CONDUCT_DISCLOSURE.txt` that declares the mode. The script also emits `screening_human_confirmation.csv`.
+- **Manuscript attribution** (`scripts/manuscript_gate.py`): a gate did not run, a ledger is absent, or one strict condition failed. Then the gate withholds the term and names the blocker.
 
 - **Gate coverage** (`check_selftest_coverage.py`): a gate runs on only one path. A gate that cannot fail is not a gate.
 - **Acceptance (live)** (`acceptance_test.py`): it runs the toolchain on a live query, and then it tries to break each guard. Every adversarial case must fail. Exit 1 means a guard misbehaved.
@@ -391,6 +418,21 @@ input gap (exit 4). Do not screen the records by hand, and do not skip to Stage 
 
 - It does not invent a study, a count, an effect size, or a citation.
 - It does not label an autonomous review as human-conducted or MECIR-compliant.
+- It does not issue the term "plagiarism-free" on its own.
+
+### The defined claim
+
+A passage is plagiarism-free when it meets one of these conditions:
+
+- It quotes another work, with the quotation marked and the source cited.
+- It paraphrases another work in new words, with the source cited.
+- It states a fact that needs no citation.
+
+A document is plagiarism-free against the sources checked when every assessed passage meets one condition. Also required: every citation resolves. No cited source carries a retraction. The supplied corpus was read.
+
+The check has limits. It reads only the sources supplied or reachable. It does not verify structure above the measured separation. A paraphrase that keeps the source's sentence structure is not covered.
+
+The scope line travels with the claim. It names four facts. Scope: N source(s) checked; N supplied document(s) read; N document(s) could not be read; structure is not verified above the measured separation. `scripts/manuscript_gate.py` prints that block, or withholds it. It calls `tools/attribution.py`, so the wording cannot drift.
 
 ## Rubric coverage
 
@@ -411,6 +453,7 @@ Every item of `eval.md` maps to the section that implements it.
 | SR8 exit-code honesty | Failure modes and exit codes. |
 | SR9 preflight before Stage 1 | Preflight (before Stage 1). |
 | SR10 mode selection | Decision tables and Execution modes — human sign-off is OPTIONAL. |
+| SR11 attribution claim | What this does not do and Which gate supplies which attribution fact. |
 
 ## Guardrails
 

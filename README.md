@@ -1274,6 +1274,23 @@ regresses. The formats are real; the sentences are constructed to exercise them.
 
 ### What the overlap and citation checks now cover
 
+**"Plagiarism-free" is a defined claim, not a forbidden word.** The definition lives in
+`tools/attribution.py` and the three consumers call it, so they cannot drift:
+
+> A passage is plagiarism-free when it meets one of these conditions: it quotes another work (the
+> quotation is marked, the source is cited); it paraphrases another work (the words are new, the
+> source is cited); or it states a fact that needs no citation. A document is plagiarism-free
+> against the sources checked when every assessed passage meets one condition, no citation is
+> unresolved, no cited source is retracted, and the supplied corpus was read.
+
+The statement is issued only when all of that holds, and it always carries its scope — sources
+checked, supplied documents read, documents that could not be read, and the one exception the
+measurement cannot close: **structure is not verified above the measured separation**, so a
+paraphrase that keeps the source's sentence structure is not covered. Two conditions are inputs
+rather than computations (citation resolution, retraction), and a missing input withholds the
+statement instead of assuming zero. `tools/claim_guard.py` allows the phrase **only** when the
+definition, the scope and the exception travel with it; the bare phrase is still refused.
+
 Aligned with the **US Office of Research Integrity** guide *"Avoiding Plagiarism,
 Self-plagiarism, and Other Questionable Writing Practices"* (Roig, 3rd rev. 2015):
 

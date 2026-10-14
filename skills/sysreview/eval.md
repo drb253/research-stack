@@ -75,6 +75,21 @@ FAIL if a stage waits on a mode answer that never comes, or if the mode is never
 
 ---
 
+## Attribution item (blocking)
+
+### SR11. Attribution claim
+The manuscript gate calls `tools/attribution.py` with the facts the upstream gates supply. It
+never reads the gates itself and never guesses a fact. The defined term is issued only when
+every assessed passage quotes and cites, paraphrases in new words and cites, or needs no
+citation; every citation resolves; no cited source carries a retraction; and the supplied
+corpus was read. The scope line names the sources checked, the supplied documents read, the
+documents that could not be read, and the structure exception. A gate that did not run, or a
+ledger that is absent, withholds the term and names the blocker.
+FAIL if the term appears without the definition, the scope and the exception, or if a missing
+gate or ledger is read as a condition met.
+
+---
+
 ## Reporting
 
 | Check | Result | Note |
@@ -89,5 +104,7 @@ FAIL if a stage waits on a mode answer that never comes, or if the mode is never
 | SR8 exit-code honesty | PASS/FAIL | |
 | SR9 preflight before Stage 1 | PASS/FAIL | |
 | SR10 mode selection | PASS/FAIL | |
+| SR11 attribution claim | PASS/FAIL | |
 
-Any FAIL in SR1-SR4 means the request must go to another skill before work continues.
+Any FAIL in SR1-SR4 or SR11 means the request must go to another skill, or the claim must be
+withheld, before work continues.
