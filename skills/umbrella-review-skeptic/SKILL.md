@@ -1,6 +1,6 @@
 ---
 name: umbrella-review-skeptic
-description: This skill produces an umbrella-review audit: a primary-study by review overlap matrix, a review-quality appraisal, an effect-comparability verdict, and a defensible narrative or second-order synthesis plan. Use when a user asks to synthesize existing systematic reviews or meta-analyses, quantify duplicate evidence or primary-study overlap, appraise review quality with AMSTAR 2 or ROBIS logic, or judge whether review-level statistical pooling is defensible, and when the sysreview alias routes a review-of-reviews request here. It does not pool primary studies for the first time; use meta-analysis-forge for a first-order meta-analysis.
+description: "This skill produces an umbrella-review audit: a primary-study by review overlap matrix, a review-quality appraisal, an effect-comparability verdict, and a defensible narrative or second-order synthesis plan. Use when a user asks to synthesize existing systematic reviews or meta-analyses, quantify duplicate evidence or primary-study overlap, appraise review quality with AMSTAR 2 or ROBIS logic, or judge whether review-level statistical pooling is defensible, and when the sysreview alias routes a review-of-reviews request here. It does not pool primary studies for the first time; use meta-analysis-forge for a first-order meta-analysis."
 ---
 
 # Umbrella Review Skeptic

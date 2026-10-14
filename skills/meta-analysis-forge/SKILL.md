@@ -1,6 +1,6 @@
 ---
 name: meta-analysis-forge
-description: This skill produces a first-order meta-analysis design and audit: an effect-size and harmonization plan, a machine-readable coding sheet, a model specification, heterogeneity and prediction-interval reporting, publication-bias diagnostics, and sensitivity checks. Use when a user asks to pool primary studies, choose an effect size, pick a fixed, random, multilevel, or robust-variance model, or audit a published meta-analysis, and when the meta-analysis alias routes a /meta-analysis request here. It does not synthesize existing reviews (use umbrella-review-skeptic) or orchestrate the full review (use evidence-synthesis-forge).
+description: "This skill produces a first-order meta-analysis design and audit: an effect-size and harmonization plan, a machine-readable coding sheet, a model specification, heterogeneity and prediction-interval reporting, publication-bias diagnostics, and sensitivity checks. Use when a user asks to pool primary studies, choose an effect size, pick a fixed, random, multilevel, or robust-variance model, or audit a published meta-analysis, and when the meta-analysis alias routes a /meta-analysis request here. It does not synthesize existing reviews (use umbrella-review-skeptic) or orchestrate the full review (use evidence-synthesis-forge)."
 ---
 
 # Meta-Analysis Forge

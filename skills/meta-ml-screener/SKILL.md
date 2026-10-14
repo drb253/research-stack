@@ -1,6 +1,6 @@
 ---
 name: meta-ml-screener
-description: This skill produces a machine-learning assisted screening plan: an active-learning or LLM workflow, an auditable screening log, a human-verification plan, and a measured recall check. Use when a user asks for deduplication, title and abstract screening, full-text triage, study classification, LLM-assisted extraction, risk-of-bias triage, topic modeling, or moderator discovery, and when the sysreview alias routes a review request here. It does not make final inclusion decisions, and it does not replace the review design in evidence-synthesis-forge or the synthesis in meta-analysis-forge.
+description: "This skill produces a machine-learning assisted screening plan: an active-learning or LLM workflow, an auditable screening log, a human-verification plan, and a measured recall check. Use when a user asks for deduplication, title and abstract screening, full-text triage, study classification, LLM-assisted extraction, risk-of-bias triage, topic modeling, or moderator discovery, and when the sysreview alias routes a review request here. It does not make final inclusion decisions, and it does not replace the review design in evidence-synthesis-forge or the synthesis in meta-analysis-forge."
 ---
 
 # Meta ML Screener

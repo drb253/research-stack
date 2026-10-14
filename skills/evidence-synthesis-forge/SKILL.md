@@ -1,6 +1,6 @@
 ---
 name: evidence-synthesis-forge
-description: This skill produces a review design package: an auditable protocol, eligibility criteria, a registered search plan, a screening and coding workflow, an appraisal plan, and a report structure for a systematic review, scoping review, evidence map, rapid review, or umbrella review. Use when a user asks to run or plan a systematic review, an SLR, a scoping review, a rapid review, or a PRISMA 2020 review, and when the sysreview alias routes an end-to-end review request here. It does not design a first-order statistical model (use meta-analysis-forge), review existing reviews (use umbrella-review-skeptic), or run machine-learning screening (use meta-ml-screener).
+description: "This skill produces a review design package: an auditable protocol, eligibility criteria, a registered search plan, a screening and coding workflow, an appraisal plan, and a report structure for a systematic review, scoping review, evidence map, rapid review, or umbrella review. Use when a user asks to run or plan a systematic review, an SLR, a scoping review, a rapid review, or a PRISMA 2020 review, and when the sysreview alias routes an end-to-end review request here. It does not design a first-order statistical model (use meta-analysis-forge), review existing reviews (use umbrella-review-skeptic), or run machine-learning screening (use meta-ml-screener)."
 ---
 
 # Evidence Synthesis Forge

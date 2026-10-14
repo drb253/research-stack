@@ -67,13 +67,59 @@ def parse_frontmatter(text):
     return out
 
 
+def _frontmatter_block(text):
+    lines = text.splitlines()
+    if not lines or lines[0].strip() != "---":
+        return None
+    for i in range(1, len(lines)):
+        if lines[i].strip() == "---":
+            return "\n".join(lines[1:i])
+    return None
+
+
+def strict_yaml_problem(text):
+    """Return a message when the frontmatter is not valid YAML, else None.
+
+    Four skills shipped an unquoted `description:` containing ": ", which is not a
+    valid YAML scalar: the harness parsed nothing, dropped the skill from the
+    catalog, and the hand-rolled reader below happily reported "13 of 13 pass".
+    The catalog went from 13 skills to 9 and only the live catalog showed it. When
+    PyYAML is available it decides; the stdlib fallback still catches the exact
+    shape that broke, so this cannot pass unnoticed on a machine without it.
+    """
+    block = _frontmatter_block(text)
+    if block is None:
+        return "no YAML frontmatter"
+    try:
+        import yaml  # noqa: PLC0415 - optional, the repository is stdlib-only
+    except Exception:
+        for line in block.splitlines():
+            m = re.match(r"^([a-z0-9_-]+):\s+([^'\"|>\[{].*)$", line)
+            if m and ": " in m.group(2):
+                return ("unquoted value for '%s' contains ': ' -- quote the value"
+                        % m.group(1))
+        return None
+    try:
+        parsed = yaml.safe_load(block)
+    except Exception as exc:
+        return "invalid YAML: %s" % str(exc).splitlines()[0][:90]
+    if not isinstance(parsed, dict):
+        return "the frontmatter is not a mapping"
+    return None
+
+
 def check(skills_dir="skills"):
     problems = []
     root = Path(skills_dir)
     files = sorted(root.glob("*/SKILL.md"))
     for path in files:
         name = path.parent.name
-        fm = parse_frontmatter(path.read_text(encoding="utf-8", errors="replace"))
+        text = path.read_text(encoding="utf-8", errors="replace")
+        yaml_problem = strict_yaml_problem(text)
+        if yaml_problem:
+            problems.append((name, yaml_problem))
+            continue
+        fm = parse_frontmatter(text)
         declared = fm.get("name", "")
         desc = fm.get("description", "")
         if not declared:
@@ -104,6 +150,12 @@ SELF_TEST = [
     ("---\nname: good\ndescription: \"%s\"\n---\n" % ("word " * 130), True),
     ("---\nname: good\ndescription: \"%s\"\n---\n" % (("word " * 59) + "plagiarism-free"), True),
     ("---\ndescription: \"%s\"\n---\n" % ("word " * 60), True),
+    # The defect that dropped four skills from the live catalog: an unquoted
+    # description containing ": " is not a valid YAML scalar.
+    ("---\nname: good\ndescription: This produces a package: an audit and a plan. %s\n---\n"
+     % ("word " * 45), True),
+    ("---\nname: good\ndescription: \"This produces a package: an audit and a plan. %s\"\n---\n"
+     % ("word " * 45), False),
 ]
 
 
