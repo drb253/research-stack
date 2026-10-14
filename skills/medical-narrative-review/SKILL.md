@@ -503,24 +503,23 @@ report still records the condition. The full flag list, the exit codes, and the 
 
 ## Rubric coverage
 
-`references/qa_checklist.md` holds the human pre-submission rubric. This table maps every section to the
-procedure that implements it.
+`eval.md` holds the self-check, with one id per item. `references/qa_checklist.md` holds the full human checklist. This table maps every id to the procedure that implements it.
 
 <!-- ste-allow R1,R2,R3: a markdown table is one layout block; the sentence-length, one-instruction and sentence-count rules do not apply to its cells -->
 
-| Section | Item | Implementing procedure. |
+| Item | What it checks | Implementing procedure. |
 |---|---|---|
-| 1 | Scope and question. | **Phase 0**; **Purpose**. |
-| 2 | Search and selection. | **Phase 2**; **Phase 3**. |
-| 3 | Sources and verification. | **Phase 3**; **Verification protocol (Phase 3 detail)**. |
-| 4 | Claim integrity. | **Non-negotiable rules**, rules 3 to 5; **Phase 5**. |
-| 5 | Numbers. | **Non-negotiable rule 4**; **Phase 4**; **Phase 8**. |
-| 6 | Citation mechanics. | **Phase 8**; **Verification protocol (Phase 3 detail)**. |
-| 7 | Displays. | **Phase 7**. |
-| 8 | Language and completeness. | **Phase 6**; **Style, language, and integrity**. |
-| 9 | Integrity and policy. | **Non-negotiable rules**, rules 8 and 9; **Optional advisory classifier (Laya)**. |
-| 10 | Unresolved items. | **Non-negotiable rule 3**; **Registries and workspace**. |
-| 11 | Exported deliverables. | **Phase 9**; **Failure modes and exit codes**. |
+| MN1 | Scope, question and declared review type. | **Phase 0**; **Purpose**. |
+| MN2 | Search and selection, recorded to reproduce. | **Phase 2**; **Phase 3**. |
+| MN3 | Every included source verified and complete. | **Phase 3**; **Verification protocol (Phase 3 detail)**. |
+| MN4 | Claim integrity. | **Non-negotiable rules**, rules 3 to 5; **Phase 5**. |
+| MN5 | Numbers trace to a recorded value. | **Non-negotiable rule 4**; **Phase 4**; **Phase 8**. |
+| MN6 | Citation mechanics. | **Phase 8**; **Verification protocol (Phase 3 detail)**. |
+| MN7 | Displays from recorded data. | **Phase 7**. |
+| MN8 | Language and completeness. | **Phase 6**; **Style, language, and integrity**. |
+| MN9 | Integrity and policy. | **Non-negotiable rules**, rules 8 and 9; **Optional advisory classifier (Laya)**. |
+| MN10 | No open item is hidden. | **Non-negotiable rule 3**; **Registries and workspace**. |
+| MN11 | Exported deliverables complete and consistent. | **Phase 9**; **Failure modes and exit codes**. |
 
 ## Escalation and honesty rules for the agent
 

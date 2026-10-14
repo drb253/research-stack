@@ -173,10 +173,9 @@ Bibliographic databases cannot see registered-but-unpublished trials, or termina
 Publication bias lives in that blind spot.
 
 Route at least one **registry** source as well (`search_clinicaltrials`, `search_ictrp`, or
-`search_ctis`). Record every source with its hit count in `search_log.csv`. For the
-ventilatory-pneumonia question, the registry search returned 8 registered trials. One trial
-terminated at 740 patients, and several completed trials have no posted results. None of them
-appear in any database search.
+`search_ctis`). Record every source with its hit count in `search_log.csv`. A registry search
+can return trials that no database search finds. Some trials stop early. Some trials finish
+with no posted results. None of them appear in a bibliographic database.
 
 Citation verification goes to `citecheck` and
 `../evidence-synthesis-forge/scripts/cross_verify_citations.py`. The final prose register goes
@@ -243,11 +242,21 @@ facts and the source of each fact.
 Draft with `[claim:C001] [src:S001,S004]` markers. The reference builder renumbers by first
 appearance (ICMJE or Vancouver) and strips the claim markers.
 
+### Work allocation
+
+One writer owns each ledger at a time. The ledger owner is the agent that created the file.
+The shared ledgers are `search_log.csv`, `sources.csv`, `screening_log.csv`, `claims.csv`, and
+`prisma_counts.json`. A second screener must not append to a shared ledger.
+
+It writes its rows to a separate file for its own batch, as in `screening_log.<agent>.csv`. The
+ledger owner merges that file after the batch, never during it. The Lead resolves a conflict
+between two owners.
+
 ## Load (read before working the stage)
 
 **Standards layer (Cochrane, MECIR, and GRADE, paraphrased and cited):**
 
-- `../evidence-synthesis-forge/references/cochrane-handbook-map.md` — the 26 chapters, and the four amateur-versus-expert failure points.
+- `../evidence-synthesis-forge/references/cochrane-handbook-map.md` — the chapter map, and the four amateur-versus-expert failure points.
 - `../evidence-synthesis-forge/references/mecir-standards.md` — the mandatory gates per stage.
 - MECIR governs what must be done; PRISMA governs what the report must state.
 - `../evidence-synthesis-forge/references/search-reporting-prisma-s.md` — the 16 search-reporting items that make a search reproducible.

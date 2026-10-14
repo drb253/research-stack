@@ -119,6 +119,9 @@ If any answer blocks pooling, deliver an honest narrative synthesis plan instead
 | 7 | Sensitivity checks | `meta-analysis-forge`. |
 | 8 | Figures and report | `../meta-analysis-forge/scripts/run_meta_analysis.R`. |
 
+Step 6 is an interface note. The appraisal belongs to `sysreview` (stage 8), and it runs before
+synthesis.
+
 ## Decision rules (defaults)
 
 Two defaults matter. Prefer restricted maximum likelihood (REML) for τ² and the Hartung-Knapp-Sidik-Jonkman (HKSJ) adjustment at small k.

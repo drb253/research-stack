@@ -52,6 +52,20 @@ die()  { printf 'ERROR: %s\n' "$*" >&2; exit 1; }
 run()  { if [ "$DRY_RUN" = 1 ]; then printf '  [dry-run] %s\n' "$*"; else eval "$@"; fi; }
 have() { command -v "$1" >/dev/null 2>&1; }
 
+# Back up a path that is about to be replaced, with the same ordinal-backup
+# convention as install_skill: a second-resolution timestamp can collide, and
+# `mv dir existing-dir` would then nest the tree instead of backing it up. The
+# store (~/.research-stack) is regenerated on every install, so a user edit there
+# used to vanish silently; this keeps the previous copy and says so.
+backup_store() {
+  [ -e "$1" ] || return 0
+  local bak n
+  bak="$1.bak-$(date +%Y%m%d%H%M%S)"; n=1
+  while [ -e "$bak" ]; do bak="$1.bak-$(date +%Y%m%d%H%M%S)-$n"; n=$((n+1)); done
+  [ "$DRY_RUN" = 1 ] || warn "  $1 is replaced -> kept as $(basename "$bak")"
+  run "mv '$1' '$bak'"
+}
+
 # Install one skill into a target directory without ever destroying something a
 # user put there. The target is only rewritten when it is a symlink (ours, or a
 # leftover) or an out-of-date copy: a real file or directory that differs is
@@ -281,13 +295,37 @@ fi
 if [ "$DO_SKILLS" = 1 ]; then
   step "2. Review skills -> $STORE/skills"
   run "mkdir -p '$STORE/skills'"
-  run "cp -R '$ROOT/skills/'* '$STORE/skills/'"
+  # Strip bytecode caches first: they are not part of the comparison below and
+  # would otherwise make every re-run look like a change.
+  run "find '$STORE/skills' -name '__pycache__' -type d -prune -exec rm -rf {} + 2>/dev/null || true"
+  # A store copy that already matches the repo is left alone, so a re-run neither
+  # churns the tree nor accumulates backups. When it differs, the previous copy
+  # is kept: the store is an install destination, but a user may have edited a
+  # file there, and `cp -R` used to overwrite it silently.
+  if diff -rq -x '__pycache__' "$ROOT/skills" "$STORE/skills" >/dev/null 2>&1; then
+    info "skills store already matches the repo (no copy, no backup)"
+  else
+    backup_store "$STORE/skills"
+    run "mkdir -p '$STORE/skills'"
+    run "cp -R '$ROOT/skills/'* '$STORE/skills/'"
+  fi
   run "find '$STORE/skills' -name '__pycache__' -type d -prune -exec rm -rf {} + 2>/dev/null || true"
   info "installed $(ls -1 "$STORE/skills" 2>/dev/null | grep -vc 'VENDORED') skills"
 
   # ship the originality-check toolkit (the skill depends on it)
   if [ -d "$ROOT/tools/originality-toolkit" ]; then
-    run "rm -rf '$STORE/originality-toolkit' && cp -R '$ROOT/tools/originality-toolkit' '$STORE/originality-toolkit'"
+    run "find '$STORE/originality-toolkit' -name '__pycache__' -type d -prune -exec rm -rf {} + 2>/dev/null || true"
+    # `attribution.py` is a SIBLING of the toolkit in the repo and is copied in
+    # below, so it is excluded from the comparison: counting it would make every
+    # re-run look like a change and accumulate backups. The old code `rm -rf`d
+    # this directory outright, so a user edit inside it was destroyed.
+    if diff -rq -x '__pycache__' -x 'attribution.py' \
+         "$ROOT/tools/originality-toolkit" "$STORE/originality-toolkit" >/dev/null 2>&1; then
+      info "originality-toolkit already matches the repo (no copy, no backup)"
+    else
+      backup_store "$STORE/originality-toolkit"
+      run "cp -R '$ROOT/tools/originality-toolkit' '$STORE/originality-toolkit'"
+    fi
     # The toolkit asks tools/attribution.py for the defined "plagiarism-free"
     # claim. That file is a SIBLING of the toolkit directory, so copying the
     # directory alone shipped a toolkit that could not evaluate the claim at all:
@@ -295,7 +333,9 @@ if [ "$DO_SKILLS" = 1 ]; then
     # Ship the definition beside the toolkit, which is the loader's first
     # candidate. It fails safe without it, but it does not work without it.
     if [ -f "$ROOT/tools/attribution.py" ]; then
-      run "cp '$ROOT/tools/attribution.py' '$STORE/originality-toolkit/attribution.py'"
+      if ! cmp -s "$ROOT/tools/attribution.py" "$STORE/originality-toolkit/attribution.py"; then
+        run "cp '$ROOT/tools/attribution.py' '$STORE/originality-toolkit/attribution.py'"
+      fi
     else
       warn "tools/attribution.py is missing; the deployed toolkit cannot evaluate the defined claim"
     fi
@@ -304,6 +344,23 @@ if [ "$DO_SKILLS" = 1 ]; then
     # recorded source time no longer matches the file beside it.
     run "find '$STORE/originality-toolkit' -name '__pycache__' -type d -prune -exec rm -rf {} + 2>/dev/null || true"
     info "installed originality-toolkit -> $STORE/originality-toolkit"
+  fi
+
+  # Ship docs/ into the store. Five skills cite docs/EVIDENCE-INVARIANT.md as the
+  # rule they are built on, and the installer used to copy no docs at all, so the
+  # reference was dead in an installed tree. The citation is written
+  # repo-root-relative; after install the same file is at $STORE/docs. The file
+  # itself says so at the top.
+  if [ -d "$ROOT/docs" ]; then
+    run "mkdir -p '$STORE/docs'"
+    if diff -rq -x '__pycache__' "$ROOT/docs" "$STORE/docs" >/dev/null 2>&1; then
+      info "docs already match the repo (no copy, no backup)"
+    else
+      backup_store "$STORE/docs"
+      run "mkdir -p '$STORE/docs'"
+      run "cp -R '$ROOT/docs/'* '$STORE/docs/'"
+    fi
+    info "installed docs -> $STORE/docs"
   fi
 
   if [ "$WITH_UPSTREAM" = 1 ]; then
