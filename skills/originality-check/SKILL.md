@@ -254,5 +254,19 @@ python3 originality_check.py DRAFT --corpus thesis_chapter3.pdf
 - Every report carries the structural-coverage section. Do not remove it and do
   not soften it.
 
-- `eval.md` lists the checks to run before you return output: hard errors O1,
-  O2 and O3, plus O4, O5, O6, O7 and O8.
+## Rubric coverage
+
+`eval.md` holds the self-check. This table maps every check to the section that implements it.
+
+<!-- ste-allow R3: a markdown table is one layout block; its cells are not paragraph sentences -->
+
+| Item | What it checks | Implementing procedure |
+|---|---|---|
+| O1 | No absolute claim; a clean result carries its bound. | **What it does NOT do**; **The defined claim, and its evidence**; **Guardrails**; `guard_report()` and `tools/claim_guard.py`. |
+| O2 | A corpus that was not read is an input gap, not a result. | **A corpus that was not read is an input gap, not a measurement**; exit `3`; `--recheck`. |
+| O3 | Never restyle a sourced passage. | **Guardrails**; `style_pass.py`. |
+| O4 | Every report carries the structural-coverage section. | **Alignment with the ORI ethical-writing guide**, G4; **Guardrails**; `structural_coverage_line()` and the `structural_coverage` JSON key. |
+| O5 | Defaults stay measured. | **Key flags**, `--threshold` (0.30) and `--min-run` (3); `benchmarks/bench_frame_copy.py`. |
+| O6 | Quoted verbatim is not a violation. | **Interpreting a report**, the `QUOTED` verdict; **Alignment with the ORI ethical-writing guide**, G2. |
+| O7 | Retraction is a hard failure. | **Alignment with the ORI ethical-writing guide**, G17; `cross_verify_citations.py`. |
+| O8 | The defined claim is issued only when its conditions hold, and always with its scope. | **The defined claim, and its evidence**; `--attribution-evidence`; `attribution.py`. |

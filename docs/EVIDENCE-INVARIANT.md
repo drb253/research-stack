@@ -6,6 +6,14 @@ about the artefact under test.**
 This document states the rule once so every skill in this repository can be held to it. It exists
 because the rule was broken, and the break was invisible.
 
+## Where this file lives
+
+A skill that cites this rule uses a path relative to the **repository root**, not to the skill
+directory. The file is at `docs/EVIDENCE-INVARIANT.md` in a source checkout, and `install.sh`
+copies `docs/` into the store, so after an install the same file is at
+`~/.research-stack/docs/EVIDENCE-INVARIANT.md`. The installer used to copy no docs at all, which
+left every citation of this rule pointing at nothing in an installed tree.
+
 ## What went wrong
 
 A 1,027-sentence document was graded against 62 identified sources while holding readable evidence
