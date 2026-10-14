@@ -165,7 +165,7 @@ The script creates the full workspace (below). It refuses to overwrite an existi
 | Trials and registries | `search_clinicaltrials`, `search_ictrp`, `search_ctis` |
 | Metrics, related work, and citing work | `get_citation_metrics`, `get_related_articles`, `get_citing_articles` |
 | Regex or filtered evidence-grade search | `academic-search__search_papers`, `academic-search__search_by_author` |
-| Consensus and position statements | `consensus__search` |
+| Consensus and position statements | `consensus__search` — only when the Consensus server is configured. It is not one of the three servers this repository mounts. Check for the tool first. When it is absent, use `search_pubmed` and `search_bookshelf` for statements and guidelines. |
 | MeSH term control | `get_mesh_details` |
 
 - Run the same concept blocks across databases.

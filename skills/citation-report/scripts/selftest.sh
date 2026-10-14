@@ -21,6 +21,11 @@ no()  { printf '  \033[31mFAIL\033[0m %s\n' "$1"; fail=$((fail+1)); }
 expect_exit() { local want="$1" name="$2"; shift 2; "$@" >/dev/null 2>&1; local got=$?
   if [ "$got" -eq "$want" ]; then ok "$name (exit $got)"; else no "$name (want $want, got $got)"; fi; }
 
+# The copy of the shared helpers must not drift from its upstream silently: the check fails
+# on any difference that is not listed in its ALLOWED table with a reason.
+expect_exit 0 "shared helpers match upstream or are allowlisted" python3 "$HERE/check_common_drift.py"
+expect_exit 0 "the drift check's own self-test passes" python3 "$HERE/check_common_drift.py" --self-test
+
 # json_field <file> <python-expression-on-d>
 json_field() { python3 -c "
 import json,sys

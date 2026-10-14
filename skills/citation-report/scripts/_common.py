@@ -6,7 +6,14 @@ this skill behaves identically at its edges: bounded inputs, a single JSON verdi
 envelope, and the same error/warning/info severity model. Skills are installed and
 symlinked individually (install.sh:235, install.sh:273-284) and no skill may import
 another skill's directory at run time, so this is a deliberate, provenance-noted
-copy. `scripts/selftest.sh` fails if the shared primitives drift from upstream.
+copy. Parity is not assumed. `scripts/check_common_drift.py` compares every shared
+primitive against the upstream file, and `scripts/selftest.sh` runs it, so a silent
+divergence fails the harness. A difference is a failure unless the check's ALLOWED
+table lists it with a reason. The current allowlist is the four size limits (this
+skill reads larger inputs) and three envelope helpers (`emit_report`,
+`emit_input_error`, `write_text_lf`) that this copy extends. A module-level
+constant whose value is a literal is compared by value, so reformatting is not
+drift.
 
 Everything here is local, deterministic, bounded, and network-free. Compatible with
 Python 3.9+ (standard library only).

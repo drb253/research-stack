@@ -548,4 +548,4 @@ Full detail: `references/verdict-rules.md`, `references/report-schema.md`,
 | `references/intake-formats.md` | per-format capability and refusal behaviour |
 | `references/limits-and-claims.md` | what the report does not claim |
 | `references/evidence-and-limits.md` | acquisition tiers, evidence strength, the red bar, the sufficiency policy |
-| `../../../docs/EVIDENCE-INVARIANT.md` | the repository-wide rule this skill is built on |
+| `../../docs/EVIDENCE-INVARIANT.md` | the repository-wide rule this skill is built on |
