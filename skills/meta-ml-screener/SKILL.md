@@ -84,6 +84,8 @@ Run `scripts/validate_screening_log.py --self-test` before a live screen. The se
 
 ## Workflow
 
+Screening needs the retrieved and deduplicated set. Confirm that the search ledger and the dedup ledger exist. Name both files. Do not start step 1 until both ledgers exist.
+
 1. Define the ML role and the decisions that stay human.
 
 2. Create the seed labels or the validation set.
@@ -101,6 +103,12 @@ Run `scripts/validate_screening_log.py --self-test` before a live screen. The se
 8. Export the decisions, the model scores, the prompts or schemas, and the human adjudication.
 
 9. Report the ML use in the manuscript.
+
+## Work Allocation
+
+One writer owns the screening log at a time. A second screener writes its own batch file, `screening_log.<agent>.csv`. The log owner merges the batch after the screener stops. Never merge during a batch. The Lead resolves a conflict.
+
+Run one screener per batch file. Record the owner name in the log.
 
 ## Decision Tables
 

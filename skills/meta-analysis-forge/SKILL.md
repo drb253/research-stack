@@ -76,7 +76,7 @@ Run `scripts/install_r_packages.R` when the R packages are absent. The engine ne
 | python3 | `scripts/validate_coding_sheet.py` | `python3 -V` |
 | Rscript | every R script | `Rscript --version` |
 | metafor | the engine and the golden tests | `Rscript -e 'library(metafor)'` |
-| robvis and ggplot2 | the risk-of-bias figures | `scripts/doctor.sh` |
+| robvis and ggplot2 | the risk-of-bias figures | `../evidence-synthesis-forge/scripts/doctor.sh` |
 
 Run `scripts/validate_coding_sheet.py` before the engine. The validator checks the required fields, the numeric estimates, the positive standard errors, the duplicate effect identifiers, and the mixed effect metrics.
 

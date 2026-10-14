@@ -95,6 +95,8 @@ Set the review root before you run a gate. The gates read `prisma_counts.json`, 
 
 9. Add the reproducibility artifacts. The artifacts are the search log, the screening log, the coding sheet, the analysis script, and the protocol.
 
+Steps 6 and 7 are a design checklist, not an execution order. The execution order follows the sysreview stage table.
+
 Run step 8 with the matching file. Use PRISMA (Preferred Reporting Items for Systematic Reviews and Meta-Analyses) for reporting. Use Cochrane and MECIR for an intervention review. Use JBI for a broader review type. Use CEE for environmental evidence. Load `references/protocol-reporting-crosswalk.md` for the crosswalk.
 
 Run step 9 before you write the report. Use `references/prisma-2020-manuscript-reporting.md` for the 27-item manuscript check. Use `references/reporting-guideline-checklists.md` to select the reporting guideline and the risk-of-bias instrument.
