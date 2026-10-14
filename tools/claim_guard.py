@@ -36,7 +36,9 @@ from pathlib import Path
 
 # Claims no bounded measurement can support.
 FORBIDDEN = [
-    (r"plagiari[sz]m[\s-]?free", "plagiarism-free is a universal negative; say what was checked"),
+    (r"plagiari[sz]m[\s-]?free",
+     "use the defined form: add the definition, the scope and the exception "
+     "(python3 tools/attribution.py --definition)"),
     (r"\berror[\s-]?free\b", "say the measured error rate and the classes tested"),
     (r"\bperfect(?:ly)?\b", "state the measured result, not a judgement"),
     (r"\bmedical[\s-]?grade\b", "regulatory status is not a code property"),
@@ -98,20 +100,41 @@ def _strip_code(text):
     return "\n".join(out)
 
 
+def _defined_attribution(text):
+    """True when the text carries the whole definition of the term.
+
+    "Plagiarism-free" is a universal negative on its own, and this gate refuses
+    it. With its definition, its scope and its one exception attached it is a
+    defined, auditable claim, and the reader can see the boundary. The three
+    anchors live in tools/attribution.py so the wording cannot drift.
+    """
+    try:
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        from attribution import DEFINITION_ANCHOR, SCOPE_ANCHOR, EXCEPTION_ANCHOR
+    except Exception:
+        return False
+    return all(anchor in text for anchor in (DEFINITION_ANCHOR, SCOPE_ANCHOR, EXCEPTION_ANCHOR))
+
+
 def scan(text, where="<text>"):
     """Return a list of findings: {kind, rule, line, message}."""
     body = _strip_code(text)
+    defined = _defined_attribution(body)
     findings = []
     for i, line in enumerate(body.splitlines(), start=1):
         if line.strip().startswith("<!--") or line.lstrip().startswith("# ste-allow"):
             continue
         for pattern, why in FORBIDDEN_RE:
             m = pattern.search(line)
-            if m and not _negated(line, m.start()):
-                findings.append({
-                    "kind": "FORBIDDEN", "rule": pattern.pattern, "line": i,
-                    "message": "'%s' -- %s" % (m.group(0), why), "where": where,
-                })
+            if not m or _negated(line, m.start()):
+                continue
+            # The defined term is allowed; the bare phrase is not.
+            if pattern.pattern.startswith(r"plagiari[sz]m") and defined:
+                continue
+            findings.append({
+                "kind": "FORBIDDEN", "rule": pattern.pattern, "line": i,
+                "message": "'%s' -- %s" % (m.group(0), why), "where": where,
+            })
     clean_hit = None
     for pattern in CLEAN_RE:
         m = pattern.search(body)
@@ -141,6 +164,22 @@ SELF_TEST = [
     # A quoted example inside code must not trip the gate.
     ("```\nThe tool is plagiarism-free.\n```\n", False),
 ]
+
+# The defined term is allowed; the same words without the definition, the scope and
+# the exception are not. Both directions are pinned here.
+try:
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from attribution import DEFINITION, G4_EXCEPTION, SCOPE_ANCHOR  # noqa: E402
+
+    _DEFINED_TEXT = ("\n".join(DEFINITION) + "\n\n" + SCOPE_ANCHOR +
+                     " 5 source(s) checked; 3 supplied document(s) read; 0 document(s) could not "
+                     "be read; " + G4_EXCEPTION + ".\n\n"
+                     "The draft is plagiarism-free (against the sources checked).\n")
+    SELF_TEST.append((_DEFINED_TEXT, False))
+    # The definition without its scope is still the bare claim.
+    SELF_TEST.append(("\n".join(DEFINITION) + "\n\nThe draft is plagiarism-free.\n", True))
+except Exception:  # pragma: no cover - the gate must still run standalone
+    pass
 
 
 def self_test():
