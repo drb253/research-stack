@@ -294,14 +294,14 @@ fi
 # ---- 2. skills ------------------------------------------------------------- #
 if [ "$DO_SKILLS" = 1 ]; then
   step "2. Review skills -> $STORE/skills"
-  run "mkdir -p '$STORE/skills'"
   # Strip bytecode caches first: they are not part of the comparison below and
   # would otherwise make every re-run look like a change.
   run "find '$STORE/skills' -name '__pycache__' -type d -prune -exec rm -rf {} + 2>/dev/null || true"
   # A store copy that already matches the repo is left alone, so a re-run neither
   # churns the tree nor accumulates backups. When it differs, the previous copy
   # is kept: the store is an install destination, but a user may have edited a
-  # file there, and `cp -R` used to overwrite it silently.
+  # file there, and `cp -R` used to overwrite it silently. Nothing is created
+  # before the comparison, so a fresh install backs up nothing.
   if diff -rq -x '__pycache__' "$ROOT/skills" "$STORE/skills" >/dev/null 2>&1; then
     info "skills store already matches the repo (no copy, no backup)"
   else
@@ -352,7 +352,6 @@ if [ "$DO_SKILLS" = 1 ]; then
   # repo-root-relative; after install the same file is at $STORE/docs. The file
   # itself says so at the top.
   if [ -d "$ROOT/docs" ]; then
-    run "mkdir -p '$STORE/docs'"
     if diff -rq -x '__pycache__' "$ROOT/docs" "$STORE/docs" >/dev/null 2>&1; then
       info "docs already match the repo (no copy, no backup)"
     else

@@ -365,7 +365,7 @@ The credentials live in two files, both with mode 600: ~/.config/paper-search-mc
 
 The free keys that lift rate limits are Semantic Scholar, CORE, DOAJ, Zenodo, OpenAIRE, and OpenAlex.
 
-IEEE and ACM keys do nothing today. Both connectors (`academic_platforms/ieee.py` and `acm.py`) are skeletons that raise `NotImplementedError` even when the key is set. A keyed IEEE or ACM sweep adds no coverage. Do not advertise them as a coverage tier.
+IEEE and ACM keys do nothing today. Both connectors are skeletons that raise `NotImplementedError` even when the key is set. They live in `mcp/paper-search-mcp/paper_search_mcp/academic_platforms/` (`ieee.py` and `acm.py`). A keyed IEEE or ACM sweep adds no coverage. Do not advertise them as a coverage tier.
 
 ## Cautions
 

@@ -11,8 +11,9 @@ Catches the defect classes the numeric/provenance gates are blind to:
   T  template/placeholder leakage into a rendered deliverable
   W  CSV well-formedness (ragged / unquoted-embedded-comma rows)
   P  PRISMA flow reconciliation
-    python3 tools/check_review_integrity.py            # gate run (exit 2 on any problem)
-    python3 tools/check_review_integrity.py --selftest # prove each check fires
+  Usage (from the repository root):
+    python3 skills/evidence-synthesis-forge/scripts/check_review_integrity.py --root <review-dir>
+    python3 skills/evidence-synthesis-forge/scripts/check_review_integrity.py --selftest
 """
 import argparse, csv, json, os, re, sys
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
