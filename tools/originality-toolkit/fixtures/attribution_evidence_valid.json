@@ -1,0 +1,7 @@
+{
+ "citations_unresolved": 0,
+ "retracted_cited": 0,
+ "tool": "citecheck",
+ "checked": 12,
+ "_comment": "FIXTURE (positive): a well-formed attribution-evidence file. load_attribution_evidence() must read both counts and the tool name, with no error."
+}

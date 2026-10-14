@@ -378,12 +378,155 @@ def _load_claim_guard():
     return None
 
 
+# ---------------------------------------------------------------------------
+# The defined claim: "plagiarism-free (against the sources checked)".
+#
+# The definition lives in tools/attribution.py so the toolkit, citation-report
+# and the sysreview gate cannot drift apart. This consumer computes the five
+# facts it can see and takes the other two from --attribution-evidence. It never
+# assumes a fact: a missing evidence file withholds the statement.
+# ---------------------------------------------------------------------------
+_ATTRIBUTION_ANCHORS = ("A passage is plagiarism-free when it meets one of these "
+                        "conditions", "Scope:",
+                        "does not verify structure above the measured separation")
+EVIDENCE_FIELDS = ("citations_unresolved", "retracted_cited")
+PASSAGE_VERDICTS = ("QUOTE + CITE", "PARAPHRASE")
+
+
+def _load_attribution():
+    """Load tools/attribution.py when the toolkit sits inside the repository."""
+    for candidate in (Path(__file__).resolve().parent / "attribution.py",
+                      Path(__file__).resolve().parent.parent / "attribution.py"):
+        if candidate.is_file():
+            spec = importlib.util.spec_from_file_location("attribution", candidate)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            return module
+    return None
+
+
+def _attribution_anchors_present(text):
+    """True when the text carries the definition, the scope and the exception.
+
+    The same three anchors tools/claim_guard.py reads: without them the phrase is
+    the universal negative the project forbids, and the guard must refuse it.
+    """
+    module = _load_attribution()
+    anchors = ((module.DEFINITION_ANCHOR, module.SCOPE_ANCHOR, module.EXCEPTION_ANCHOR)
+               if module is not None else _ATTRIBUTION_ANCHORS)
+    return all(anchor in text for anchor in anchors)
+
+
+def load_attribution_evidence(path):
+    """Read the two facts this tool cannot compute from a small JSON file.
+
+    Contract: {"citations_unresolved": int >= 0, "retracted_cited": int >= 0,
+    "tool": "a non-empty name", "checked": int >= 0 (optional)}. A missing or
+    invalid file is an input gap: both counts stay None and the caller withholds
+    the statement -- an assumed zero would be the overclaim the definition exists
+    to stop.
+    """
+    result = {"citations_unresolved": None, "retracted_cited": None,
+              "tool": None, "checked": None, "error": None, "path": path}
+    if not path:
+        result["error"] = "no --attribution-evidence file was supplied"
+        return result
+    evidence_path = Path(str(path))
+    if not evidence_path.is_file():
+        result["error"] = "the evidence file does not exist: %s" % evidence_path
+        return result
+    try:
+        data = json.loads(evidence_path.read_text(encoding="utf-8"))
+    except Exception as exc:  # noqa: BLE001 - report, do not abort the run
+        result["error"] = "the evidence file is not valid JSON: %s" % exc
+        return result
+    if not isinstance(data, dict):
+        result["error"] = "the evidence file is not a JSON object"
+        return result
+    tool = data.get("tool")
+    if not isinstance(tool, str) or not tool.strip():
+        result["error"] = "the evidence file carries no tool name"
+        return result
+    counts = {}
+    for field in EVIDENCE_FIELDS:
+        value = data.get(field)
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            result["error"] = "the evidence field %r is not an integer >= 0" % field
+            return result
+        counts[field] = value
+    checked = data.get("checked")
+    if checked is not None and (isinstance(checked, bool) or not isinstance(checked, int)
+                                or checked < 0):
+        result["error"] = "the evidence field 'checked' is not an integer >= 0"
+        return result
+    result.update(counts)
+    result["tool"] = tool.strip()
+    result["checked"] = checked
+    return result
+
+
+def attribution_facts(rows, statuses, corpus_size, corpus_gaps, evidence):
+    """The seven facts evaluate() needs. Five are computed here, two supplied."""
+    passage_findings = sum(1 for row in rows
+                           if row["verdict"].startswith(PASSAGE_VERDICTS))
+    open_reviews = sum(1 for row in rows if row["verdict"].startswith("REVIEW"))
+    api_answered = sorted(source for source, status in (statuses or {}).items()
+                          if status == "ok" and source != "local")
+    documents = corpus_size or 0
+    return {
+        "passage_findings": passage_findings,
+        "open_reviews": open_reviews,
+        "citations_unresolved": evidence["citations_unresolved"],
+        "retracted_cited": evidence["retracted_cited"],
+        "sources_checked": len(api_answered) + documents,
+        "corpus_docs": documents,
+        "corpus_unreadable": len(corpus_gaps or []),
+    }
+
+
+def attribution_assessment(rows, statuses, corpus_size, corpus_gaps, evidence):
+    """Return (result, block). The block is emitted in every report.
+
+    When the shared definition module is unreachable the toolkit must not use the
+    term at all -- an anchorless use is exactly what claim_guard refuses -- so the
+    fallback says the claim cannot be evaluated and why.
+    """
+    facts = attribution_facts(rows, statuses, corpus_size, corpus_gaps, evidence)
+    module = _load_attribution()
+    if module is None:
+        result = {
+            "issuable": False,
+            "statement": ("The defined originality claim cannot be evaluated: the shared "
+                          "definition module (tools/attribution.py) was not found. This is "
+                          "an input gap, not a result."),
+            "blockers": ["the shared definition module (tools/attribution.py) was not found"],
+            "scope": None, "facts": facts, "evidence": evidence,
+        }
+        block = ("## Defined originality claim -- NOT EVALUATED\n\n"
+                 "The shared definition module (`tools/attribution.py`) was not found, so "
+                 "this report cannot evaluate the defined claim. This is an input gap, not "
+                 "a result.")
+        return result, block
+    result = module.evaluate(**facts)
+    result["facts"] = facts
+    result["evidence"] = evidence
+    block = module.render_block(result)
+    # A withheld statement names the blockers, not the boundary. The scope must
+    # still reach the report: the term is allowed only with the definition, the
+    # scope and the exception attached, and a withheld claim bounded by nothing
+    # would be the universal negative wearing the definition's clothes.
+    if module.SCOPE_ANCHOR not in block:
+        block += "\n\n" + result["scope"]
+    return result, block
+
+
 def guard_report(report, clean):
     """Return the reasons a generated report must not be emitted.
 
     Two independent properties:
-      1. it never contains an absolute claim ("plagiarism-free", "clearance",
-         "guaranteed", ...), and
+      1. it never contains an absolute claim ("clearance", "guaranteed", ...), and
+         it uses the term "plagiarism-free" ONLY with its definition, scope and
+         exception attached, and
       2. a clean result carries its bound -- the ORI Guideline 4 coverage line.
     The full repository gate (tools/claim_guard.py) runs when it is reachable;
     the local copy covers the deployed toolkit, which ships without tools/.
@@ -392,10 +535,14 @@ def guard_report(report, clean):
     if clean and STRUCTURAL_MARKER not in report:
         problems.append("clean report carries no bound: the structural-coverage "
                         "line is missing")
+    defined = _attribution_anchors_present(report)
     for pattern, why in _REPORT_FORBIDDEN:
         match = pattern.search(report)
         if match and not _REPORT_NEGATION.search(report[max(0, match.start() - 30):
                                                  match.start()]):
+            # The defined term is allowed; the bare phrase is not.
+            if pattern.pattern.startswith(r"plagiari[sz]m") and defined:
+                continue
             problems.append("forbidden claim %r (%s)" % (match.group(0), why))
     module = _load_claim_guard()
     if module is not None:
@@ -405,7 +552,8 @@ def guard_report(report, clean):
 
 
 def render_report(draft_name, rows, source_names, threshold, statuses,
-                  corpus_size=None, corpus_gaps=None, corpus_path=None):
+                  corpus_size=None, corpus_gaps=None, corpus_path=None,
+                  attribution_block=None):
     checked = len(rows)
     flagged = [r for r in rows if r["verdict"] != "ok"]
     violations = [r for r in flagged if is_violation(r["verdict"])]
@@ -422,6 +570,16 @@ def render_report(draft_name, rows, source_names, threshold, statuses,
     lines = []
     lines.append("# Self-originality report — %s" % draft_name)
     lines.append("")
+
+    def finish():
+        # The defined-claim block closes EVERY report, issued or withheld: a
+        # reader must never see a report that is silent about what the run does
+        # and does not establish.
+        if attribution_block:
+            lines.append("")
+            lines.append(attribution_block)
+        return "\n".join(lines)
+
     lines.append("Sources queried: %s  |  threshold: %.2f" % (", ".join(source_names), threshold))
     lines.append("")
     if corpus_empty:
@@ -470,7 +628,7 @@ def render_report(draft_name, rows, source_names, threshold, statuses,
                          "This does **not** clear you: Turnitin's web and student-paper "
                          "repositories are private and not reachable here.")
         lines.append("")
-        return "\n".join(lines)
+        return finish()
 
     lines.append("## Flagged passages")
     lines.append("")
@@ -510,7 +668,7 @@ def render_report(draft_name, rows, source_names, threshold, statuses,
         else:
             lines.append("| %d | - | - | ok | (no candidate) |" % index)
     lines.append("")
-    return "\n".join(lines)
+    return finish()
 
 
 def _action_text(verdict):
@@ -688,6 +846,94 @@ def _self_test():
                 problems.append("claim_guard did not report UNBOUNDED on the fixture; "
                                 "got %r" % sorted(kinds))
 
+    # (k) the defined claim. Fixture 1: every condition holds, so the statement
+    # IS issued and it carries the scope. The block reaches a clean report.
+    attribution = _load_attribution()
+    if attribution is None:
+        # The deployed toolkit ships without tools/. The claim then cannot be
+        # evaluated at all, and the report must say so without using the term.
+        fallback, fallback_block = attribution_assessment([], {}, 0, [], {
+            "citations_unresolved": None, "retracted_cited": None, "error": "not supplied"})
+        if fallback["issuable"]:
+            problems.append("the defined claim was issued without the definition module")
+        if "plagiarism-free" in fallback_block.lower():
+            problems.append("the fallback used the term without its definition")
+    else:
+        issued = attribution.evaluate(
+            passage_findings=0, open_reviews=0, citations_unresolved=0,
+            retracted_cited=0, sources_checked=5, corpus_docs=3, corpus_unreadable=0)
+        if not issued["issuable"]:
+            problems.append("the defined claim was withheld with every condition true: %r"
+                            % issued["blockers"])
+        if attribution.SCOPE_ANCHOR not in issued["statement"]:
+            problems.append("the issued statement carries no scope")
+        issued_report = render_report("d.md", [], ["local"], 0.30, {}, corpus_size=3,
+                                      attribution_block=attribution.render_block(issued))
+        if attribution.DEFINITION_ANCHOR not in issued_report:
+            problems.append("an issued report does not carry the definition")
+        if attribution.EXCEPTION_ANCHOR not in issued_report:
+            problems.append("an issued report does not carry the structure exception")
+        if guard_report(issued_report, clean=True):
+            problems.append("the report guard refused an issued report: %r"
+                            % guard_report(issued_report, clean=True))
+        # Fixture 2: the evidence file is missing -> NOT ISSUED, naming citation
+        # resolution, and the withheld block still reaches the report.
+        withheld = attribution.evaluate(
+            passage_findings=0, open_reviews=0, citations_unresolved=None,
+            retracted_cited=None, sources_checked=2, corpus_docs=1, corpus_unreadable=0)
+        if withheld["issuable"]:
+            problems.append("the defined claim was issued with no citation evidence")
+        if "citation resolution was not verified" not in " ".join(withheld["blockers"]):
+            problems.append("the withheld claim does not name citation resolution: %r"
+                            % withheld["blockers"])
+        withheld_report = render_report("d.md", [], ["local"], 0.30, {}, corpus_size=1,
+                                        attribution_block=attribution.render_block(withheld))
+        if attribution.DEFINITION_ANCHOR not in withheld_report:
+            problems.append("a withheld report does not carry the definition")
+        if "NOT ISSUED" not in withheld_report:
+            problems.append("a withheld report does not say NOT ISSUED")
+        # Fixture 3: a passage finding exists -> NOT ISSUED.
+        blocked = attribution.evaluate(
+            passage_findings=2, open_reviews=0, citations_unresolved=0,
+            retracted_cited=0, sources_checked=5, corpus_docs=3, corpus_unreadable=0)
+        if blocked["issuable"]:
+            problems.append("the defined claim was issued with a passage finding")
+    # The bare term, without the definition, is still refused.
+    bare = "The draft is plagiarism-free.\n"
+    if not guard_report(bare, clean=False):
+        problems.append("the bare term was not refused by the report guard")
+
+    # (l) the evidence-file contract: valid reads; missing and invalid stay None.
+    valid = load_attribution_evidence(fixtures / "attribution_evidence_valid.json")
+    if valid["error"] or valid["citations_unresolved"] != 0 or valid["retracted_cited"] != 0:
+        problems.append("a valid evidence file was not read: %r" % valid)
+    if valid["tool"] != "citecheck":
+        problems.append("a valid evidence file lost its tool name: %r" % valid)
+    invalid = load_attribution_evidence(fixtures / "attribution_evidence_invalid.json")
+    if invalid["citations_unresolved"] is not None or invalid["retracted_cited"] is not None:
+        problems.append("an invalid evidence file did not stay None: %r" % invalid)
+    if not invalid["error"]:
+        problems.append("an invalid evidence file gave no reason: %r" % invalid)
+    missing = load_attribution_evidence(fixtures / "no_such_evidence.json")
+    if missing["citations_unresolved"] is not None or missing["retracted_cited"] is not None:
+        problems.append("a missing evidence file did not stay None: %r" % missing)
+    if not missing["error"]:
+        problems.append("a missing evidence file gave no reason: %r" % missing)
+    # Facts mapping: a REVIEW row is an open review, not a passage finding.
+    review_row = {"sentence": "s", "verdict": "REVIEW (topical overlap)", "best": None}
+    quote_row = {"sentence": "s", "verdict": "QUOTE + CITE (verbatim)", "best": None}
+    quoted_row = {"sentence": "s", "verdict": "QUOTED (verbatim; verify the citation)",
+                  "best": None}
+    facts = attribution_facts([review_row, quote_row, quoted_row], {"openalex": "ok"},
+                              2, [{"file": "x"}],
+                              {"citations_unresolved": 1, "retracted_cited": 0})
+    if facts["passage_findings"] != 1 or facts["open_reviews"] != 1:
+        problems.append("the facts mapping is wrong: %r" % facts)
+    if facts["sources_checked"] != 3 or facts["corpus_docs"] != 2:
+        problems.append("sources_checked/corpus_docs are wrong: %r" % facts)
+    if facts["corpus_unreadable"] != 1:
+        problems.append("corpus_unreadable is wrong: %r" % facts)
+
     for p in problems:
         print("self-test FAILED: %s" % p)
     if problems:
@@ -719,6 +965,11 @@ def main(argv=None):
                         help="do not drop <table> content from HTML drafts")
     parser.add_argument("--min-words", type=int, default=8)
     parser.add_argument("--out", default=None, help="write markdown report here")
+    parser.add_argument("--attribution-evidence", default=None, metavar="FILE",
+                        help="JSON with the two facts this tool cannot compute: "
+                             '{"citations_unresolved": N, "retracted_cited": N, '
+                             '"tool": "name", "checked": N}. Without it the defined '
+                             "claim is WITHHELD (input gap), never assumed zero.")
     parser.add_argument("--json", dest="json_out", default=None,
                         help="write machine-readable results here (consumed by cite_fix.py)")
     parser.add_argument("--refresh", action="store_true", help="ignore cache")
@@ -780,10 +1031,17 @@ def main(argv=None):
                      "verdict": verdict(best, args.threshold, args.min_run)})
     sys.stderr.write("\r" + " " * 90 + "\r")
 
+    # The defined claim runs on every report. Two of its facts come from the
+    # caller's evidence file; without that file the statement is withheld, never
+    # issued on an assumed zero.
+    evidence = load_attribution_evidence(args.attribution_evidence)
+    attribution, attribution_block = attribution_assessment(
+        rows, seen_statuses, n_docs, corpus_gaps, evidence)
     report = render_report(os.path.basename(args.draft), rows, source_names,
                            args.threshold, seen_statuses,
                            corpus_size=n_docs, corpus_gaps=corpus_gaps,
-                           corpus_path=args.corpus)
+                           corpus_path=args.corpus,
+                           attribution_block=attribution_block)
     flagged = sum(1 for r in rows if r["verdict"] != "ok")
     # The report is a product, not a debug dump: it must not overclaim and a
     # clean result must carry its bound. Refuse to emit a report that fails either
@@ -795,6 +1053,11 @@ def main(argv=None):
         for problem in guard_problems:
             print("  - %s" % problem, file=sys.stderr)
         return 1
+    if evidence["error"]:
+        print("attribution evidence: %s" % evidence["error"], file=sys.stderr)
+    if not attribution["issuable"]:
+        print("attribution: the defined claim is WITHHELD: %s"
+              % "; ".join(attribution["blockers"]), file=sys.stderr)
     if args.out:
         with open(args.out, "w", encoding="utf-8") as handle:
             handle.write(report)
@@ -828,6 +1091,17 @@ def main(argv=None):
                 "sentences_compared": len(rows),
                 "frame_copy_covered": False,
                 "line": structural_coverage_line(len(rows), n_docs, source_names),
+            },
+            # The defined claim travels with its scope and its evidence status, in
+            # the JSON as well as the markdown: a consumer that reads only the JSON
+            # must still see whether the claim was issued and what bounded it.
+            "attribution": {
+                "issuable": attribution["issuable"],
+                "statement": attribution["statement"],
+                "blockers": attribution["blockers"],
+                "scope": attribution["scope"],
+                "facts": attribution["facts"],
+                "evidence": attribution["evidence"],
             },
             "results": [
                 {

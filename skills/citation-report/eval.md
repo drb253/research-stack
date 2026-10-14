@@ -178,6 +178,34 @@ its artifacts instead of reporting `CONFLICT_LINK_INFERRED`. Section 3 holds bot
 `prose_summary`. Editing `verdicts.json` to create one must also fail the gate
 (`CONFLICT_LINK_INFERRED`, `CONFLICT_EVIDENCE_TOO_WEAK`).
 
+### 8c-i. Is the defined claim earned?
+
+The report may carry one defined claim: plagiarism-free against the sources checked. The definition lives
+in `tools/attribution.py`, and `verdicts.json` carries the `attribution` object it produced. Check four
+things.
+
+1. **The block is complete.** `verdicts.json` and the JSON envelope carry the `attribution` object with
+   its `facts`, `statement`, `scope` and `blockers`. The PDF, DOCX and HTML artifacts print the
+   definition, the statement and the scope. The gate recomputes the facts from the recorded verdicts and
+   reports `ATTRIBUTION_MISMATCH` on any disagreement; it reports `ATTRIBUTION_BLOCK_MISSING` when an
+   artifact prints the term without the definition's three anchors.
+2. **The scope names all four facts.** The statement carries a `Scope:` line with the sources checked,
+   the supplied documents read, the documents that could not be read, and the structure exception. A
+   statement without them is the universal negative this project refuses.
+3. **The statement is issued only when every condition holds.** An unresolved citation, a retracted cited
+   source, an open review, a passage finding, or an unread supplied document must each withhold it and be
+   named in the blockers. A fact the run cannot establish is `None`, never 0: with no source checked the
+   statement is withheld rather than assumed clean.
+4. **A bare use of the term still fails.** The honesty step scans the artifact text as well as the
+   recorded prose, so a claim added to an artifact without the definition reports `HONESTY_CLAIM`.
+
+`scripts/selftest.sh` pins all three outcomes — issued, withheld on an unresolved citation, withheld on a
+corpus gap — and the bare-claim direction.
+
+**Fails when:** the statement is issued while any condition fails, a blocker is missing or unnamed, a
+fact is assumed to be zero instead of `None`, an artifact prints the term without the definition, or a
+recorded statement disagrees with the gate's recomputation.
+
 ## 8d. Did the tool understand the document?
 
 Read the `preconditions` array in the audit output. All four report an observed value whether they pass

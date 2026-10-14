@@ -61,13 +61,13 @@ def load_honesty_scanner():
     return claim_guard.scan
 
 
-def honesty_findings(text, scanner=None):
+def honesty_findings(text, scanner=None, where="report prose"):
     """Findings for one piece of report prose. ``None`` means the scanner is absent."""
     if scanner is None:
         scanner = load_honesty_scanner()
     if scanner is None:
         return None
-    return scanner(text, where="report prose")
+    return scanner(text, where=where)
 
 
 def report_prose(graded, record=None) -> str:
@@ -76,23 +76,35 @@ def report_prose(graded, record=None) -> str:
     ``claim_guard`` decides a clean result at document level, so a bound anywhere in
     the report bounds a clean statement elsewhere in it. Joining the notes keeps that
     semantics and stops the gate firing on a note that a reader would bound.
+
+    The recorded attribution block is part of this prose. Without it the block's own
+    use of the defined term would look like the bare universal negative to
+    ``claim_guard``, and the gate would refuse the report the tool just wrote.
     """
+    import _attribution
     import _highlight
 
     parts = [_highlight.note_text(verdict) for verdict in graded]
     document = (record or {}).get("document")
     if isinstance(document, dict) and document.get("transcribed"):
         parts.append("the document text was transcribed by %s" % document.get("transcription", "ocr"))
+    block = _attribution.markdown_from_record((record or {}).get("attribution"))
+    if block:
+        parts.append(block)
     return "\n".join(parts)
 
 
-def check_honesty(graded, record=None, scanner=None) -> list:
+def check_honesty(graded, record=None, scanner=None, out_dir=None) -> list:
     """The gate's honesty step: no universal negative may ship in a generated report.
 
     A report that says "plagiarism-free" claims something no bounded check can
     establish, and a clean result must name what it was checked against.
     ``tools/claim_guard.py`` owns that rule, so the gate calls it rather than
     re-implementing the rule and letting the two drift apart.
+
+    The artifacts are scanned as well as the recorded prose, each as its own document:
+    a term that the definition does not bound, added to an artifact by hand, then has
+    nothing to exempt it.
     """
     if scanner is None:
         scanner = load_honesty_scanner()
@@ -105,17 +117,112 @@ def check_honesty(graded, record=None, scanner=None) -> list:
                 "report's own claims were not scanned for a universal negative",
             )
         ]
+    corpora = [("the report's own notes", report_prose(graded, record))]
+    html = Path(out_dir) / "report.html" if out_dir else None
+    if html is not None and html.is_file():
+        corpora.append((str(html), html.read_text(encoding="utf-8", errors="replace")))
     issues: list = []
-    for finding in honesty_findings(report_prose(graded, record), scanner) or []:
-        code = "HONESTY_UNBOUNDED" if finding["kind"] == "UNBOUNDED" else "HONESTY_CLAIM"
+    for where, text in corpora:
+        for finding in honesty_findings(text, scanner, where) or []:
+            code = "HONESTY_UNBOUNDED" if finding["kind"] == "UNBOUNDED" else "HONESTY_CLAIM"
+            issues.append(
+                _common.issue(
+                    "error",
+                    code,
+                    item_id=finding["kind"],
+                    detail="%s: %s" % (where, finding["message"]),
+                )
+            )
+    return issues
+
+
+def check_attribution(graded, record, out_dir=None, rebuilt=None) -> list:
+    """Recompute the defined claim, and check the artifact carries it.
+
+    The gate recomputes the facts from the recorded verdicts, calls the shared
+    definition, and compares. A hand-edited ``attribution`` object then cannot claim a
+    statement that the run's own numbers do not support.
+
+    The HTML artifact must carry the definition's three anchors. The claim a reader
+    sees is the claim that has to be bounded, so a report that prints the term without
+    the definition, the scope and the exception is an error even if the recorded file
+    looks well formed.
+    """
+    import _attribution
+
+    module = _attribution.load_module()
+    if module is None:
+        return [
+            _common.issue(
+                "warning",
+                "ATTRIBUTION_DEFINITION_UNAVAILABLE",
+                detail="tools/attribution.py is not installed beside the skill, so the "
+                "recorded claim could not be recomputed",
+            )
+        ]
+    if rebuilt is None:
+        rebuilt = _attribution.build(record.get("coverage") or {}, graded)
+    if not rebuilt.get("available"):
+        return [
+            _common.issue(
+                "warning",
+                "ATTRIBUTION_DEFINITION_UNAVAILABLE",
+                detail=str(rebuilt.get("reason") or "the definition could not be loaded"),
+            )
+        ]
+    result = rebuilt["result"]
+    stored = record.get("attribution") or {}
+    issues: list = []
+    if stored and not stored.get("available", False):
         issues.append(
             _common.issue(
                 "error",
-                code,
-                item_id=finding["kind"],
-                detail="the report's own text: %s" % finding["message"],
+                "ATTRIBUTION_MISMATCH",
+                item_id="available",
+                detail="the record says the definition was unavailable, but it is installed "
+                "and the run's facts can be evaluated",
             )
         )
+    elif stored:
+        for key in ("issuable", "statement", "scope"):
+            if stored.get(key) != result.get(key):
+                issues.append(
+                    _common.issue(
+                        "error",
+                        "ATTRIBUTION_MISMATCH",
+                        item_id=key,
+                        detail="recorded %r, recomputed %r" % (stored.get(key), result.get(key)),
+                    )
+                )
+        if sorted(stored.get("blockers") or []) != sorted(result.get("blockers") or []):
+            issues.append(
+                _common.issue(
+                    "error",
+                    "ATTRIBUTION_MISMATCH",
+                    item_id="blockers",
+                    detail="recorded %r, recomputed %r"
+                    % (stored.get("blockers"), result.get("blockers")),
+                )
+            )
+    html = Path(out_dir) / "report.html" if out_dir else None
+    if html is not None and html.is_file():
+        text = html.read_text(encoding="utf-8", errors="replace")
+        # The block is required when the record carries one, and whenever the artifact
+        # uses the term. A report that never makes the claim needs no block: the rule is
+        # that the term must not appear without its definition, not that every artifact
+        # must print the definition.
+        if stored.get("available") or "plagiarism-free" in text.lower():
+            missing = [anchor for anchor in _attribution.anchors(module) if anchor not in text]
+            if missing:
+                issues.append(
+                    _common.issue(
+                        "error",
+                        "ATTRIBUTION_BLOCK_MISSING",
+                        item_id="html",
+                        detail="report.html does not carry the whole definition; missing: %s"
+                        % "; ".join(missing),
+                    )
+                )
     return issues
 
 
@@ -532,7 +639,13 @@ def check_directory(out_dir, *, document=None, bundle=None) -> int:
     #     universal negative ("plagiarism-free"), and a clean result must state what it
     #     was checked against. `tools/claim_guard.py` is the repository's authority on
     #     that, so the gate calls it instead of re-implementing the rule.
-    issues.extend(check_honesty(graded, record))
+    issues.extend(check_honesty(graded, record, out_dir=out_dir))
+    # 3e. The defined claim is recomputed from the recorded verdicts, and the artifact
+    #     must carry the definition it rests on.
+    import _attribution
+
+    attribution_built = _attribution.build(record.get("coverage") or {}, graded)
+    issues.extend(check_attribution(graded, record, out_dir, attribution_built))
 
     for verdict in errors[:MAX_REPORTED_ERRORS]:
         issues.append(
@@ -592,8 +705,14 @@ def check_directory(out_dir, *, document=None, bundle=None) -> int:
             "warning_severity_sentences": len(warnings),
             "artifacts_verified": len(present),
             "coverage_percent": (recorded or {}).get("citation_coverage", {}).get("percent"),
+            "attribution_issuable": (
+                attribution_built.get("result") or {}
+            ).get("issuable"),
         },
-        extra={"artifacts": artifact_reports},
+        extra={
+            "artifacts": artifact_reports,
+            "attribution": _attribution.record(attribution_built),
+        },
     )
 
 

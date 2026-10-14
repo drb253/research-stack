@@ -783,6 +783,86 @@ def test_honesty_gate() -> int:
     return checks
 
 
+def test_attribution_facts() -> int:
+    """The state-to-fact mapping, and the None rule, must not drift.
+
+    The defined claim is only as good as the facts behind it, and the one failure mode
+    that matters is a fact assumed to be zero when the run never checked it.
+    """
+    checks = 0
+    import _attribution
+
+    module = _attribution.load_module()
+    _check(
+        module is not None,
+        "tools/attribution.py must be importable from the skill; without it no statement "
+        "may be issued at all",
+    )
+    checks += 1
+
+    _check(
+        _attribution.CITABLE_KINDS == (verdicts.CITABLE_MARKER_KINDS | {"author_year"}),
+        "the citable kinds must mirror the classifier: %r vs %r"
+        % (_attribution.CITABLE_KINDS, verdicts.CITABLE_MARKER_KINDS),
+    )
+    checks += 1
+
+    class _Verdict:
+        def __init__(self, *kinds):
+            self.unresolved_tokens = [{"kind": kind, "token": "1"} for kind in kinds]
+
+    summary = {
+        "states": {"conflict": 1, "unattributed": 2, "unverifiable": 3},
+        "rules": {"D03": 2, "D04": 1},
+        "sources": {"total": 5, "with_evidence": 3},
+    }
+    values = _attribution.facts(summary, [_Verdict("numeric", "bracket")])
+    _check(values["passage_findings"] == 3, "conflict + unattributed: %r" % values)
+    _check(values["open_reviews"] == 3, "every unverifiable sentence is an open review")
+    _check(values["citations_unresolved"] == 2, "unresolved citable tokens: %r" % values)
+    _check(values["retracted_cited"] == 1, "D04 sentences are the retracted citations")
+    _check(
+        values["sources_checked"] == 5 and values["corpus_docs"] == 3,
+        "the ledger size and the read documents: %r" % values,
+    )
+    _check(values["corpus_unreadable"] == 2, "5 supplied minus 3 read is 2 unread")
+    checks += 1
+
+    # No ledger: resolution and retraction were never verified, so both are None, never
+    # 0. A claim that assumes zero is the overclaim the shared definition exists to stop.
+    empty = _attribution.facts(
+        {"states": {}, "rules": {}, "sources": {"total": 0}}, [_Verdict("numeric")]
+    )
+    _check(
+        empty["citations_unresolved"] is None and empty["retracted_cited"] is None,
+        "an unchecked fact must be None, never 0: %r" % empty,
+    )
+    checks += 1
+
+    # A clean set of facts is issued; one unresolved citation is not.
+    clean = _attribution.facts(
+        {"states": {}, "rules": {}, "sources": {"total": 1, "with_evidence": 1}}, []
+    )
+    _check(module.evaluate(**clean)["issuable"] is True, "every condition holds -> issued")
+    _check(
+        module.evaluate(**values)["issuable"] is False,
+        "one unresolved citation must withhold the statement",
+    )
+    checks += 1
+
+    # The three anchors claim_guard requires must be reachable in what the report prints,
+    # in both directions: the withheld statement must still carry the scope.
+    withheld = module.evaluate(passage_findings=1, citations_unresolved=0, retracted_cited=0)
+    built = {"available": True, "facts": {}, "result": withheld}
+    block = _attribution.markdown(built)
+    for anchor in _attribution.anchors(module):
+        reachable = anchor in block or anchor in "\n".join(module.DEFINITION)
+        _check(reachable, "the block must carry the anchor %r" % anchor)
+    _check("Scope:" in block, "a withheld block still carries its scope: %r" % block)
+    checks += 1
+    return checks
+
+
 def main() -> int:
     tests = [
         ("sentence splitting", test_sentence_splitting),
@@ -801,6 +881,7 @@ def main() -> int:
         ("intake preconditions", test_preconditions),
         ("worklist wording", test_worklist_wording),
         ("honesty gate", test_honesty_gate),
+        ("attribution facts", test_attribution_facts),
     ]
     total = 0
     failed = 0

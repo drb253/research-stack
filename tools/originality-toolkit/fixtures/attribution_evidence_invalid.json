@@ -1,0 +1,6 @@
+{
+ "citations_unresolved": "none",
+ "retracted_cited": 0,
+ "tool": "",
+ "_comment": "FIXTURE (negative): a malformed attribution-evidence file. The count is a string and the tool name is empty, so load_attribution_evidence() must reject it and keep both counts None -- the statement is withheld, never issued on an assumed zero."
+}

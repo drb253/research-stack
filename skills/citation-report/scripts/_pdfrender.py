@@ -490,6 +490,25 @@ class _Renderer:
             self.space(4.0)
         self._legend_table()
 
+    def attribution_section(self, meta: dict) -> None:
+        """The defined claim, with its definition and its scope.
+
+        Printed only when the shared definition is installed. The term never appears in
+        the artifact without the definition, the scope and the one exception beside it.
+        """
+        block = (meta or {}).get("attribution") or {}
+        statement = str(block.get("statement") or "").strip()
+        if not statement:
+            return
+        self.report_heading(str(block.get("heading") or "The defined claim"))
+        for line in block.get("definition") or []:
+            self.prose(str(line), font="F1", size=8.6, gray=0.15)
+        self.prose(statement, font="F2", size=9.0)
+        if "Scope:" not in statement:
+            # The boundary is printed even when the statement is withheld, so the
+            # reader never meets the term on its own.
+            self.prose(str(block.get("scope") or ""), font="F1", size=8.6, gray=0.15)
+
     def _coverage_bar(self, summary: dict) -> None:
         states = summary.get("states") or {}
         total = summary.get("sentences_total") or sum(states.values()) or 0
@@ -945,6 +964,7 @@ def render(layout, summary, bundle, meta) -> tuple:
     painter.gate_banner(meta)
     painter.input_bound_banner(meta)
     painter.coverage_section(summary)
+    painter.attribution_section(meta)
     painter.document_body(layout)
     painter.disclosure(bundle, meta)
     painter.sources_appendix(bundle)

@@ -731,6 +731,33 @@ class _Composer:
                 )
             )
 
+    def _attribution(self) -> None:
+        """The defined claim, with its definition and its scope.
+
+        Printed only when the shared definition is installed. The term never appears in
+        the artifact without the definition, the scope and the one exception beside it.
+        """
+        block = self.meta.get("attribution") or {}
+        statement = str(block.get("statement") or "").strip()
+        if not statement:
+            return
+        self.body.append(
+            self._paragraph("Heading1", self._run(block.get("heading") or ""))
+        )
+        for line in block.get("definition") or []:
+            self.body.append(self._plain(line))
+        self.body.append(
+            self._paragraph(
+                "Normal",
+                self._run(statement, bold=True, color="2F3A5C"),
+                extra='<w:spacing w:before="120" w:after="60"/>',
+            )
+        )
+        if "Scope:" not in statement:
+            # The boundary is printed even when the statement is withheld, so the
+            # reader never meets the term on its own.
+            self.body.append(self._plain(block.get("scope") or ""))
+
     # -- 4. legend ----------------------------------------------------------- #
 
     def _legend(self) -> None:
@@ -884,9 +911,10 @@ class _Composer:
             "and it is counted separately from both covered and uncovered.",
             "A sentence is never painted red because a value was missing from extracted "
             "text. Extraction routinely loses tables, figures and supplementary "
-            "material, so absence is recorded as unverifiable. Red requires a citation "
-            "that resolves to nothing, a retracted source, or a value that contradicts "
-            "the same named measure in a source we actually hold.",
+            "material, so absence is recorded as unverifiable. Red requires a retracted "
+            "source, or a value that contradicts the same named measure in a source we "
+            "actually hold. A citation that resolves to nothing warns instead: an "
+            "unmatched marker has no link to verify.",
             "Advisory grades are advisory and never gate inputs. They are "
             "model-generated, cannot set, change or veto a verdict, and are disclosed "
             "as: %s." % _common.ADVISORY_DISCLOSURE,
@@ -1067,6 +1095,7 @@ class _Composer:
         # nesting it inside the gate banner would hide it on a clean-but-unverifiable run.
         self._input_bound_banner()
         self._coverage_bar()
+        self._attribution()
         self._legend()
         self._document_body()
         self._limits()

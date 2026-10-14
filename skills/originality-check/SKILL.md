@@ -30,6 +30,44 @@ what exactly overlaps, and what citation belongs there?*
 - It never certifies originality. It lowers avoidable matches by *attributing*
   them and by flagging near-verbatim paraphrase.
 
+- It uses the term **plagiarism-free (against the sources checked)** only in the
+  defined form below. Every report carries the definition, the statement and the
+  scope, issued or withheld. Never write the bare phrase.
+
+## The defined claim, and its evidence
+
+`tools/attribution.py` holds the project's definition of one term:
+**plagiarism-free (against the sources checked)**. Run `python3
+tools/attribution.py --definition` for the exact wording. In short:
+
+- A passage is plagiarism-free when it meets one of these conditions.
+
+- It quotes another work, marks the quotation, and cites the source.
+
+- It paraphrases another work in new words, and cites the source.
+
+- It states a fact that needs no citation.
+
+- A document meets the definition when every assessed passage meets one
+  condition, every citation resolves, and the run cites no retracted source.
+
+- The check reads only the sources supplied or reachable. It does not verify structure above the measured separation.
+
+Scope: sources checked; supplied documents read; documents that could not be
+read; the structure exception.
+
+The toolkit computes five of the seven facts. It counts the passage findings,
+the open reviews, the sources that answered, and the documents read and not
+read. You supply the other two facts with `--attribution-evidence FILE`:
+
+```json
+{"citations_unresolved": 0, "retracted_cited": 0, "tool": "citecheck", "checked": 12}
+```
+
+The file needs both counts as integers of 0 or more, plus a tool name. An
+absent or invalid file withholds the statement and names the missing fact. The
+toolkit never assumes zero.
+
 ## Alignment with the ORI ethical-writing guide
 
 The guide is *"Avoiding Plagiarism, Self-plagiarism, and Other Questionable
@@ -45,12 +83,12 @@ plagiarism, and 2 it calls correct.
 |---|---|
 | G2 — verbatim text must be **quoted** | **implemented**: a quoted run returns `QUOTED (verbatim; verify the citation)`, which is correct practice and not a violation; the same words unquoted return `QUOTE + CITE (verbatim)` |
 | G3/G6 — summarise and paraphrase in your own words, keeping the meaning | implemented (lexical overlap plus verbatim run) |
-| G4 — a paraphrase must also use its own **syntactical structure** | **measured, no threshold wired** — see below |
-| G5 — always identify the source | out of scope for this tool; `cite_fix.py` and `audit_citations.py` cover it |
+| G4 — a paraphrase must also use its own **syntactical structure** | **measured, no threshold wired** — this is the stated structure exception in the defined claim, and every report carries it |
+| G5 — always identify the source | out of scope for this tool; `cite_fix.py` and `audit_citations.py` cover it, and `--attribution-evidence` supplies `citations_unresolved` |
 | G8 — when in doubt about common knowledge, cite it | partly: the `--min-run` noise floor suppresses generic phrasing |
 | G11/G14 — text recycling and self-plagiarism | use `--corpus` to add your own prior papers |
-| G15 — body citations and reference list, both directions | `audit_citations.py` (`UNCITED_REFERENCE`, `CITATION_EXCEEDS_REFERENCE_LIST`) |
-| G17 — the cited work must not be corrected or retracted | `cross_verify_citations.py` makes retraction a hard failure (99% lower bound measured); corrections are a warning |
+| G15 — body citations and reference list, both directions | `audit_citations.py` (`UNCITED_REFERENCE`, `CITATION_EXCEEDS_REFERENCE_LIST`) supplies `citations_unresolved` |
+| G17 — the cited work must not be corrected or retracted | `cross_verify_citations.py` makes retraction a hard failure (99% lower bound measured); it supplies `retracted_cited` |
 
 **G4 (structure): the toolkit measures it, and it wires no threshold**. A frame
 copy swaps every content word but keeps the function-word frame: "whether X are
@@ -173,7 +211,7 @@ python3 style_pass.py DRAFT --report out.json --out style_report.md --clean draf
 
 `--sources`, `--corpus`, `--threshold` (0.30), `--min-run` (3), `--min-words`
 (8), `--keep-tables`, `--refresh`, `--json`, `--out`, `--allow-insufficient`,
-`--recheck`.
+`--recheck`, `--attribution-evidence`.
 
 ## Checking against sources the APIs cannot reach
 
@@ -217,4 +255,4 @@ python3 originality_check.py DRAFT --corpus thesis_chapter3.pdf
   not soften it.
 
 - `eval.md` lists the checks to run before you return output: hard errors O1,
-  O2 and O3, plus O4, O5, O6 and O7.
+  O2 and O3, plus O4, O5, O6, O7 and O8.

@@ -65,7 +65,10 @@ DEFINITION = [
 # are the universal negative this project forbids.
 DEFINITION_ANCHOR = "A passage is plagiarism-free when it meets one of these conditions"
 SCOPE_ANCHOR = "Scope:"
-EXCEPTION_ANCHOR = "does not verify structure above the measured separation"
+# The shared substring, so the definition sentence and the scope line cannot drift
+# apart -- a consumer flagged exactly that risk. The wording of each sentence stays
+# free to read naturally; this string is what the gate checks.
+EXCEPTION_ANCHOR = "above the measured separation"
 
 G4_EXCEPTION = "structure is not verified above the measured separation"
 
@@ -77,13 +80,20 @@ def scope_line(sources_checked, corpus_docs, corpus_unreadable):
 
 
 def evaluate(*, passage_findings=0, open_reviews=0, citations_unresolved=None,
-             retracted_cited=None, sources_checked=0, corpus_docs=0, corpus_unreadable=0):
+             retracted_cited=None, sources_checked=0, corpus_docs=0, corpus_unreadable=0,
+             evidence_hint="supply the source evidence this check needs"):
     """Decide whether the statement may be issued. Return the result and the blockers.
 
     `citations_unresolved` and `retracted_cited` are None when the caller has no
     evidence for them. None is an input gap and blocks the statement: this tool
     cannot verify citation resolution or retraction itself, and a claim that
     silently assumes them would be the overclaim the definition exists to stop.
+
+    `evidence_hint` names what the CALLER's user must supply. The default is
+    neutral because the flag differs per consumer (the toolkit takes
+    `--attribution-evidence`, citation-report takes `--sources`/`--bib`/`--dois`,
+    sysreview reads its citation gate); naming one consumer's flag in a shared
+    message sent users to a flag their tool does not have.
     """
     blockers = []
     if passage_findings:
@@ -93,11 +103,11 @@ def evaluate(*, passage_findings=0, open_reviews=0, citations_unresolved=None,
         blockers.append("%d passage(s) still need a decision: cite them, or record them as "
                         "common knowledge" % open_reviews)
     if citations_unresolved is None:
-        blockers.append("citation resolution was not verified (supply --attribution-evidence)")
+        blockers.append("citation resolution was not verified (%s)" % evidence_hint)
     elif citations_unresolved:
         blockers.append("%d citation(s) do not resolve" % citations_unresolved)
     if retracted_cited is None:
-        blockers.append("retracted sources were not checked (supply --attribution-evidence)")
+        blockers.append("retracted sources were not checked (%s)" % evidence_hint)
     elif retracted_cited:
         blockers.append("%d cited source(s) are retracted" % retracted_cited)
     if corpus_unreadable:

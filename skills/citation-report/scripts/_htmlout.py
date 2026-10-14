@@ -208,6 +208,7 @@ def render(layout, summary, bundle, meta) -> tuple:
         _emit_gate(parts)
     _emit_input_bound(parts, meta)
     _emit_coverage(parts, summary)
+    _emit_attribution(parts, meta)
     _emit_legend(parts)
     highlights, segments = _emit_document(parts, layout, notes, warnings)
     _emit_limits(parts, bundle, meta, advisory_enabled)
@@ -365,6 +366,39 @@ def _emit_coverage(parts, summary) -> None:
     caveat = _text(summary.get("coverage_caveat"))
     if caveat:
         parts.append('<p class="caveat">%s</p>' % esc(caveat))
+    parts.append("</section>")
+
+
+def _emit_attribution(parts, meta) -> None:
+    """The defined claim, with its definition and its scope.
+
+    Printed only when the shared definition is installed (`meta["attribution"]` is
+    empty otherwise). The term never appears in an artifact without the definition, the
+    scope and the one exception printed beside it.
+    """
+    block = (meta or {}).get("attribution") or {}
+    statement = _text(block.get("statement"))
+    if not statement:
+        return
+    parts.append('<section class="limits attribution">')
+    parts.append('<h2 class="section-h">%s</h2>' % esc(_text(block.get("heading"))))
+    lines = [_text(line) for line in (block.get("definition") or [])]
+    bullets = [line for line in lines if line.startswith("- ")]
+    prose = [line for line in lines if not line.startswith("- ")]
+    for line in prose[:1]:
+        parts.append("<p>%s</p>" % esc(line))
+    if bullets:
+        parts.append("<ul>")
+        for line in bullets:
+            parts.append("<li>%s</li>" % esc(line[2:]))
+        parts.append("</ul>")
+    for line in prose[1:]:
+        parts.append("<p>%s</p>" % esc(line))
+    parts.append('<p class="caveat"><strong>%s</strong></p>' % esc(statement))
+    if "Scope:" not in statement:
+        # The boundary is printed even when the statement is withheld, so the reader
+        # never meets the term on its own.
+        parts.append('<p class="caveat">%s</p>' % esc(_text(block.get("scope"))))
     parts.append("</section>")
 
 

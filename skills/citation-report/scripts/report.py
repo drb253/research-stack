@@ -20,6 +20,7 @@ import json
 import sys
 from pathlib import Path
 
+import _attribution
 import _bundle
 import _common
 import _evidence
@@ -232,7 +233,7 @@ def _errors_and_warnings(graded) -> tuple:
     return errors, warnings
 
 
-def _verdict_payload(document, bundle, graded, summary, meta, evidence=None) -> dict:
+def _verdict_payload(document, bundle, graded, summary, meta, evidence=None, attribution=None) -> dict:
     errors, warnings = _errors_and_warnings(graded)
     result = evidence or {}
     status = result.get("status") if result.get("blocking") else ("fail" if errors else "pass")
@@ -248,6 +249,10 @@ def _verdict_payload(document, bundle, graded, summary, meta, evidence=None) -> 
         # to see whether the tool was in a position to make these findings, not only what
         # the sources contained.
         "preconditions": list(meta.get("preconditions", []) or []),
+        # The defined claim, with every fact it rests on. `available: false` means the
+        # shared definition was not installed, and no statement may be issued.
+        "attribution": attribution if attribution is not None else {"available": False,
+                                                                    "reason": "not evaluated"},
         "gate": {
             "status": "fail" if errors else "pass",
             "errors": len(errors),
@@ -470,6 +475,15 @@ def cmd_report(arguments) -> int:
         summary = dict(summary)
         summary["coverage_caveat"] = caveat
     meta = _meta(document, bundle, summary, graded, evidence, intake)
+    # The defined claim, computed once from the run's own states and carried into every
+    # artifact, into verdicts.json and into the JSON envelope. `artifact_block` returns
+    # {} when the shared definition is not installed, so the artifacts then print no
+    # block at all -- never a bare use of the term.
+    attribution = _attribution.build(summary, graded)
+    attribution_record = _attribution.record(attribution)
+    meta["attribution"] = _attribution.artifact_block(attribution)
+    if not attribution["available"]:
+        meta["warnings"] = list(meta.get("warnings", [])) + [attribution["reason"]]
     if arguments.allow_insufficient and evidence["blocking"]:
         override_note = (
             "insufficient evidence was overridden by --allow-insufficient; the status "
@@ -487,14 +501,20 @@ def cmd_report(arguments) -> int:
 
     _common.write_json(
         out_dir / "verdicts.json",
-        _verdict_payload(document, bundle, graded, summary, meta, evidence),
+        _verdict_payload(document, bundle, graded, summary, meta, evidence, attribution_record),
     )
     _common.write_json(out_dir / "coverage.json", summary)
     bundle.write_csv(out_dir / "sources_report.csv")
     sufficiency.write_worklist(out_dir / "evidence_worklist.csv", evidence["worklist"])
 
     if "table" in formats:
-        _common.write_text_lf(out_dir / "findings.md", findings_table(graded, summary))
+        # `findings.md` is an artifact too, so the defined claim and its boundary travel
+        # with it in the same words the other formats print.
+        block = _attribution.markdown(attribution)
+        body = findings_table(graded, summary)
+        _common.write_text_lf(
+            out_dir / "findings.md", body + ("\n\n" + block + "\n" if block else "")
+        )
 
     for verdict in graded:
         if verdict.severity in ("error", "warning"):
@@ -539,6 +559,7 @@ def cmd_report(arguments) -> int:
             },
             "worklist_rows": len(evidence["worklist"]),
             "worklist": str(out_dir / "evidence_worklist.csv"),
+            "attribution": attribution_record,
         },
         status_override=status_override,
         # With --allow-insufficient the status still names the condition, but the exit
@@ -781,6 +802,10 @@ def cmd_audit(arguments) -> int:
     intake_records = preconditions.evaluate(document, bundle, graded)
     intake = preconditions.summarise(intake_records)
     combined_status = _combine_status(evidence, intake)
+    # `audit` is the mode an agent or CI calls, so the defined claim travels in its
+    # envelope too: a caller deciding what to report next needs the same boundary the
+    # rendered report prints.
+    attribution_record = _attribution.record(_attribution.build(summary, graded))
     issues = []
     # The input condition is reported here too, not only in `report` mode. `audit` is
     # the mode a CI job and an agent call, so leaving the sufficiency policy out of it
@@ -821,6 +846,7 @@ def cmd_audit(arguments) -> int:
             "evidence": {key: value for key, value in evidence.items() if key != "worklist"},
             "worklist": evidence["worklist"],
             "text_summary": coverage.render_text(summary),
+            "attribution": attribution_record,
         },
         status_override=combined_status,
         exit_override=(

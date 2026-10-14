@@ -76,6 +76,62 @@ counts it separately.
 The rule ladder uses (D03), (D04), (D07), (D08), (D11), (D12), and (D13). `references/verdict-rules.md`
 gives the predicate and the severity for every id.
 
+## The defined claim
+
+This report can issue one defined claim, and only one: plagiarism-free against the sources checked.
+The definition lives in `tools/attribution.py`, shared with the originality toolkit and the review gate.
+The shared module states the definition in these words:
+
+- A passage is plagiarism-free when it meets one of these conditions.
+
+- It quotes another work. A marker shows the quotation. A citation names the source.
+
+- It paraphrases another work. The author writes new words. A citation names the source.
+
+- It states a fact that needs no citation.
+
+- A document meets the definition when every assessed passage meets one condition.
+
+- No citation may stay unresolved. Never cite a retracted source. The supplied corpus must be readable.
+
+The check has limits. It reads only the sources supplied or reachable. It does not verify structure above the measured separation. So a paraphrase can keep the source's sentence structure, and the check does not catch that.
+
+Run `python3 tools/attribution.py --definition` for the authoritative wording.
+
+### The scope travels with the claim
+
+The statement always carries its boundary, in this shape:
+
+`Scope: 1 source(s) checked; 1 supplied document(s) read; 0 document(s) could not be read; structure is not verified above the measured separation.`
+
+The four facts are the source count, the documents read, the documents that could not be read, and the one exception. A statement without them is the universal negative this project refuses.
+
+### How the report computes the facts
+
+| Fact | Where it comes from |
+|---|---|
+| `passage_findings` | sentences in `conflict` plus sentences in `unattributed` |
+| `open_reviews` | sentences in `unverifiable` |
+| `citations_unresolved` | citable tokens that resolved to no source; the D03 sentences carry them |
+| `retracted_cited` | sentences that cite a retracted source (D04) |
+| `sources_checked` | the source ledger size |
+| `corpus_docs` | sources whose text was read |
+| `corpus_unreadable` | supplied sources whose text was not read |
+
+`tools/attribution.py` issues the statement only when every condition holds. It withholds the statement when any fact is missing. A fact that the run cannot establish stays `None`, never zero. The gate recomputes every fact from the recorded `verdicts.json` and fails on a disagreement (`ATTRIBUTION_MISMATCH`).
+
+### Where the block appears
+
+- `verdicts.json` carries the `attribution` object: the facts, the statement, the scope, and the blockers.
+
+- The JSON envelope from `report` and `audit` carries the same object.
+
+- The PDF, DOCX, and HTML artifacts print the definition, the statement, and the scope.
+
+- The gate requires the HTML artifact to carry all three definition anchors. It fails with `ATTRIBUTION_BLOCK_MISSING` when one is absent.
+
+The term never appears in an artifact without the definition. The honesty step scans the artifact text, so a bare claim fails with `HONESTY_CLAIM`.
+
 ## Preflight and dependencies
 
 The reader uses optical character recognition (OCR) for a scan. Run these checks before the first report. Stop and report when a check fails.
@@ -345,7 +401,10 @@ becomes red, because no link exists to verify, and the run still passes its own 
 | A red has an inferred link. | `fail` | 1 | `CONFLICT_LINK_INFERRED`. Narrow the rule, or record a verified link. |
 | A red rests on a prose summary. | `fail` | 1 | `CONFLICT_EVIDENCE_TOO_WEAK`. Use primary text or a recorded value. |
 | Evidence has no recorded origin. | `fail` | 1 | `EVIDENCE_WITHOUT_PROVENANCE`. Record the acquisition attempt. |
-| The report carries an absolute claim. | `fail` | 1 | `HONESTY_CLAIM` or `HONESTY_UNBOUNDED`. Rewrite the report text. |
+| The report carries an absolute claim. | `fail` | 1 | `HONESTY_CLAIM` or `HONESTY_UNBOUNDED`. Rewrite the report text, or carry the defined block. |
+| The artifact prints the term without the definition. | `fail` | 1 | `ATTRIBUTION_BLOCK_MISSING`. Render the block into the artifact. |
+| The recorded claim disagrees with the recomputation. | `fail` | 1 | `ATTRIBUTION_MISMATCH`. Re-run `report.py`. |
+| The shared definition is not installed. | `pass` | 0 | `ATTRIBUTION_DEFINITION_UNAVAILABLE`. Restore `tools/attribution.py`; the tool then issues no statement. |
 | The audit preconditions fail. | `insufficient_input` | 4 | `CITATION_STYLE_UNRECOGNISED`, `TRIGGER_LANGUAGE_UNSUPPORTED`, `SENTENCE_SPLIT_SUSPECT`, or `NO_SOURCE_LIST`. Fix the input. |
 
 ## What this does not do
@@ -359,13 +418,16 @@ becomes red, because no link exists to verify, and the run still passes its own 
   report document, not a patched copy of your file.
 
 - **It does not prove a sentence false**. A red states that a value contradicts a supplied source, or
-  that a citation resolves to nothing. It does not judge the claim itself.
+  that the source carries a retraction. It does not judge the claim itself.
 
 - **It does not cover sources it was not given**. With metadata-only inputs, most cited sentences become
   `unverifiable`. That result is honest, and it is not a finding about the document.
 
 - **It does not guarantee completeness of the evidence base**. The source registry holds what you
   supplied, plus whatever the open-access tiers returned on that run.
+
+- **It does not bound the whole literature**. The defined claim covers the sources the run checked, and
+  the scope line names them. A source outside that set is outside the claim.
 
 ## Rubric coverage
 
@@ -385,7 +447,7 @@ becomes red, because no link exists to verify, and the run still passes its own 
 | 7 | The advisory channel is inert. | **The two channels**; **Hard rules**; **Worked examples**, Example 5. |
 | 8 | The artifacts contain what they claim. | **Reading the output**; **Workflow** step 6. |
 | 8b | The input and result boundary is visible. | **Statuses and exit codes**; **Worked examples**, Example 4. |
-| 8c | Every accusation clears the red bar. | **Evidence acquisition and the red bar**; **Failure modes and exit codes**. |
+| 8c | Every accusation clears the red bar, and the defined claim is earned or withheld. | **Evidence acquisition and the red bar**; **The defined claim**; **Failure modes and exit codes**. |
 | 8d | The tool understood the document. | **Preflight and dependencies**; **Failure modes and exit codes**. |
 | 9 | A bad input fails loudly. | **Failure modes and exit codes**; **Limits, stated plainly**. |
 | 10 | A transcription stays a transcription. | **Statuses and exit codes**; **Worked examples**, Example 4. |
@@ -476,7 +538,8 @@ Full detail: `references/verdict-rules.md`, `references/report-schema.md`,
 | `scripts/_pdfrender.py`, `_pdfout.py` | PDF: painted highlights, printed margin notes |
 | `scripts/_docxout.py` | DOCX: run shading and real Word comments |
 | `scripts/_htmlout.py` | HTML: coloured spans, hover notes, coverage bar |
-| `scripts/report_gate.py` | gate and independent artifact verification, including the honesty step |
+| `scripts/report_gate.py` | gate and independent artifact verification, including the honesty and defined-claim steps |
+| `scripts/_attribution.py` | the state-to-fact mapping for the defined claim, and the block every artifact prints |
 | `scripts/selftest.sh` | both-path regression harness (pass *and* fail fixtures) |
 | `scripts/self_test.py` | offline logic assertions over the pure functions |
 | `references/verdict-rules.md` | every rule, its predicate, and its severity |

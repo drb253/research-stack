@@ -1114,6 +1114,123 @@ expect_exit 1 "the gate rejects a red finding that claims OCR evidence" "${GATE[
 expect_json_in "and names the transcription bar" "$TMP/gateocr.json" "str(d['issues'])" "CONFLICT_TRANSCRIBED_EVIDENCE"
 
 echo
+echo "== 19. the defined plagiarism-free claim: issued only when every condition holds =="
+# The definition lives in tools/attribution.py, shared with the other consumers.
+# citation-report owns the citation half: it maps its own states to the facts, carries
+# the block into verdicts.json and every artifact, and the gate recomputes it. This
+# section pins the issued outcome; 19b and 19c pin the two withheld outcomes, and 19d
+# pins that a bare claim in an artifact still fails the honesty step.
+head -1 "$ASSETS/sample-sources.csv" >"$WS/attrib_sources.csv"
+grep '^S001,' "$ASSETS/sample-sources.csv" >>"$WS/attrib_sources.csv"
+cat >"$WS/attrib_clean.md" <<'MD'
+# Statin therapy
+
+## Results
+
+Statin therapy reduced major adverse cardiovascular events in adults with hyperlipidaemia (HR 0.80) [src:S001].
+MD
+"${RUN[@]}" report --document "$WS/attrib_clean.md" --sources "$WS/attrib_sources.csv" \
+  --offline --format pdf,docx,html --out-dir "$WS/attrib_pass" >"$TMP/attrib_pass.json" 2>&1
+attrib_pass_exit=$?
+expect_json "every condition holds, so the statement is issued" \
+  "$TMP/attrib_pass.json" "d['attribution']['issuable']" "True"
+expect_json "the scope names the sources, the documents read, the unread, and the exception" \
+  "$TMP/attrib_pass.json" \
+  "'1 source(s) checked' in d['attribution']['scope'] and '1 supplied document(s) read' in d['attribution']['scope'] and '0 document(s) could not be read' in d['attribution']['scope'] and 'structure is not verified above the measured separation' in d['attribution']['scope']" "True"
+expect_json "the issued statement carries its scope" \
+  "$TMP/attrib_pass.json" "'Scope:' in d['attribution']['statement']" "True"
+if python3 - "$WS/attrib_pass/report.html" <<'PY'
+import sys
+text = open(sys.argv[1], encoding="utf-8").read()
+anchors = ("A passage is plagiarism-free when it meets one of these conditions",
+           "Scope:",
+           "does not verify structure above the measured separation")
+missing = [anchor for anchor in anchors if anchor not in text]
+assert not missing, "missing anchors: %s" % missing
+print("all three definition anchors are in the artifact")
+PY
+then ok "report.html, not only verdicts.json, carries the whole definition"; else no "report.html carries the whole definition"; fi
+# The block has to reach every format, not only the one with a single text node. The PDF
+# wraps its lines, so its text layer is normalised before the anchors are looked for.
+if command -v pdftotext >/dev/null 2>&1; then
+  if python3 - "$WS/attrib_pass" <<'PY'
+import re
+import subprocess
+import sys
+import zipfile
+from pathlib import Path
+
+folder = Path(sys.argv[1])
+anchors = ("A passage is plagiarism-free when it meets one of these conditions",
+           "Scope:",
+           "does not verify structure above the measured separation")
+texts = {"html": (folder / "report.html").read_text(encoding="utf-8")}
+texts["pdf"] = " ".join(
+    subprocess.run(["pdftotext", "-layout", str(folder / "report.pdf"), "-"],
+                   capture_output=True, text=True).stdout.split()
+)
+xml = zipfile.ZipFile(folder / "report.docx").read("word/document.xml").decode("utf-8")
+texts["docx"] = " ".join(re.sub(r"<[^>]+>", "", xml).split())
+for name, text in texts.items():
+    missing = [anchor for anchor in anchors if anchor not in text]
+    assert not missing, "%s is missing %s" % (name, missing)
+print("all three formats carry the whole definition")
+PY
+  then ok "every artifact format carries the definition block"; else no "every artifact format carries the definition block"; fi
+else
+  ok "pdftotext absent: the PDF half of the block check is pinned by the HTML check instead"
+fi
+if [ "$attrib_pass_exit" -eq 0 ]; then ok "an issued statement does not fail the run"; else no "an issued statement must not fail the run (got $attrib_pass_exit)"; fi
+"${GATE[@]}" --dir "$WS/attrib_pass" >"$TMP/attrib_pass_gate.json" 2>&1
+attrib_gate_exit=$?
+if [ "$attrib_gate_exit" -eq 0 ]; then ok "the gate accepts the issued statement and its artifact"; else no "the gate must accept the issued statement (got $attrib_gate_exit)"; fi
+if grep -q "ATTRIBUTION_BLOCK_MISSING\|HONESTY_CLAIM\|ATTRIBUTION_MISMATCH" "$TMP/attrib_pass_gate.json"; then
+  no "no block, honesty or recomputation error on the pass fixture"
+else
+  ok "no block, honesty or recomputation error on the pass fixture"
+fi
+
+echo
+echo "== 19b. one unresolved citation withholds the statement, and names it =="
+cat >"$WS/attrib_broken.md" <<'MD'
+# Broken citation
+
+An exploratory analysis suggested that statins reduce stroke risk [99].
+MD
+"${RUN[@]}" report --document "$WS/attrib_broken.md" --sources "$WS/attrib_sources.csv" \
+  --offline --format html --out-dir "$WS/attrib_broken" >"$TMP/attrib_broken.json" 2>&1
+expect_json "the statement is withheld" "$TMP/attrib_broken.json" "d['attribution']['issuable']" "False"
+expect_json "the blocker names the unresolved citation" "$TMP/attrib_broken.json" \
+  "any('do not resolve' in b for b in d['attribution']['blockers'])" "True"
+expect_json "the withheld statement says NOT ISSUED" "$TMP/attrib_broken.json" \
+  "'NOT ISSUED' in d['attribution']['statement']" "True"
+
+echo
+echo "== 19c. an unreadable supplied document withholds the statement =="
+head -1 "$ASSETS/sample-sources.csv" >"$WS/attrib_gap_sources.csv"
+grep '^S001,' "$ASSETS/sample-sources.csv" >>"$WS/attrib_gap_sources.csv"
+grep '^S003,' "$ASSETS/sample-sources.csv" >>"$WS/attrib_gap_sources.csv"
+"${RUN[@]}" report --document "$WS/attrib_clean.md" --sources "$WS/attrib_gap_sources.csv" \
+  --offline --format html --out-dir "$WS/attrib_gap" >"$TMP/attrib_gap.json" 2>&1
+expect_json "the statement is withheld" "$TMP/attrib_gap.json" "d['attribution']['issuable']" "False"
+expect_json "the blocker names the unread document" "$TMP/attrib_gap.json" \
+  "any('could not be read' in b for b in d['attribution']['blockers'])" "True"
+expect_json "the corpus gap is counted, not assumed away" "$TMP/attrib_gap.json" \
+  "d['attribution']['facts']['corpus_unreadable']" "1"
+
+echo
+echo "== 19d. a bare claim in an artifact still fails the gate =="
+# The pass fixture is well formed. Strip the definition out of its artifact and put the
+# term back without it: verdicts.json is untouched, so only the artifact scan can catch
+# this. That is what pins the honesty step to the text a reader actually sees.
+rm -rf "$TMP/attrib_bare"; cp -R "$WS/attrib_pass" "$TMP/attrib_bare"
+printf '<!DOCTYPE html><html><body><p>The draft is plagiarism-free.</p></body></html>\n' \
+  >"$TMP/attrib_bare/report.html"
+"${GATE[@]}" --dir "$TMP/attrib_bare" >"$TMP/attrib_bare_gate.json" 2>&1
+expect_json_in "the bare claim is refused" "$TMP/attrib_bare_gate.json" "str(d['issues'])" "HONESTY_CLAIM"
+expect_json_in "and the missing definition is named" "$TMP/attrib_bare_gate.json" "str(d['issues'])" "ATTRIBUTION_BLOCK_MISSING"
+
+echo
 printf 'RESULT: %d passed, %d failed\n' "$pass" "$fail"
 if [ "$fail" -eq 0 ]; then
   printf '\033[32mCITATION-REPORT VERIFIED\033[0m\n'
