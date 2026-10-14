@@ -1943,7 +1943,30 @@ async def convert_paper_ids(ids: str, email: str = "") -> Dict:
             params=params, timeout=30,
         )
         response.raise_for_status()
-        return response.json()
+        payload = response.json()
+        # AUDIT F2: NCBI echoes the request URL, and that URL carries api_key when a
+        # key is set. The echo sits at request.echo, not at the top level, so the
+        # removal has to walk the whole payload; a first attempt that popped only the
+        # top-level "echo" left the credential exposed and was caught by re-calling the
+        # live tool. Remove any echo field at any depth and redact the key wherever it
+        # still appears, so the credential never reaches the model context or a log.
+        def _redact(node):
+            if isinstance(node, dict):
+                for field in list(node):
+                    if field.lower() in ("echo", "api_key"):
+                        node.pop(field, None)
+                        continue
+                    value = node[field]
+                    if _ncbi_key and isinstance(value, str) and _ncbi_key in value:
+                        node[field] = value.replace(_ncbi_key, "<redacted>")
+                        continue
+                    _redact(value)
+            elif isinstance(node, list):
+                for item in node:
+                    _redact(item)
+            return node
+
+        return _redact(payload)
 
     return await asyncio.to_thread(_run)
 
@@ -2462,7 +2485,11 @@ async def bookshelf_locate_table(query: str, max_results: int = 10) -> List[Dict
         )
     except SourceUnavailable as exc:
         return [exc.to_dict()]
-    return papers if papers else []
+    # AUDIT F1: the annotation declares list[dict] but search_floats returns Paper
+    # objects, so FastMCP's output validation rejected every response and the tool
+    # was unusable for any input. Every other tool goes through async_search, which
+    # converts with paper.to_dict(); this one did not.
+    return [paper.to_dict() for paper in papers]
 
 
 @mcp.tool()

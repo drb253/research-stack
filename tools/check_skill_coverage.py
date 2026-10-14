@@ -52,7 +52,7 @@ FRONTMATTER = re.compile(r"\A---[ \t]*\r?\n(.*?)\r?\n---[ \t]*\r?\n", re.S)
 KEBAB = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 # eval.md item ids: "### C1. ...", "#### H2 ...", "### 8b. ..." are NOT ids
 # (numeric citation-report sections are sections, not rubric items).
-ITEM_ID = re.compile(r"^#{2,4}[ \t]+([A-Z]\d+[a-z]?)\.[ \t]*(.*)$", re.M)
+ITEM_ID = re.compile(r"^#{2,4}[ \t]+([A-Z]{1,3}\d+[a-z]?)\.[ \t]*(.*)$", re.M)
 
 # --- written exemptions ----------------------------------------------------- #
 # Rule 3 has no exemptions in this repository: every skill must ship a harness
@@ -357,6 +357,14 @@ def check_tree(skills_dir, ci_text):
                 violations.append({"skill": name, "rule": "eval-coverage",
                                    "detail": "eval.md ids absent from SKILL.md: %s"
                                              % ", ".join(missing)})
+            elif not ids:
+                # AUDIT F-03/F-04: "ok (0 ids)" claimed a clean result for a check that
+                # never ran. Two skills (sysreview SR1-SR11, meta-analysis MR1-MR9) use
+                # two-letter ids the old regex could not see. The regex now accepts up to
+                # three letters; a genuinely numeric-only eval.md (citation-report, by
+                # design) is reported as unchecked rather than as ok.
+                row["checks"]["eval-coverage"] = ("no ids extracted (%d chars, numeric "
+                                                  "headings are not ids)" % len(read_text(eval_path)))
             else:
                 row["checks"]["eval-coverage"] = "ok (%d ids)" % len(ids)
         rows.append(row)
@@ -386,6 +394,8 @@ def run_selftest():
         ("bad-unregistered", "harness"),
         ("bad-one-sided", "gate-paths"),
         ("bad-eval-coverage", "eval-coverage"),
+        ("good-two-letter", None),
+        ("bad-eval-coverage-two-letter", "eval-coverage"),
         ("bad-declared-gate", "gate-paths"),
     ]
     failures = 0
