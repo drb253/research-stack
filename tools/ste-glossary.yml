@@ -24,6 +24,7 @@ avoid:
   "for the purpose of": to
 
 prefer:
+  "plagiarism-free (against the sources checked)": the defined term. Use it only with its definition, its scope (four facts) and its structure exception, all from tools/attribution.py; the bare phrase is refused by tools/claim_guard.py
   report: the artifact a run produces; "output" is the stream it prints
   source: a work the tool reads; "reference" is an entry in a reference list
   unavailable: the source could not be read; "empty" means it answered with no match

@@ -7,6 +7,24 @@ versioning follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- **"Plagiarism-free" is now a defined claim, not a forbidden word.** Refusing the phrase was
+  correct while it was an absolute; it is not correct as a blanket ban, because a human reviewer
+  signs off on exactly this property. `tools/attribution.py` holds the definition in one place, in
+  ASD-STE100 wording, and the three consumers (the originality toolkit, `citation-report` and the
+  `sysreview` manuscript gate) call it so they cannot drift:
+  *A passage is plagiarism-free when it meets one of these conditions: it quotes another work (the
+  quotation is marked, the source is cited); it paraphrases another work (the words are new, the
+  source is cited); or it states a fact that needs no citation. A document is plagiarism-free
+  against the sources checked when every assessed passage meets one condition, no citation is
+  unresolved, no cited source is retracted, and the supplied corpus was read.*
+  The statement is issued only when all of that holds, and it always carries its scope — sources
+  checked, supplied documents read, documents that could not be read, and the one exception the
+  measurement cannot close: structure is not verified above the measured separation, so a
+  paraphrase that keeps the source's sentence structure is not covered. `claim_guard` now allows
+  the phrase **only** when the definition, the scope and the exception are present, so the gate and
+  the definition cannot drift either; the bare phrase is still refused. Two facts a consumer cannot
+  compute — citation resolution and retraction — are inputs, and a missing input withholds the
+  statement rather than assuming zero.
 - **Six accuracy gates, four new skill harnesses and three end-to-end rubric scorers.** The skills are
   instructions a model acts on, so the pass added gates that a program can decide and a harness for
   every skill:

@@ -120,11 +120,21 @@ def evaluate(*, passage_findings=0, open_reviews=0, citations_unresolved=None,
 
 
 def render_block(result):
-    """The markdown block a report carries: definition, statement, scope."""
+    """The markdown block a report carries: definition, statement, scope.
+
+    The scope is appended when the statement does not already carry it. A WITHHELD
+    statement lists blockers instead of the scope, and without this the block had
+    no SCOPE_ANCHOR -- so claim_guard refused the term in a report that was doing
+    the right thing by withholding it. The block must be self-contained in both
+    states.
+    """
     lines = ["## Plagiarism-free — the defined claim", ""]
     lines += DEFINITION
     lines.append("")
     lines.append("**%s**" % result["statement"])
+    if SCOPE_ANCHOR not in result["statement"]:
+        lines.append("")
+        lines.append(result["scope"])
     return "\n".join(lines)
 
 
@@ -182,9 +192,19 @@ def self_test():
     for anchor in (DEFINITION_ANCHOR, EXCEPTION_ANCHOR):
         if anchor not in text:
             failures.append("the definition is missing the anchor %r" % anchor)
+    # Both states must render a block claim_guard accepts: all three anchors.
+    for label, result in (("issued", ok),
+                          ("withheld", evaluate(passage_findings=0, open_reviews=0,
+                                                citations_unresolved=None, retracted_cited=0,
+                                                sources_checked=5, corpus_docs=3,
+                                                corpus_unreadable=0))):
+        block = render_block(result)
+        for anchor in (DEFINITION_ANCHOR, SCOPE_ANCHOR, EXCEPTION_ANCHOR):
+            if anchor not in block:
+                failures.append("the %s block is missing the anchor %r" % (label, anchor))
     for msg in failures:
         print("FAIL  %s" % msg)
-    print("attribution self-test: %d checks, %d failed" % (len(SELF_TEST) + 5, len(failures)))
+    print("attribution self-test: %d checks, %d failed" % (len(SELF_TEST) + 11, len(failures)))
     return 1 if failures else 0
 
 
