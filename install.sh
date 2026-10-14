@@ -288,6 +288,17 @@ if [ "$DO_SKILLS" = 1 ]; then
   # ship the originality-check toolkit (the skill depends on it)
   if [ -d "$ROOT/tools/originality-toolkit" ]; then
     run "rm -rf '$STORE/originality-toolkit' && cp -R '$ROOT/tools/originality-toolkit' '$STORE/originality-toolkit'"
+    # The toolkit asks tools/attribution.py for the defined "plagiarism-free"
+    # claim. That file is a SIBLING of the toolkit directory, so copying the
+    # directory alone shipped a toolkit that could not evaluate the claim at all:
+    # every run reported an input gap and never issued or withheld per condition.
+    # Ship the definition beside the toolkit, which is the loader's first
+    # candidate. It fails safe without it, but it does not work without it.
+    if [ -f "$ROOT/tools/attribution.py" ]; then
+      run "cp '$ROOT/tools/attribution.py' '$STORE/originality-toolkit/attribution.py'"
+    else
+      warn "tools/attribution.py is missing; the deployed toolkit cannot evaluate the defined claim"
+    fi
     # Strip bytecode caches the same way the skills copy does. `cp -R` does not
     # preserve mtimes, so shipping a stale __pycache__ imports bytecode whose
     # recorded source time no longer matches the file beside it.

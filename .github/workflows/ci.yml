@@ -94,6 +94,33 @@ jobs:
           python3 tools/e2e_citecheck.py --offline
           python3 tools/e2e_humanizer.py --offline
           python3 tools/e2e_citation_report.py --offline
+      # The toolkit asks tools/attribution.py for the defined claim, and that file
+      # is a SIBLING of the toolkit directory. Copying the directory alone shipped a
+      # toolkit that could not evaluate the claim, and no test saw it because the
+      # deployed fallback was asserted instead. This step builds the DEPLOYED shape
+      # (install.sh's copy) and requires the claim to be issued.
+      - name: The deployed toolkit shape can evaluate the defined claim
+        run: |
+          T="$(mktemp -d)"
+          cp -R tools/originality-toolkit "$T/originality-toolkit"
+          cp tools/attribution.py "$T/originality-toolkit/attribution.py"
+          mkdir -p "$T/corpus"
+          printf 'Systematic reviews synthesize evidence across studies and report the certainty of the pooled estimate in a structured and auditable way.\n' > "$T/corpus/source.txt"
+          printf 'This draft contains only original wording and makes no claim that requires a citation at all.\n' > "$T/draft.md"
+          python3 "$T/originality-toolkit/originality_check.py" "$T/draft.md" --sources "" \
+            --corpus "$T/corpus" \
+            --attribution-evidence tools/originality-toolkit/fixtures/attribution_evidence_valid.json \
+            --json "$T/out.json" --out "$T/out.md" >/dev/null
+          python3 - "$T" <<'PY'
+          import json, pathlib, sys
+          root = pathlib.Path(sys.argv[1])
+          a = json.loads((root / "out.json").read_text())["attribution"]
+          assert a["issuable"], "the deployed toolkit withheld the claim: %s" % a["blockers"]
+          assert "Scope:" in a["statement"], "the issued statement has no scope"
+          report = (root / "out.md").read_text()
+          assert "plagiarism-free when it meets one of these conditions" in report, "no definition"
+          print("deployed toolkit issues the defined claim")
+          PY
       - name: Installer dry-run (defaults + AIPOCH flag)
         run: bash install.sh --targets cline --dry-run --minimal --no-mcp --with-aipoch-skills >/dev/null
       # The STE, preservation and honesty gates. These were report-only while the
