@@ -265,7 +265,7 @@ flowchart LR
     B --> C["install.sh"]
     C --> D["1 · paper-search + 43 patches"]
     C --> E["1b · ncbi + academic-search forks"]
-    C --> F["2 · 13 skills (+ toolkit, + upstream)"]
+    C --> F["2 · 15 skills (+ toolkit, + upstream)"]
     C --> G["2b · render/PDF toolchain"]
     C --> H["3 · write client MCP configs"]
     C --> I["4 · API keys  ·  5 · R packages"]
@@ -285,7 +285,7 @@ Beyond the 13 gated skills, two MIT-licensed packs can be added — they are
 
 AIPOCH closes the biggest capability gap — **primary omics / bioinformatics data
 analysis** — which the gated core does not cover. Install is a **sparse, blobless
-checkout of `scientific-skills/` (~120 MB)**. Unlike our 13 skills, AIPOCH's
+checkout of `scientific-skills/` (~120 MB)**. Unlike our 15 skills, AIPOCH's
 skills *generate code and advice* and carry **no verification gates**: treat their
 output as a first draft to check, not a verified result.
 
@@ -462,7 +462,7 @@ flowchart TB
         GS["google-scholar"]
     end
 
-    subgraph SK["Skills layer — 13 skills"]
+    subgraph SK["Skills layer — 15 skills"]
         SR["sysreview / meta-analysis (orchestrators)"]
         EV["evidence-synthesis-forge · meta-analysis-forge"]
         NR["medical-narrative-review"]
@@ -897,7 +897,7 @@ changes with the tools installed, and a suite that assumed one of them failed on
 three — and a fourth environment, an engine with no rasteriser, is its own gap
 (`no_pdf_rasterizer`). Both unreadable routes are asserted to exit 4 rather than 1.
 
-`verify.sh` reports the **gated core strictly** (pass/fail on the 13 skills) and
+`verify.sh` reports the **gated core strictly** (pass/fail on the 15 skills) and
 lists any installed **third-party packs** (K-Dense / AIPOCH, with AIPOCH broken
 down by category) as *informational* — they never change the verdict.
 
@@ -1377,7 +1377,7 @@ All paper-search settings live in one auto-loaded file:
 ### Tier 0 — no keys (works out of the box)
 
 Free sources, Crossref / OpenAlex / DataCite resolution, retraction checks, the
-13 skills and all gates. **≈90% of output.**
+15 skills and all gates. **≈90% of output.**
 
 ### Tier 1 — recommended, free (~2 minutes) → unlocks the rest of the free tier
 
@@ -1469,7 +1469,7 @@ research-stack/
 ├── benchmarks/                     # measured results: 7 harnesses + README (see below)
 ├── config/paper-search.env.template
 ├── docs/  PLATFORMS.md · EVIDENCE-INVARIANT.md · BENCHMARK-RESULTS.md · AUDIT-FINDINGS.md · original/ (SETUP.md · AGENT_PROMPT.md · VERIFY.md)
-├── skills/                         # 13 review/guard skills  (incl. citation-report)
+├── skills/                         # 15 review/guard skills  (incl. citation-report)
 ├── tools/  originality-toolkit/ (23 files) · verification_report.py
 └── mcp/
     ├── paper-search-mcp/            # vendored, pre-patched (upstream v0.1.4 + 43 patches)

@@ -1,7 +1,7 @@
 # DeepSeek Harness (dsh)
 
 `./install.sh --targets dsh` makes DeepSeek Harness a first-class target: the
-repo's **13 review skills** go into `~/.dsh/skills`, and the MCP servers go into
+repo's **15 review skills** go into `~/.dsh/skills`, and the MCP servers go into
 `~/.dsh/cordis.patch.yml` through the `dsh` platform in `bin/mcp_config.py`.
 
 ```bash

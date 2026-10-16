@@ -7,6 +7,32 @@ versioning follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- **Two web-search skills, each with a harness.** `openserp-search` drives the local
+  OpenSERP service, and `wigolo-search` drives the local wigolo server. The two stay
+  side-by-side MCP neighbors rather than one pipeline, because the OpenSERP engine
+  plugin loads in wigolo 0.2.1 and is never dispatched: a per-call log line never
+  fired, and `engines_used` never listed it.
+- **`skills/openserp-search/scripts/openserp_unwrap.py` — the wrapped-link gate.**
+  Google answers the OpenSERP browser profile with one encrypted redirect per organic
+  result (`/goto?url=CAES...`), so every Google record arrives with `domain: google.com`
+  and no citable address. That is upstream issue #53, and the attribution fix (commit
+  `98e48e6`) is in no release. The tool follows the single 302 hop and rewrites `url`,
+  `domain`, `display_url` and `domain_info`, keeps the original in `wrapped_url`, and
+  labels a link it could not resolve `"unwrapped": false` instead of passing the
+  wrapper off as a real address. 21 offline checks pass, and 8/8 real links resolved on
+  2026-10-16.
+- **The burst limit on Google is a documented, pinned fact.** A six-engine *parallel*
+  fan-out returned `0 results`, `blocked` and one `captcha_detected`, while the same
+  queries in series, four seconds apart, all answered (5/5 at 4.8–6.7 s). The shipped
+  config pins `google.rate_requests: 10` and `rate_burst: 1`, and the skill states that
+  `blocked` and `captcha_detected` skip the retries on purpose, so the caller waits 10
+  to 15 seconds instead of retrying at once.
+- **`skills/wigolo-search/scripts/check_skill_claims.py` — a doc-contract gate.** The
+  skill is instructions a model acts on, so the gate holds the file to the ten tool
+  names, the fourteen engine names, the two keyed engines with their environment
+  variables, and the Scholar denial, all read from the live server on 2026-10-16. A
+  rewrite that drops one of them fails the gate.
+
 - **"Plagiarism-free" is now a defined claim, not a forbidden word.** Refusing the phrase was
   correct while it was an absolute; it is not correct as a blanket ban, because a human reviewer
   signs off on exactly this property. `tools/attribution.py` holds the definition in one place, in

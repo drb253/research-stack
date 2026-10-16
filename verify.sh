@@ -70,7 +70,7 @@ echo "== 2. skills =="
 SKILLS="sysreview meta-analysis evidence-synthesis-forge meta-analysis-forge \
 medical-narrative-review umbrella-review-skeptic meta-ml-screener \
 environment-life-review-forge paper-search citecheck humanizerdrb originality-check \
-citation-report"
+citation-report openserp-search wigolo-search"
 NSKILLS="$(echo $SKILLS | wc -w | tr -d ' ')"
 IFS=',' read -ra TLIST <<< "$TARGETS"
 for t in "${TLIST[@]}"; do

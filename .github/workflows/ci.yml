@@ -84,6 +84,15 @@ jobs:
           bash skills/sysreview/scripts/selftest.sh
           bash skills/meta-analysis/scripts/selftest.sh
           bash skills/umbrella-review-skeptic/scripts/selftest.sh
+      # The two web-search skills ship a harness each. openserp-search pins the
+      # wrapped-link unwrap tool, because Google answers this host with
+      # /goto?url= redirects that must be resolved before a result is citable.
+      # wigolo-search pins its tool, engine and Scholar claims against the lists
+      # the live server printed, so a rewrite cannot drop one silently.
+      - name: Web-search skill harnesses (openserp, wigolo)
+        run: |
+          bash skills/openserp-search/scripts/selftest.sh
+          bash skills/wigolo-search/scripts/selftest.sh
       # The coverage gate asserts that every skill has a harness registered in
       # THIS file, that every declared gate has a pass and a fail fixture, and
       # that every eval.md item appears in its SKILL.md. The three e2e scorers
