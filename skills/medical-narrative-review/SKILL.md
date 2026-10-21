@@ -65,6 +65,7 @@ Check the environment first. Then fix the vocabulary of this file.
 | Toolkit | `ls scripts/gate.py scripts/init_review.py` | Stop; the skill is incomplete. |
 | MCP server | Look for `search_pubmed` and `search_papers`. | Run offline on user-supplied sources. |
 | Figure rasteriser | `command -v rsvg-convert inkscape magick qlmanage` | The DOCX carries a labelled placeholder. |
+| Typeset PDF | `command -v chrome chromium google-chrome`, or `CHROME` | Skip `house_style_narrative.py`; the baseline DOCX/PDF still applies. |
 | Workspace | Confirm write access to the output directory. | Stop; report the path. |
 
 The question framework is population, intervention, comparator, and outcome (PICO). It can instead be population, exposure, and outcome (PEO). The reporting standard is the Preferred Reporting Items for Systematic Reviews and Meta-Analyses (PRISMA). The appraisal scale is the Scale for the Assessment of Narrative Review Articles (SANRA). The certainty framework is Grading of Recommendations Assessment, Development and Evaluation (GRADE).
@@ -262,6 +263,41 @@ pass-or-fail report. Every `error` issue is a blocker. Fix it and re-run until t
 
 ### Phase 9 — Export the deliverables
 
+Run two exports. The **designed edition** is the default reader-facing artifact; the **baseline
+export** is the format guarantee and the one the gate inspects.
+
+**1. Designed edition (house style).** A gradient cover, numbered sections, callout boxes,
+navy-header tables, an inline vector figure, a contents page with real page numbers, and a running
+footer.
+
+```bash
+python3 scripts/house_style_build.py --workspace . --out final/house_style.html
+python3 scripts/house_style_render.py --workspace . \
+  --out "<Review_Title>_Critical_Review.pdf"
+```
+
+`house_style_build.py` is stdlib-only and always works: it reads `final/manuscript_cited.md`,
+`sources.csv`, `claims.csv`, `search_log.csv`, `final/references.md` and the screening-flow SVG, and
+writes the HTML plus a manifest. It never re-types content. `house_style_render.py` prints the PDF
+with Chromium, resolves contents page numbers in two passes, overlays the footer, and verifies the
+result. It needs Playwright with Chromium, `pypdf` and `reportlab`; when those are absent the HTML is
+still delivered and the baseline export carries the PDF.
+
+Presentation is read from `house_style.json` in the workspace. Only the fields the review needs have
+to be present; everything else falls back to a derived value.
+
+| Field | Effect |
+|---|---|
+| `title`, `short_title`, `accent` | Cover headline, running footer, and the gold-highlighted phrase |
+| `eyebrow`, `subtitle`, `meta`, `badges` | Cover furniture; `meta` and `badges` accept inline HTML |
+| `verdict`, `verdict_heading` | The key box under the abstract |
+| `callouts[]` | Boxes keyed to a section: `section`, `kind` (`key`/`warn`/`crit`/`good`), `heading`, `text` |
+| `display_titles` | Long section titles for the contents and headings |
+| `table_captions` | Captions for appendix tables, in order, per section title |
+| `figure_caption`, `abbreviations` | Figure caption and the abbreviation table |
+
+**2. Baseline export (format guarantee).**
+
 ```bash
 python3 scripts/export_document.py final/manuscript_cited.md \
   --workspace . --out-dir final \
@@ -271,12 +307,32 @@ python3 scripts/export_document.py final/manuscript_cited.md \
   --title "<review title>" --citation-style vancouver --footer-left "<short running title>"
 ```
 
-The command produces three formats from the same final Markdown, with no third-party packages.
+The command produces DOCX, PDF, and HTML from the same final Markdown, with no third-party packages.
+
+For the narrative house style — metric-card cover, boxed structured abstract, contents with live
+page numbers, numbered sections, navy-header tables, a drawn screening figure, two-column
+references, and an overlaid running footer — run the typeset edition from the same final manuscript:
+
+```bash
+python3 scripts/house_style_narrative.py --workspace . --config house_style_narrative.json
+```
+
+It reads `final/manuscript_cited.md`, `final/references.md`, `sources.csv`, `claims.csv`,
+`tables/table2.md` and `prisma_counts.json`, and writes `<Title>_Narrative_Review.pdf`,
+`final/house_style_narrative.html` and `figures/prisma_house.svg`. The build is two-pass: the first
+render is read back to map each heading to its page, the numbers go into the contents, and the second
+render is footered. `--html-only` stops before rendering. The step is optional: it needs a
+Chromium-family browser, and the footer needs `pypdf` + `reportlab`. Without them it reports
+`RENDERER_UNAVAILABLE` or `FOOTER_SKIPPED` and the baseline PDF above is still delivered. The
+presentation config is optional; every key falls back to a value read from the workspace.
 
 <!-- ste-allow R1,R2,R3: a markdown table is one layout block; the sentence-length, one-instruction and sentence-count rules do not apply to its cells -->
 
 | Output | What it contains |
 |---|---|
+| `<Title>_Critical_Review.pdf` | House-style A4 edition: gradient cover, numbered sections, callout boxes, navy-header tables, inline vector figure, two-pass contents, running footer |
+| `<Title>_Narrative_Review.pdf` | Narrative house-style A4 edition: metric-card cover, boxed abstract, contents with live page numbers, numbered sections, drawn screening figure, two-column references, overlaid footer |
+| `final/house_style.html` | The same edition as print-ready HTML with the figure inline |
 | `final/manuscript.docx` | Word styles (Title, Heading 1-4, Caption, Table text, Reference), real Word tables with repeating header rows, hanging-indent references, page numbers in the footer, and the figure embedded as a PNG |
 | `final/manuscript.pdf` | A4, Times typography with real metrics, ruled tables, running footer, and the screening flow drawn as **vectors from `prisma_counts.json`** |
 | `final/manuscript.html` | Print-ready CSS (A4 page breaks before References and appendices), tables that repeat their header across pages, clickable citations linked to their reference entries, and the SVG figure shown directly |
@@ -289,11 +345,13 @@ python3 scripts/gate.py --dir . --style vancouver --require-exports
 
 Notes that matter:
 
-- The PDF draws the figure itself, so it never depends on a rasteriser. The DOCX embeds a PNG. Supply one, or let the tool convert the SVG locally with `rsvg-convert`, `inkscape`, `magick`, or macOS `qlmanage`. If no rasteriser exists, the DOCX carries a labelled placeholder and the tool delivers the SVG beside it. The DOCX never pretends that a missing figure is present.
+- The house-style renderer verifies its own output: page count, no blank page, every heading present, every reference number present, every inline citation in range, and no unrendered markup. A failure is reported, never papered over.
 
-- Every run regenerates the exports, because the tool derives them from the final Markdown. Re-export after any edit.
+- The baseline PDF draws the figure itself, so it never depends on a rasteriser. The DOCX embeds a PNG. Supply one, or let the tool convert the SVG locally with `rsvg-convert`, `inkscape`, `magick`, or macOS `qlmanage`. If no rasteriser exists, the DOCX carries a labelled placeholder and the tool delivers the SVG beside it. The DOCX never pretends that a missing figure is present.
 
-- Page numbers come from the Word or PDF engine. When you print the HTML from a browser, enable the browser's header and footer to get page numbers.
+- Every run regenerates the exports, because the tools derive them from the final Markdown. Re-export after any edit.
+
+- Page numbers in the house-style PDF are real PDF pages, computed in two passes. Page numbers in the baseline DOCX come from the Word engine. When you print the baseline HTML from a browser, enable the browser's header and footer to get page numbers.
 
 ## Verification protocol (Phase 3 detail)
 
@@ -569,7 +627,15 @@ report still records the condition. The full flag list, the exit codes, and the 
 | `scripts/check_numbers.py` | recompute n/N, CI, and ranges from the ledgers |
 | `scripts/lint_manuscript.py` | section completeness and causal-language checks |
 | `scripts/gate.py` | aggregate every audit into one pass-or-fail report |
-| `scripts/export_document.py` | write DOCX, PDF, and print-ready HTML |
+| `scripts/export_document.py` | write DOCX, PDF, and print-ready HTML (baseline format guarantee) |
+| `scripts/house_style_narrative.py` | optional typeset edition: metric-card cover, boxed abstract, contents with live page numbers, drawn screening figure, two-column references, overlaid footer |
+| `scripts/house_style_build.py` | optional critical-review HTML edition (gradient cover, callouts, badges) |
+| `scripts/house_style_render.py` | optional renderer for the critical-review HTML, with contents pagination and footer |
+| `assets/house_style_narrative.json` | presentation config for the narrative typeset edition |
+| `scripts/house_style_build.py` | build the designed HTML edition from the final ledgers (stdlib only) |
+| `scripts/house_style_render.py` | print the designed PDF with two-pass contents and a verified footer (needs Chromium) |
+| `references/house_style_layout.md` | the house style: design tokens, document structure, config schema, failure modes |
+| `assets/house_style_template.json` | a complete presentation config to copy per review |
 | `scripts/selftest.sh` | the offline regression harness |
 | `assets/topic_intake.md` | intake questions with defaults |
 | `assets/manuscript_scaffold.md` | section skeleton with marker placeholders |
@@ -596,10 +662,12 @@ python3 scripts/gate.py --dir .
 python3 scripts/export_document.py final/manuscript_cited.md --workspace . --out-dir final \
   --references final/references.md --append tables/table1.md --append tables/table2.md \
   --figure prisma_counts.json --title "<title>" --footer-left "<running title>"
+# 9b. optional typeset edition in the narrative house style (needs a browser)
+python3 scripts/house_style_narrative.py --workspace . --config house_style_narrative.json
 python3 scripts/gate.py --dir . --require-exports
 ```
 
-Scripts run from the skill directory, and they need no third-party package.
+Scripts run from the skill directory. The ten verification commands, `export_document.py` and `house_style_narrative.py --html-only` need only the standard library. `house_style_narrative.py` in PDF mode needs a Chromium-family browser, and adds `pypdf` + `reportlab` only for the page footer; `house_style_render.py` needs Playwright plus those two. Both typeset commands report what is missing instead of failing silently, and the baseline DOCX/PDF is still produced by `export_document.py`.
 
 ## Regression tests
 
@@ -609,7 +677,7 @@ gate. It then exercises the whole chain: `build_reference_list.py`, then `export
 `gate.py` PASS. Run it after any change.
 
 ```bash
-bash scripts/selftest.sh     # RESULT: 30 passed, 0 failed
+bash scripts/selftest.sh     # RESULT: 32 passed, 0 failed
 ```
 
 The harness needs only `python3` and `bash`. It needs no network and no third-party package, and it is

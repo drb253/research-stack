@@ -1,0 +1,45 @@
+{
+  "title": "<manuscript H1 if left empty>",
+  "short_title": "<running footer; defaults to the title before the colon>",
+  "accent": "<one phrase from the title to render in gold>",
+  "eyebrow": "Critical Review &middot; <Field>",
+  "subtitle": "An evidence-mapped, governance-focused <b>critical review</b> of what is proven, what is plausible, and what is missing.",
+  "meta": [
+    "<b>Article type:</b> Critical review &mdash; narrative synthesis with a documented, systematic search",
+    "<b>Setting:</b> <population and setting>",
+    "<b>Citation style:</b> Vancouver (superscript) &middot; all references identifier-verified",
+    "<b>Evidence base:</b> 38 verified sources &middot; 1 figure &middot; 2 tables"
+  ],
+  "badges": ["<badge 1>", "<badge 2>", "<badge 3>", "<badge 4>"],
+  "footer_left": "Prepared with the paper-search evidence engine \u00b7 Cline",
+  "footer_right": "2026",
+  "verdict_heading": "The one-line verdict",
+  "verdict": "<one or two sentences; inline HTML allowed>",
+  "display_titles": {
+    "Introduction": "Introduction \u2014 the case, the gap, the questions",
+    "Methods": "Methods \u2014 how this review was done",
+    "Discussion": "Discussion \u2014 what the evidence will and will not carry"
+  },
+  "callouts": [
+    {
+      "section": "Introduction",
+      "kind": "warn",
+      "heading": "What this review does not claim",
+      "text": "<bounded statement; inline HTML and superscript citations allowed>"
+    },
+    {
+      "section": "Discussion",
+      "kind": "warn",
+      "heading": "The evidence gaps that matter most",
+      "text": "<bounded statement>"
+    }
+  ],
+  "table_captions": {
+    "Appendix D: Reporting checklist": ["Table D1. SANRA items, as reported in the manuscript.", "Table D2. PRISMA 2020 items applicable to this review."]
+  },
+  "figure_caption": "Screening flow for the review. Counts are those recorded in the search log and the source ledger; the diagram is generated from the same counts file and cannot be drawn if the arithmetic does not balance.",
+  "abbreviations": {
+    "CI": "Confidence interval",
+    "RR": "Relative risk"
+  }
+}

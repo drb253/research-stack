@@ -1,0 +1,18 @@
+{
+  "_comment": "Copy to <workspace>/house_style_narrative.json and edit. Every key is optional; empty values fall back to values read from the workspace.",
+  "title": "",
+  "subtitle": "",
+  "kicker": "Narrative Review &middot; Preventive Oncology",
+  "running_title": "",
+  "metrics": [],
+  "toc_note": "",
+  "footer_left": "Prepared with the paper-search evidence engine \u00b7 Cline",
+  "status_box": {
+    "heading": "Evidence status at a glance",
+    "items": [
+      { "label": "Established", "text": "" },
+      { "label": "Contested", "text": "" },
+      { "label": "Missing", "text": "" }
+    ]
+  }
+}

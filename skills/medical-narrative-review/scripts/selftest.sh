@@ -294,6 +294,26 @@ expect_exit 0 "exports three formats" python3 "$HERE/export_document.py" \
   "$FULL/final/manuscript_cited.md" --workspace "$FULL" --out-dir "$FULL/final" \
   --references "$FULL/final/references.md" --title "Statins in hyperlipidaemia"
 
+echo "== 9b. house_style_build (designed HTML edition) =="
+expect_exit 0 "builds the house-style HTML and manifest" python3 "$HERE/house_style_build.py" \
+  --workspace "$FULL" --out final/house_style.html
+if python3 - "$FULL/final/house_style.html" <<'PY'
+import sys
+doc = open(sys.argv[1], encoding="utf-8").read()
+bad = []
+for needle in ('class="cover"', "Contents", "References", "<section"):
+    if needle not in doc:
+        bad.append("missing " + needle)
+if doc.count("<section") < 4:
+    bad.append("too few sections")
+if "%s" in doc:
+    bad.append("unformatted placeholder")
+print("; ".join(bad))
+sys.exit(1 if bad else 0)
+PY
+then ok "house-style HTML has a cover, sections, contents and references"
+else no "house-style HTML is structurally incomplete"; fi
+
 echo "== 10. gate PASSES a complete workspace =="
 expect_exit 0 "gate passes the complete review" python3 "$HERE/gate.py" --dir "$FULL" --require-exports
 

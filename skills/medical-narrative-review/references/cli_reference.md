@@ -249,3 +249,82 @@ Issue codes: `INVALID_CLAIM_ID`, `DUPLICATE_CLAIM_ID`, `INVALID_CLAIM_KIND`, `IN
 `DUPLICATE_REFERENCE_NUMBER`, `CITATION_EXCEEDS_REFERENCE_LIST`, `UNCITED_REFERENCE`,
 `CITATION_NOT_IN_FIRST_APPEARANCE_ORDER`, `DRAFT_MARKER_IN_FINAL_DOCUMENT`,
 `NO_NUMBERED_CITATIONS_FOUND`.
+
+## `house_style_build.py` — the designed HTML edition
+
+```bash
+python3 scripts/house_style_build.py --workspace . --out final/house_style.html \
+  --config house_style.json --toc toc_pages.json
+```
+
+Stdlib only. Reads `final/manuscript_cited.md`, `sources.csv`, `claims.csv`, `search_log.csv`,
+`final/references.md`, `figures/prisma_flow.svg` and the optional `house_style.json`. Writes the HTML
+and `<out>.manifest.json`, which carries the section keys and headings the renderer needs.
+Sections are numbered automatically; appendices are lettered; Declarations is unnumbered; Abstract,
+References and any appendix whose title contains "evidence tables" are skipped because the builder
+reproduces them itself. Exits non-zero only when the manuscript is missing.
+
+Report fields: `output`, `manifest`, `sections`, `references`, `tables`, `figures`.
+
+## `house_style_render.py` — the designed PDF
+
+```bash
+python3 scripts/house_style_render.py --workspace . \
+  --html final/house_style.html --out "<Title>_Critical_Review.pdf"
+```
+
+Optional and third-party: needs Playwright with Chromium, `pypdf`, `reportlab` and `pypdfium2`.
+Pass 1 prints the PDF and locates each section heading at the top of its page; those numbers are
+written to `toc_pages.json`; the HTML is rebuilt and pass 2 prints the final PDF. A footer (rule,
+short title, `n / N`) is overlaid with reportlab on every page except the cover. Then it verifies:
+page count, blank pages, every heading, every reference number, every inline citation in range, and
+unrendered entities. A missing dependency exits with an install message rather than a traceback.
+
+Exit code `0` only when the render verifies. Any layout failure is reported as a problem list.
+
+## `house_style_narrative.py` — the narrative typeset edition
+
+```bash
+python3 scripts/house_style_narrative.py --workspace . \
+  --config house_style_narrative.json --out "<Title>_Narrative_Review.pdf"
+```
+
+Builds an A4 edition in the narrative house style: navy/teal palette, cover with four metric cards
+(records screened, sources verified, atomic claims, references), boxed structured abstract, contents
+with real page numbers, numbered section headers, navy-header zebra tables, a screening-flow figure
+drawn from `prisma_counts.json`, two-column Vancouver references, and a running footer with
+`page n / N`.
+
+| Input | Use |
+|---|---|
+| `final/manuscript_cited.md` | the text; draft markers are rejected |
+| `final/references.md` | the numbered reference list |
+| `sources.csv` | Table 1, the verified-source metric, the `cited_for_context` count |
+| `claims.csv` | the claim metric |
+| `tables/table2.md` | Table 2, certainty by theme |
+| `prisma_counts.json` | the screening figure and the screened count |
+| `house_style_narrative.json` | optional: title, subtitle, kicker, running title, metrics, contents note, footer, evidence-status box |
+
+| Flag | Effect |
+|---|---|
+| `--workspace DIR` | review workspace (default `.`) |
+| `--out PATH` | output PDF (default `<Title>_Narrative_Review.pdf` in the workspace) |
+| `--config FILE` | presentation config, optional |
+| `--html-only` | write `final/house_style_narrative.html` and stop; no browser needed |
+| `--no-footer` | skip the overlaid footer |
+
+Outputs: `final/house_style_narrative.html`, `figures/prisma_house.svg`, the PDF, and a copy of the PDF
+in `final/`. Two passes: pass 1 is rendered, the page of each heading is read back with `pdftotext` (or
+`pypdf`), the numbers are injected into the contents, and pass 2 is footered. Text comes only from the
+final manuscript, so the edition cannot drift from the audited text.
+
+Requirements: a Chromium-family browser for PDF mode, found through `CHROME`, `CHROMIUM` or
+`CHROME_PATH`, then `PATH`, then known application paths, then Playwright caches. `pypdf` + `reportlab`
+are needed for the footer only. `--html-only` needs neither.
+
+Exit codes: `0` pass, `1` blocking issue. Issue codes: `MANUSCRIPT_MISSING`, `CONFIG_INVALID`,
+`RENDERER_UNAVAILABLE`, `RENDER_FAILED`, `FOOTER_SKIPPED` (warning), `TOC_UNMAPPED` (warning, naming
+the sections whose page number could not be read back).
+
+Report fields: `pdf`, `pages`, `sections`, `references`, `tables`, `figures`, `renderer`, `footer`,
+`toc_pages`, `html`.
