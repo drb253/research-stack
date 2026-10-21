@@ -188,9 +188,11 @@ optional input can never block a submission. `gate.py` passes this flag automati
 python3 scripts/gate.py --dir . --style vancouver --require-exports
 ```
 
-Runs the source validator, both citation audits, the numeric check, the prose lint, and the
-screening-flow check, writes `GATE_REPORT.json`, and prints one verdict with a per-check table.
-`submission_ready` is `true` only when every check passes and `final/manuscript_cited.md` exists.
+Runs the source validator, both citation audits, the numeric check, the prose lint, the
+screening-flow check, the ledger↔PRISMA↔reference cross-check, and (when a `records/` directory
+exists) the ledger↔record reconciliation. It writes `GATE_REPORT.json` and prints one verdict with a
+per-check table. `submission_ready` is `true` only when every check passes and
+`final/manuscript_cited.md` exists.
 `--skip-final` allows a pre-finalisation run. `--require-exports` makes a missing DOCX/PDF/HTML export
 an error rather than an informational note, which is what you want before sending the review to
 co-authors. `CHECK_UNAVAILABLE` means a bundled script could not be executed — treat it as a failure,
@@ -249,6 +251,54 @@ Issue codes: `INVALID_CLAIM_ID`, `DUPLICATE_CLAIM_ID`, `INVALID_CLAIM_KIND`, `IN
 `DUPLICATE_REFERENCE_NUMBER`, `CITATION_EXCEEDS_REFERENCE_LIST`, `UNCITED_REFERENCE`,
 `CITATION_NOT_IN_FIRST_APPEARANCE_ORDER`, `DRAFT_MARKER_IN_FINAL_DOCUMENT`,
 `NO_NUMBERED_CITATIONS_FOUND`.
+
+## `verify_records.py` — reconcile the ledger against saved retrieval records
+
+```bash
+python3 scripts/verify_records.py --sources sources.csv --records records/ \
+  --check-numbers
+```
+
+The only defence against a DOI that resolves to a different paper used to be the reviewer's eye. This
+command makes it mechanical. Save every retrieval response under `records/` exactly as returned
+(JSON or JSONL; Crossref, Europe PMC, PubMed and OpenAlex shapes are recognised, including a
+stringified `extra` object from the paper-search MCP server), then compare the ledger with those
+records.
+
+| Flag | Effect |
+|---|---|
+| `--sources FILE` | the ledger (required) |
+| `--records PATH` | a JSON/JSONL file or a directory of them (required) |
+| `--min-title-similarity F` | threshold, default `0.90`; a containment match counts as 1.0 |
+| `--require-all` | a source with no saved record is an error instead of a warning |
+| `--check-numbers` | trace each number in `effect_estimate` into the record's title and abstract |
+| `--strict-numbers` | an untraceable number becomes an error |
+| `--all` | check every row, not only verified citable ones |
+
+Checks: `RECORD_MISSING`, `RECORD_TITLE_MISSING`, `DOI_MISMATCH`, `TITLE_MISMATCH`, `YEAR_MISMATCH`,
+`VOLUME_MISMATCH`, `PAGES_MISMATCH`, `FIRST_AUTHOR_MISMATCH`, `RETRACTION_CONFLICT`,
+`RETRACTION_UNCONFIRMED`, `NUMBER_NOT_IN_RECORD`, `ABSTRACT_MISSING`. DOI, title, year and
+retraction conflicts are always errors; the bibliographic near-misses are warnings.
+
+Exit `0` when no error remains, `1` otherwise, `4` when an input cannot be read.
+
+## `crosscheck_counts.py` — one evidence base, four files
+
+```bash
+python3 scripts/crosscheck_counts.py --workspace . --strict
+```
+
+`make_prisma_flow.py` proves the screening arithmetic is internally consistent; it cannot know
+whether the numbers describe the same evidence as the ledger. This command checks that
+`included.studies_included` equals the ledger's included rows, that `sources_verified` equals the
+verified citable rows, that the reference list length matches, that every claim's `source_ids` exist,
+that no claim marked verified rests on an unverified source, and that every citable source is used by
+at least one claim.
+
+`--strict` promotes a count mismatch from warning to error and is the pre-submission mode; `gate.py`
+calls it that way. Issue codes: `PRISMA_INCLUDED_MISMATCH`, `PRISMA_VERIFIED_MISMATCH`,
+`REFERENCE_COUNT_MISMATCH`, `CLAIM_SOURCE_MISSING`, `CITABLE_SOURCE_NO_CLAIM`,
+`CLAIM_UNVERIFIED_SOURCE`, `INPUT_MISSING`.
 
 ## `house_style_build.py` — the designed HTML edition
 

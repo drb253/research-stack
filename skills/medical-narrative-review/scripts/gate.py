@@ -87,6 +87,15 @@ def collect_checks(base: Path, style: str) -> list:
         plan.append(("prose", "lint_manuscript.py", _prose_arguments(workspace, draft)))
     if counts.is_file():
         plan.append(("screening_flow", "make_prisma_flow.py", [str(counts), "--check-only"]))
+    if sources.is_file() and counts.is_file():
+        plan.append(
+            ("crosscheck", "crosscheck_counts.py", ["--workspace", str(workspace), "--strict"])
+        )
+    records = workspace / "records"
+    if sources.is_file() and records.is_dir():
+        plan.append(
+            ("records", "verify_records.py", [str(sources), "--records", str(records)])
+        )
     return plan
 
 

@@ -196,6 +196,20 @@ reason for every record.
 Every citable record needs `verification_status=verified`, a named `verifier`, a `verified_date`, a
 `locator`, and a `retraction_status`. This phase is where reviews normally fail. Do not rush it.
 
+Save every retrieval response to `records/` as JSON or JSONL, exactly as the tool returned it (Crossref,
+Europe PMC, PubMed and OpenAlex shapes are all accepted, including the paper-search MCP `extra` string).
+Then reconcile the ledger against those saved records instead of trusting your own reading:
+
+```bash
+python3 scripts/verify_records.py --sources sources.csv --records records/ --check-numbers
+```
+
+It compares title similarity, first author, year, volume, pages and DOI, flags a record that is marked
+retracted while the ledger says `clear`, and traces each number in `effect_estimate` into the record's
+title or abstract. A DOI that resolves to a different paper is an error, not a warning. Add
+`--require-all` to make a source with no saved record an error, and `--strict-numbers` to make an
+untraceable number an error.
+
 ### Phase 4 — Extraction
 
 For each verified source, extract these fields into `sources.csv`. The fields are design, population,
@@ -253,6 +267,8 @@ python3 scripts/build_reference_list.py draft.md sources.csv claims.csv --style 
 python3 scripts/audit_citations.py final/manuscript_cited.md claims.csv sources.csv --final
 python3 scripts/check_numbers.py final/manuscript_cited.md
 python3 scripts/lint_manuscript.py final/manuscript_cited.md --sections
+python3 scripts/crosscheck_counts.py --workspace . --strict
+python3 scripts/verify_records.py --sources sources.csv --records records/ --check-numbers
 python3 scripts/gate.py --dir . --style vancouver
 ```
 
@@ -260,6 +276,12 @@ python3 scripts/gate.py --dir . --style vancouver
 and `final/citation_map.csv`. It **refuses** to emit a reference list that contains any unverified, retracted, or
 excluded source, or any source without an identifier. `gate.py` aggregates every audit into one
 pass-or-fail report. Every `error` issue is a blocker. Fix it and re-run until the gate passes.
+
+Two of those audits close gaps the earlier ones could not see. `crosscheck_counts.py` proves that the
+PRISMA totals, the source ledger, the claim ledger and the reference list describe the same evidence
+base; `--strict` makes a disagreement an error, and `gate.py` runs it that way. `verify_records.py`
+proves that each verified row still matches the record it was copied from. Both are deterministic and
+read only local files, so a clean result is reproducible.
 
 ### Phase 9 — Export the deliverables
 
@@ -400,6 +422,7 @@ review-<slug>/
   claims.csv               # atomic claims mapped to verified S IDs (C IDs)
   prisma_counts.json       # real screening counts used to draw the flow diagram
   draft.md                 # marked manuscript (Phase 6)
+  records/                 # saved retrieval responses, reconciled by verify_records.py
   figures/  tables/  final/
   UNRESOLVED.md            # every placeholder, conflict, and open question
   GATE_REPORT.json         # written by gate.py
@@ -508,10 +531,12 @@ false`. `--allow-insufficient` exits 0 while the report still records the condit
 | Failure | Control |
 |---|---|
 | A fabricated or wrong reference. | Identifier verification before citation; the refusal in `build_reference_list.py`; `audit_citations.py`. |
+| A DOI that resolves to a different paper. | `verify_records.py` reconciles title, author, year, volume and pages against the saved record; a mismatch is an error. |
 | Wrong metadata (journal, year, authors). | The copy-from-record rule; duplicate detection on DOI and normalized title. |
 | An overstated claim ("proves") from a weak design. | The causal-language checks in `lint_manuscript.py`; the certainty field in `claims.csv`. |
 | A number that contradicts the source. | Extraction with locators; `check_numbers.py` recomputes n/N, CI, and ranges. |
 | A PRISMA figure that disagrees with screening. | The arithmetic gate in `make_prisma_flow.py`. |
+| PRISMA totals that disagree with the ledger. | `crosscheck_counts.py --strict`, run by the gate; `sources_verified` and `studies_included` must equal the ledger counts. |
 | Missing key literature. | Multi-database search with logged queries; availability logging; citing-article and related-article sweeps. |
 | Silent gaps and unfinished sections. | Placeholder detection; the `--sections` completeness check; `UNRESOLVED.md`. |
 | A citation to a retracted study. | `check_retraction` plus the `retraction_status` gate. |
@@ -627,6 +652,8 @@ report still records the condition. The full flag list, the exit codes, and the 
 | `scripts/check_numbers.py` | recompute n/N, CI, and ranges from the ledgers |
 | `scripts/lint_manuscript.py` | section completeness and causal-language checks |
 | `scripts/gate.py` | aggregate every audit into one pass-or-fail report |
+| `scripts/verify_records.py` | reconcile the ledger against saved retrieval records: title, author, year, volume, pages, DOI, retraction, and number traceability |
+| `scripts/crosscheck_counts.py` | reconcile PRISMA totals, the ledger, the claim ledger and the reference list |
 | `scripts/export_document.py` | write DOCX, PDF, and print-ready HTML (baseline format guarantee) |
 | `scripts/house_style_narrative.py` | optional typeset edition: metric-card cover, boxed abstract, contents with live page numbers, drawn screening figure, two-column references, overlaid footer |
 | `scripts/house_style_build.py` | optional critical-review HTML edition (gradient cover, callouts, badges) |
@@ -657,6 +684,8 @@ python3 scripts/build_reference_list.py draft.md sources.csv claims.csv --style 
 python3 scripts/audit_citations.py final/manuscript_cited.md claims.csv sources.csv --final
 python3 scripts/check_numbers.py final/manuscript_cited.md
 python3 scripts/lint_manuscript.py final/manuscript_cited.md --sections
+python3 scripts/crosscheck_counts.py --workspace . --strict
+python3 scripts/verify_records.py --sources sources.csv --records records/ --check-numbers
 python3 scripts/gate.py --dir .
 # 9. export DOCX + PDF + print-ready HTML and confirm delivery
 python3 scripts/export_document.py final/manuscript_cited.md --workspace . --out-dir final \

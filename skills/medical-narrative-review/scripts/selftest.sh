@@ -89,6 +89,26 @@ cat > "$WS/prisma_ok.json" <<'JSON'
 }
 JSON
 sed 's/"studies_included": 10/"studies_included": 11/' "$WS/prisma_ok.json" > "$WS/prisma_bad.json"
+# the full workspace carries a one-row ledger, so its counts file must agree with it
+cat > "$WS/prisma_full.json" <<'JSON'
+{
+  "review_type": "narrative",
+  "identification": {"records_from_databases": 100, "records_from_registers": 0, "records_from_other_methods": 0, "duplicates_removed": 10},
+  "screening": {"records_screened": 90, "records_excluded": 70},
+  "retrieval": {"reports_sought": 20, "reports_not_retrieved": 2},
+  "eligibility": {"reports_assessed": 18, "reports_excluded": 17, "exclusion_reasons": {"wrong population": 10, "wrong outcome": 7}},
+  "included": {"studies_included": 1, "sources_verified": 1}
+}
+JSON
+
+mkdir -p "$WS/records"
+cat > "$WS/records/record_ok.json" <<'JSON'
+[{"doi": "10.1056/NEJMoa1234567", "title": "Effect of statins on cardiovascular events", "authors": ["John Smith"], "container_title": "New England Journal of Medicine", "year": 2020, "volume": "382", "page": "100-110", "abstract": "Statin therapy reduced major adverse cardiovascular events (HR 0.80)."}]
+JSON
+cat > "$WS/records/record_wrong.json" <<'JSON'
+[{"doi": "10.1056/NEJMoa1234567", "title": "Epidemiological aspects and financial impact of lumpy skin disease in Ethiopia", "authors": ["G. Gari"], "container_title": "Preventive Veterinary Medicine", "year": 2011, "volume": "102", "page": "274-283", "abstract": "Lumpy skin disease causes economic loss."}]
+JSON
+
 
 # --------------------------------------------------------------------------- #
 # Checks                                                                      #
@@ -251,7 +271,7 @@ expect_exit 1 "gate FAILS an empty scaffold" python3 "$HERE/gate.py" --dir "$TMP
 # --------------------------------------------------------------------------- #
 FULL="$TMP/full"; mkdir -p "$FULL"
 cp "$WS/sources.csv" "$WS/claims.csv" "$FULL/"
-cp "$WS/prisma_ok.json" "$FULL/prisma_counts.json"
+cp "$WS/prisma_full.json" "$FULL/prisma_counts.json"
 printf 'search_id,database,platform,query_string,filters,date_run,hits_retrieved,availability,records_screened,records_included,notes\nSR1,PubMed,NCBI,statins AND cardiovascular,year>=2015,2024-01-01,100,available,90,10,\n' > "$FULL/search_log.csv"
 printf '# Unresolved items\n\n_none yet_\n' > "$FULL/UNRESOLVED.md"
 cat > "$FULL/draft.md" <<'MD'
@@ -313,6 +333,26 @@ sys.exit(1 if bad else 0)
 PY
 then ok "house-style HTML has a cover, sections, contents and references"
 else no "house-style HTML is structurally incomplete"; fi
+
+echo "== 9b. crosscheck_counts (ledger vs PRISMA vs references) =="
+expect_exit 0 "PRISMA totals agree with the ledger" python3 "$HERE/crosscheck_counts.py" \
+  --workspace "$FULL" --strict
+BADCC="$TMP/full_badcounts"; mkdir -p "$BADCC"; cp -R "$FULL/." "$BADCC/"
+python3 - "$BADCC/prisma_counts.json" <<'PY'
+import json, sys
+p = sys.argv[1]
+d = json.load(open(p))
+d["included"]["studies_included"] = 9
+json.dump(d, open(p, "w"))
+PY
+expect_exit 1 "a PRISMA total that disagrees with the ledger FAILS --strict" python3 \
+  "$HERE/crosscheck_counts.py" --workspace "$BADCC" --strict
+
+echo "== 9c. verify_records (ledger vs saved retrieval records) =="
+expect_exit 0 "a matching record passes" python3 "$HERE/verify_records.py" \
+  --sources "$WS/sources.csv" --records "$WS/records/record_ok.json" --check-numbers
+expect_exit 1 "a DOI that resolves to another paper FAILS" python3 "$HERE/verify_records.py" \
+  --sources "$WS/sources.csv" --records "$WS/records/record_wrong.json"
 
 echo "== 10. gate PASSES a complete workspace =="
 expect_exit 0 "gate passes the complete review" python3 "$HERE/gate.py" --dir "$FULL" --require-exports
